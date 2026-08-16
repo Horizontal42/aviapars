@@ -11,28 +11,25 @@ from aiogram.types import CallbackQuery, Message
 from aviapars.adapters.base import Mode, Tier
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.db.repo_places import PlacesRepo
-from aviapars.domain.combiner import SearchOpts, search_itineraries
-from aviapars.telegram.format import MODE_EMOJI, format_money
+from aviapars.domain.combiner import Itinerary, SearchOpts, search_itineraries
+from aviapars.telegram.format import format_mode_label, format_money
 from aviapars.telegram.keyboards import PlacePick, SearchTrack, search_results_kb
 from aviapars.telegram.place_picker import ask_place_pick
 from aviapars.telegram.states import AddRoute, SearchFlow
 
 router = Router(name="search")
 
-# Only plane is offered — the only mode with a real adapter registered today
-# (§13: yandex_rasp/train lands in Phase C). Asking the user to pick a mode
-# that can never return anything would be dishonest UX.
-_SEARCH_MODE = Mode.PLANE
+# Every mode with a registered adapter is tried; a mode with nothing
+# registered for it (or no coverage for these places) just contributes zero
+# offers — search_itineraries degrades to whatever sources actually answered.
+_SEARCH_MODES = frozenset({Mode.PLANE, Mode.TRAIN})
 
 
 @router.message(Command("search"))
 async def cmd_search(message: Message, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(SearchFlow.origin)
-    await message.answer(
-        "Разовый поиск (маршрут не сохраняется). Откуда? Напишите город.\n"
-        "Сейчас ищу только ✈️ самолётом — поезда ещё не подключены."
-    )
+    await message.answer("Разовый поиск (маршрут не сохраняется). Откуда? Напишите город.")
 
 
 @router.message(SearchFlow.origin)
@@ -87,15 +84,18 @@ async def on_search_date_text(
     dest = await places_repo.get(data["dest_place_id"])
     assert origin is not None and dest is not None
 
-    await message.answer("🔎 Ищу варианты…")
+    await message.answer("🔎 Ищу варианты, включая через хаб (например, через Москву)…")
     outcome = await search_itineraries(
         registry,
+        places_repo,
         origin=origin,
         dest=dest,
         dates=(parsed,),
         pax=1,
-        mode=_SEARCH_MODE,
-        opts=SearchOpts(tiers=frozenset({Tier.DISCOVERY, Tier.CONFIRMATION}), allow_network=True, deadline_s=12),
+        modes=_SEARCH_MODES,
+        opts=SearchOpts(
+            tiers=frozenset({Tier.DISCOVERY, Tier.CONFIRMATION}), allow_network=True, deadline_s=12, max_hops=1
+        ),
     )
 
     if not outcome.itineraries:
@@ -109,24 +109,33 @@ async def on_search_date_text(
     lines = [f"🔎 {data['origin_title']} → {data['dest_title']} · {parsed.strftime('%d.%m.%Y')}"]
     lines.append(f"Найдено {len(outcome.itineraries)} вариант(ов), показываю {len(top)}")
     for i, itinerary in enumerate(top, start=1):
-        offer = itinerary.offers[0]
-        price = format_money(itinerary.price_minor, itinerary.currency)
-        dur = ""
-        if offer.duration_minutes is not None:
-            h, m = divmod(offer.duration_minutes, 60)
-            dur = f" · {h}ч{f' {m}м' if m else ''}"
-        emoji = MODE_EMOJI[offer.legs[0].mode]
-        confirmed = " ✅" if offer.tier == Tier.CONFIRMATION else " ⚠️ не подтверждено"
-        lines.append(f"{i}️⃣ {price} {emoji}{dur}{confirmed}")
+        lines.append(f"{i}️⃣ {_render_itinerary_line(itinerary)}")
 
     await state.update_data(
-        results_offers=[it.offers[0] for it in top],
+        results_itineraries=top,
         results_route_title=f"{data['origin_title']} → {data['dest_title']}",
         results_date=parsed.isoformat(),
-        results_mode=_SEARCH_MODE.value,
     )
     await state.set_state(SearchFlow.results)
     await message.answer("\n".join(lines), reply_markup=search_results_kb(len(top)))
+
+
+def _render_itinerary_line(itinerary: Itinerary) -> str:
+    all_legs = [leg for offer in itinerary.offers for leg in offer.legs]
+    modes = [leg.mode for leg in all_legs]
+    mode_label = format_mode_label(modes)
+    price = format_money(itinerary.price_minor, itinerary.currency)
+    dur = ""
+    if itinerary.duration_minutes is not None:
+        h, m = divmod(itinerary.duration_minutes, 60)
+        dur = f" · {h}ч{f' {m}м' if m else ''}"
+    hub_note = ""
+    if len(itinerary.offers) > 1:
+        hub_place = all_legs[0].to_place
+        hub_note = f" через {hub_place.iata or hub_place.place_id}"
+    confirmed_all = all(o.tier == Tier.CONFIRMATION for o in itinerary.offers)
+    confirmed = " ✅" if confirmed_all else " ⚠️ не подтверждено"
+    return f"{price} {mode_label}{hub_note}{dur}{confirmed}"
 
 
 @router.callback_query(SearchFlow.results, SearchTrack.filter())
@@ -134,23 +143,25 @@ async def on_search_track(query: CallbackQuery, callback_data: SearchTrack, stat
     """§10 bridge: jumps straight into /add's threshold step with everything
     else pre-filled from the search the user just ran."""
     data = await state.get_data()
-    offer = data["results_offers"][callback_data.idx]
+    itinerary: Itinerary = data["results_itineraries"][callback_data.idx]
+    all_legs = [leg for offer in itinerary.offers for leg in offer.legs]
+    modes_used = {leg.mode.value for leg in all_legs}
+    mode_pref = modes_used.pop() if len(modes_used) == 1 else "auto"
 
     await state.update_data(
         origin_place_id=data["origin_place_id"],
         origin_title=data["origin_title"],
         dest_place_id=data["dest_place_id"],
         dest_title=data["dest_title"],
-        mode_pref=data["results_mode"],
+        mode_pref=mode_pref,
         fixed_date=data["results_date"],
-        _suggested_price_minor=offer.price_minor,
     )
     await state.set_state(AddRoute.threshold)
     assert query.message is not None
-    suggested_rub = (offer.price_minor // 100 // 500) * 500
+    suggested_rub = (itinerary.price_minor // 100 // 500) * 500
     await query.message.answer(
         f"Маршрут «{data['results_route_title']}» на {data['results_date']} — беру эти параметры.\n"
         f"При какой цене прислать уведомление? Введите сумму в рублях "
-        f"(например {suggested_rub or offer.price_minor // 100})."
+        f"(например {suggested_rub or itinerary.price_minor // 100})."
     )
     await query.answer()

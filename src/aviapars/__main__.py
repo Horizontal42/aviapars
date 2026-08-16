@@ -5,6 +5,7 @@ import logging
 
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.adapters.travelpayouts import TravelpayoutsAdapter
+from aviapars.adapters.yandex_rasp import YandexRaspAdapter
 from aviapars.config import settings
 from aviapars.db.engine import connect
 from aviapars.db.migrate import migrate
@@ -35,6 +36,12 @@ async def main() -> None:
                 token=settings.travelpayouts_token,
                 marker=settings.travelpayouts_marker,
                 cache_ttl_s=settings.cache_ttl_s.travelpayouts,
+            )
+        )
+        registry.register(
+            YandexRaspAdapter(
+                api_key=settings.yandex_rasp_api_key,
+                cache_ttl_s=settings.cache_ttl_s.yandex_rasp_price,
             )
         )
 

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from aviapars.adapters.base import Mode, Offer
+from aviapars.adapters.base import Mode
+from aviapars.domain.combiner import Itinerary
 
 MODE_EMOJI: dict[Mode, str] = {
     Mode.PLANE: "✈️",
@@ -26,39 +27,46 @@ def format_money(price_minor: int, currency: str) -> str:
     return f"{major:,}".replace(",", " ") + f" {suffix}"
 
 
-def format_deal_card(
-    route_title: str, offer: Offer, *, threshold_minor: int, confirmed: bool
-) -> str:
+def format_deal_card(route_title: str, itinerary: Itinerary, *, threshold_minor: int, confirmed: bool) -> str:
     """Deal notification card (§9/§10). Degrades gracefully when leg detail is
     missing (date_only/no-carrier discovery offers) rather than fabricating
-    a time or airline — see base.py Leg docstring."""
-    price = format_money(offer.price_minor, offer.currency)
-    threshold = format_money(threshold_minor, offer.currency)
-    mode_label = format_mode_label([leg.mode for leg in offer.legs])
-    depart_date = min(leg.depart_utc for leg in offer.legs).date()
+    a time or airline — see base.py Leg docstring. `itinerary.offers` has one
+    entry for a direct trip, two for a hub-composed one (§8) — each offer can
+    come from a different source with its own tier/confidence, so per-leg
+    price is shown whenever there's more than one."""
+    price = format_money(itinerary.price_minor, itinerary.currency)
+    threshold = format_money(threshold_minor, itinerary.currency)
+    all_legs = [leg for offer in itinerary.offers for leg in offer.legs]
+    mode_label = format_mode_label([leg.mode for leg in all_legs])
+    depart_date = min(leg.depart_utc for leg in all_legs).date()
 
     lines = [
         f"🔥 {route_title}   {price}  (порог: {threshold})",
         f"   {depart_date.strftime('%d.%m')} · {mode_label}",
     ]
-    for leg in offer.legs:
-        origin = leg.from_place.iata or str(leg.from_place.place_id)
-        dest = leg.to_place.iata or str(leg.to_place.place_id)
-        carrier_bits = " ".join(b for b in (leg.carrier, leg.number) if b)
-        time_str = leg.depart_local.strftime("%H:%M") if leg.time_precision == "exact" else "время неизвестно"
-        carrier_str = f"{carrier_bits}  " if carrier_bits else ""
-        lines.append(f"   {MODE_EMOJI[leg.mode]} {origin} → {dest}  {carrier_str}{time_str}")
+    multi_leg = len(itinerary.offers) > 1
+    for offer in itinerary.offers:
+        for leg in offer.legs:
+            origin = leg.from_place.iata or str(leg.from_place.place_id)
+            dest = leg.to_place.iata or str(leg.to_place.place_id)
+            carrier_bits = " ".join(b for b in (leg.carrier, leg.number) if b)
+            time_str = leg.depart_local.strftime("%H:%M") if leg.time_precision == "exact" else "время неизвестно"
+            carrier_str = f"{carrier_bits}  " if carrier_bits else ""
+            price_str = f"  {format_money(offer.price_minor, offer.currency)}" if multi_leg else ""
+            lines.append(f"   {MODE_EMOJI[leg.mode]} {origin} → {dest}  {carrier_str}{time_str}{price_str}")
 
-    if offer.duration_minutes is not None:
-        h, m = divmod(offer.duration_minutes, 60)
+    if itinerary.duration_minutes is not None:
+        h, m = divmod(itinerary.duration_minutes, 60)
         lines.append(f"   В пути: {h}ч {m}м" if m else f"   В пути: {h}ч")
 
     if confirmed:
         lines.append("   ✅ Подтверждено · только что")
     else:
-        age_h = _age_hours(offer.source_cached_at)
+        cached_ats = [o.source_cached_at for o in itinerary.offers if o.source_cached_at is not None]
+        age_h = _age_hours(min(cached_ats)) if cached_ats else None
+        sources = ", ".join(sorted({o.source_id for o in itinerary.offers}))
         age_str = f"{age_h} ч назад" if age_h is not None else "возраст неизвестен"
-        lines.append(f"   ⚠️ Не подтверждено · данные {offer.source_id}, {age_str}")
+        lines.append(f"   ⚠️ Не подтверждено · данные {sources}, {age_str}")
 
     return "\n".join(lines)
 

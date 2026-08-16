@@ -113,17 +113,24 @@ class AdapterRegistry:
             except Exception as exc:  # adapters must not raise (§5 rule 1) — belt-and-braces here
                 result = SearchResult(status=ResultStatus.UPSTREAM_ERROR, offers=[], partial=True, error=str(exc))
 
-        if result.status == ResultStatus.OK:
+        # EMPTY means the adapter was queried successfully and genuinely found nothing — that's
+        # not a failure. Conflating it with real errors (timeout/rate-limited/upstream) was a
+        # real bug: a route with legitimately sparse results (e.g. yandex_rasp returning no
+        # ticket prices for a route/date, which turns out to be common) would trip the circuit
+        # breaker after 5 empty-but-successful queries and get wrongly marked "down".
+        healthy = result.status in (ResultStatus.OK, ResultStatus.EMPTY)
+        if healthy:
             await self._health_repo.save_state(adapter.id, circuit.record_success(state))
-            await self._cache.set(
-                cache_key, adapter.id, _serialize_result(result), "application/json", adapter.default_cache_ttl_s
-            )
         else:
             await self._health_repo.save_state(
                 adapter.id,
                 circuit.record_failure(state, now),
                 error_kind=result.status.value,
                 error_msg=result.error,
+            )
+        if result.status == ResultStatus.OK:
+            await self._cache.set(
+                cache_key, adapter.id, _serialize_result(result), "application/json", adapter.default_cache_ttl_s
             )
 
         return result

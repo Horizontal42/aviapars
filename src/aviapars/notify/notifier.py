@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, time, timedelta, timezone
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
-from aviapars.adapters.base import Offer
 from aviapars.db.models import Route, User
 from aviapars.db.repo_jobs import Job, JobsRepo
 from aviapars.db.repo_notifications import NotificationsRepo
+from aviapars.domain.combiner import Itinerary
 from aviapars.notify.dedupe import DedupeGate
 from aviapars.telegram.format import format_deal_card
 
@@ -42,17 +43,22 @@ class Notifier:
         self._cooldown_h = cooldown_h
         self._daily_cap = daily_cap
 
-    async def send_deal(self, *, user: User, route: Route, offer: Offer, confirmed: bool) -> bool:
+    async def send_deal(self, *, user: User, route: Route, itinerary: Itinerary, confirmed: bool) -> bool:
         """Returns True if delivered now, False if suppressed or deferred to
         quiet hours (§9 anti-noise, still applies alongside the threshold gate
-        in domain/dealer.py)."""
+        in domain/dealer.py). `itinerary` may be a direct offer (one leg) or
+        a hub-composed one (two, §8) — dedupe/records key off a hash of the
+        whole itinerary, not a single offer."""
         now = datetime.now(timezone.utc)
-        depart_date = min(leg.depart_utc for leg in offer.legs).date().isoformat()
-        dedupe_key = f"{route.id}:{offer.itinerary_hash}:{now.date().isoformat()}"
+        all_legs = [leg for offer in itinerary.offers for leg in offer.legs]
+        depart_date = min(leg.depart_utc for leg in all_legs).date().isoformat()
+        mode = "+".join(dict.fromkeys(leg.mode.value for leg in all_legs))
+        itinerary_hash = _combined_hash(itinerary)
+        dedupe_key = f"{route.id}:{itinerary_hash}:{now.date().isoformat()}"
 
         allowed = await self._dedupe.can_send(
             route_id=route.id,
-            itinerary_hash=offer.itinerary_hash,
+            itinerary_hash=itinerary_hash,
             now=now,
             cooldown_h=self._cooldown_h,
             daily_cap=self._daily_cap,
@@ -60,7 +66,8 @@ class Notifier:
         if not allowed:
             return False
 
-        text = format_deal_card(route.title, offer, threshold_minor=route.max_price, confirmed=confirmed)
+        text = format_deal_card(route.title, itinerary, threshold_minor=route.max_price, confirmed=confirmed)
+        tier = "confirmation" if confirmed else "discovery"
 
         if is_quiet_hours(user, now):
             await self._jobs.enqueue(
@@ -71,11 +78,11 @@ class Notifier:
                     "chat_id": user.tg_user_id,
                     "text": text,
                     "dedupe_key": dedupe_key,
-                    "itinerary_hash": offer.itinerary_hash,
-                    "price_minor": offer.price_minor,
-                    "mode": offer.legs[0].mode.value,
+                    "itinerary_hash": itinerary_hash,
+                    "price_minor": itinerary.price_minor,
+                    "mode": mode,
                     "depart_date": depart_date,
-                    "tier": offer.tier.value,
+                    "tier": tier,
                 },
             )
             return False
@@ -84,11 +91,11 @@ class Notifier:
         await self._repo.record(
             route_id=route.id,
             dedupe_key=dedupe_key,
-            itinerary_hash=offer.itinerary_hash,
-            price_minor=offer.price_minor,
-            mode=offer.legs[0].mode.value,
+            itinerary_hash=itinerary_hash,
+            price_minor=itinerary.price_minor,
+            mode=mode,
             depart_date=depart_date,
-            tier_at_send=offer.tier.value,
+            tier_at_send=tier,
         )
         return True
 
@@ -106,6 +113,14 @@ class Notifier:
             depart_date=p["depart_date"],
             tier_at_send=p["tier"],
         )
+
+
+def _combined_hash(itinerary: Itinerary) -> str:
+    """Stable identity for dedupe across both a single offer and a
+    hub-composed pair — concatenates each leg-offer's own hash so the same
+    two-leg combination always produces the same key."""
+    joined = "|".join(o.itinerary_hash for o in itinerary.offers)
+    return hashlib.sha256(joined.encode()).hexdigest()[:16]
 
 
 def is_quiet_hours(user: User, now_utc: datetime) -> bool:

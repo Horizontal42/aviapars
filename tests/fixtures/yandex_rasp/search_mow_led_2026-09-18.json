@@ -1,0 +1,52 @@
+{
+  "pagination": {"total": 3, "limit": 100, "offset": 0},
+  "interval_segments": [],
+  "segments": [
+    {
+      "departure": "2026-09-18T00:40:00+03:00",
+      "arrival": "2026-09-18T09:33:00+03:00",
+      "thread": {
+        "number": "059Й",
+        "uid": "059Й_2_2",
+        "carrier": {"code": 112, "title": "ФПК"}
+      },
+      "tickets_info": {
+        "et_marker": true,
+        "places": [
+          {"currency": "RUB", "price": {"whole": 2380, "cents": 0}, "name": "плацкарт"},
+          {"currency": "RUB", "price": {"whole": 4560, "cents": 0}, "name": "купе"}
+        ]
+      }
+    },
+    {
+      "departure": "2026-09-18T23:55:00+03:00",
+      "arrival": "2026-09-19T07:57:00+03:00",
+      "thread": {
+        "number": "756А",
+        "uid": "756А_2_2",
+        "carrier": {"code": 112, "title": "ФПК"}
+      },
+      "tickets_info": {
+        "et_marker": true,
+        "places": [
+          {"currency": "RUB", "price": {"whole": 3120, "cents": 50}, "name": "плацкарт"}
+        ]
+      }
+    },
+    {
+      "departure": "2026-09-18T13:30:00+03:00",
+      "arrival": "2026-09-18T21:10:00+03:00",
+      "thread": {
+        "number": "742А",
+        "uid": "742А_2_2",
+        "carrier": {"code": 112, "title": "ФПК"}
+      },
+      "tickets_info": null
+    }
+  ],
+  "search": {
+    "date": "2026-09-18",
+    "from": {"code": "c213", "title": "Москва"},
+    "to": {"code": "c2", "title": "Санкт-Петербург"}
+  }
+}

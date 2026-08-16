@@ -22,5 +22,6 @@ config.yaml
 *.db-shm
 /var/
 data/places_seed.sqlite
+/stations.json
 
 *.log
