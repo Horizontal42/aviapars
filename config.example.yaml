@@ -3,34 +3,52 @@
 # Copy this file to config.yaml and adjust; config.yaml is gitignored so local
 # tuning doesn't collide with the tracked example.
 
+# путь к файлу SQLite базы данных
 db_path: /var/lib/aviapars/aviapars.db
 
+# список стран (ISO-коды), для которых сидируется справочник places при первом запуске
 seed_countries: [RU]
 
+# сколько фоновых воркеров разбирают очередь задач планировщика одновременно
 worker_count: 2
+# максимум одновременных HTTP-запросов ко всем источникам суммарно (фон + интерактив)
 http_concurrency_global: 2
+# отдельный резервный слот для /search, поверх глобального лимита
 http_concurrency_interactive: 1
+# максимум одновременных запросов к одному источнику (не долбим один сайт параллельно)
 http_concurrency_per_source: 1
 
+# минимально допустимый интервал опроса маршрута в минутах (защита источников от долбёжки)
 poll_interval_floor_min: 15
+# интервал опроса по умолчанию, который бот предлагает при создании маршрута
 poll_interval_default_min: 60
 
+# сколько секунд считать ответ источника свежим и не запрашивать его снова
 cache_ttl_s:
-  travelpayouts: 10800      # 3h
-  yandex_rasp_schedule: 43200  # 12h
-  yandex_rasp_price: 7200   # 2h
-  airline_direct: 1800      # 30min
-  rzd_direct: 2700          # 45min
+  travelpayouts: 10800      # TTL кэша Travelpayouts (3ч)
+  yandex_rasp_schedule: 43200  # TTL кэша расписаний Яндекса (12ч, расписания почти не меняются)
+  yandex_rasp_price: 7200   # TTL кэша цен Яндекса (2ч)
+  airline_direct: 1800      # TTL кэша прямых сайтов авиакомпаний (30мин)
+  rzd_direct: 2700          # TTL кэша РЖД-скрейпера, если будет включён (45мин)
 
+# максимум комбинированных маршрутов через хаб, которые проверяются за один поиск
 max_combo_candidates: 24
+# максимально допустимое число пересадок в маршруте
 max_hops_cap: 2
 
+# сколько минут живёт сессия /search до истечения (после — «Поиск устарел»)
 search_session_ttl_min: 30
+# максимум одновременных сессий /search на одного пользователя
 search_sessions_per_user_cap: 5
 
+# сколько секунд ждём live-ответ источников в /search перед показом результата
 interactive_l1_deadline_s: 12
+# сколько секунд ждём мгновенный ответ из кэша в /search (первый проход)
 interactive_l0_deadline_s: 1
+# сколько секунд /search готов ждать освобождения лимита запроса к источнику, прежде чем пропустить его
 interactive_bucket_wait_s: 2
 
+# максимум уведомлений по одному маршруту в сутки (анти-спам)
 notifications_per_route_per_day: 3
+# минимальный интервал между повторными уведомлениями об одной и той же цене (часы)
 notification_dedupe_cooldown_h: 12
