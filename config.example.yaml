@@ -1,0 +1,36 @@
+# Non-secret, tunable settings. Safe to commit and read over someone's shoulder.
+# Secrets (tokens, keys) live in .env instead — see .env.example.
+# Copy this file to config.yaml and adjust; config.yaml is gitignored so local
+# tuning doesn't collide with the tracked example.
+
+db_path: /var/lib/aviapars/aviapars.db
+
+seed_countries: [RU]
+
+worker_count: 2
+http_concurrency_global: 2
+http_concurrency_interactive: 1
+http_concurrency_per_source: 1
+
+poll_interval_floor_min: 15
+poll_interval_default_min: 60
+
+cache_ttl_s:
+  travelpayouts: 10800      # 3h
+  yandex_rasp_schedule: 43200  # 12h
+  yandex_rasp_price: 7200   # 2h
+  airline_direct: 1800      # 30min
+  rzd_direct: 2700          # 45min
+
+max_combo_candidates: 24
+max_hops_cap: 2
+
+search_session_ttl_min: 30
+search_sessions_per_user_cap: 5
+
+interactive_l1_deadline_s: 12
+interactive_l0_deadline_s: 1
+interactive_bucket_wait_s: 2
+
+notifications_per_route_per_day: 3
+notification_dedupe_cooldown_h: 12

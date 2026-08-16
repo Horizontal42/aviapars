@@ -1,0 +1,30 @@
+[Unit]
+Description=Aviapars ticket price tracker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+WorkingDirectory=/opt/aviapars
+EnvironmentFile=/opt/aviapars/.env
+ExecStart=/opt/aviapars/.venv/bin/python -m aviapars
+Restart=on-failure
+RestartSec=10
+
+MemoryHigh=450M
+MemoryMax=700M
+CPUWeight=50
+Nice=5
+WatchdogSec=300
+TimeoutStopSec=30
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+PrivateTmp=yes
+ReadWritePaths=/var/lib/aviapars
+
+User=aviapars
+Group=aviapars
+
+[Install]
+WantedBy=multi-user.target
