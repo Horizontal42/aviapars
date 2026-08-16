@@ -39,16 +39,28 @@ class PlaceRef:
 
 @dataclass(frozen=True, slots=True)
 class Leg:
+    """`carrier`/`number`/`arrive_utc`/`tz` are None for discovery-tier sources
+    that only give a route+date price signal, not a real flight schedule (the
+    Travelpayouts month-matrix endpoint is exactly this — verified live in
+    Phase 0: it returns depart_date/value/number_of_changes/duration, no
+    airline or flight number at all). `time_precision` makes that honest and
+    machine-readable rather than silently fabricating a time or carrier.
+    `depart_utc`/`depart_local` are still required — for date_only legs they
+    hold midnight of `depart_date` as a placeholder, which callers must treat
+    as date-precision only when `time_precision == "date_only"`.
+    """
+
     mode: Mode
-    carrier: str
-    number: str
     from_place: PlaceRef
     to_place: PlaceRef
     depart_utc: datetime
-    arrive_utc: datetime
     depart_local: datetime
-    tz: str
+    carrier: str | None = None
+    number: str | None = None
+    arrive_utc: datetime | None = None
+    tz: str | None = None
     fare_class: str | None = None
+    time_precision: str = "exact"  # "exact" | "date_only"
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +76,8 @@ class Offer:
     expires_at: datetime | None
     confidence: float
     itinerary_hash: str
+    duration_minutes: int | None = None  # total trip duration when known but not derivable
+    # from leg times alone (date_only legs have no arrive_utc to subtract).
 
 
 @dataclass(frozen=True, slots=True)

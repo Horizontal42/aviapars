@@ -136,10 +136,13 @@ CREATE TABLE source_health (
     notified_admin_at    TEXT
 );
 
--- kind: discovery|confirm|combo|health ; state: queued|running|done|failed
+-- kind: discovery|confirm|combo|health|notify ; state: queued|running|done|failed
+-- 'notify' jobs are how quiet-hours deferral works (§9): the Notifier inserts one instead
+-- of sending immediately, run_after = end of quiet hours, and the scheduler tick delivers
+-- it like any other due job.
 CREATE TABLE jobs (
     id                  INTEGER PRIMARY KEY,
-    kind                TEXT NOT NULL CHECK (kind IN ('discovery', 'confirm', 'combo', 'health')),
+    kind                TEXT NOT NULL CHECK (kind IN ('discovery', 'confirm', 'combo', 'health', 'notify')),
     route_id            INTEGER REFERENCES routes(id) ON DELETE CASCADE,
     priority            INTEGER NOT NULL DEFAULT 0,
     payload_json        TEXT,

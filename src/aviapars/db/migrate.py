@@ -28,12 +28,14 @@ async def migrate(db_path: str | None = None) -> None:
         await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("PRAGMA foreign_keys=ON")
 
-        has_migrations_table = await db.execute_fetchall(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
+        has_migrations_table = list(
+            await db.execute_fetchall(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
+            )
         )
         applied = 0
         if has_migrations_table:
-            rows = await db.execute_fetchall("SELECT MAX(version) FROM schema_migrations")
+            rows = list(await db.execute_fetchall("SELECT MAX(version) FROM schema_migrations"))
             applied = rows[0][0] or 0
 
         for version, path_ in _migration_files():
