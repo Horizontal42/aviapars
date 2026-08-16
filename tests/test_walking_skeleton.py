@@ -20,7 +20,7 @@ from aviapars.notify.dedupe import DedupeGate
 from aviapars.notify.notifier import Notifier
 from aviapars.scheduler.worker import process_route
 
-MIGRATION = Path(__file__).parent.parent / "data" / "migrations" / "001_init.sql"
+MIGRATIONS_DIR = Path(__file__).parent.parent / "data" / "migrations"
 FIXTURE = Path(__file__).parent / "fixtures" / "travelpayouts" / "month_matrix_svx_aer_2026-09.json"
 
 
@@ -36,7 +36,8 @@ class FakeBot:
 async def db(tmp_path: Path) -> aiosqlite.Connection:
     path = tmp_path / "test.db"
     conn = await aiosqlite.connect(path)
-    await conn.executescript(MIGRATION.read_text(encoding="utf-8"))
+    for migration in sorted(MIGRATIONS_DIR.glob("*.sql")):
+        await conn.executescript(migration.read_text(encoding="utf-8"))
     yield conn
     await conn.close()
 

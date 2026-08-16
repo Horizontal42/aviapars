@@ -59,8 +59,8 @@ async def db(tmp_path) -> aiosqlite.Connection:
 
 def _query() -> SearchQuery:
     return SearchQuery(
-        origin=PlaceRef(place_id=1, iata="GOJ", yandex_code=None, city_id=None),
-        dest=PlaceRef(place_id=2, iata="LED", yandex_code=None, city_id=None),
+        origin=PlaceRef(place_id=1, iata="GOJ", yandex_code=None, rzd_code=None, city_id=None),
+        dest=PlaceRef(place_id=2, iata="LED", yandex_code=None, rzd_code=None, city_id=None),
         dates=(date(2026, 9, 18),),
         pax=1,
         mode=Mode.PLANE,

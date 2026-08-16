@@ -23,6 +23,7 @@ class Place:
     name_en: str | None
     iata: str | None
     yandex_code: str | None
+    rzd_code: str | None
     city_id: int | None
     country: str
     region: str | None

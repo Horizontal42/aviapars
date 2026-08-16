@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 from aviapars.adapters.registry import AdapterRegistry
+from aviapars.adapters.rzd_direct import RzdDirectAdapter
 from aviapars.adapters.travelpayouts import TravelpayoutsAdapter
 from aviapars.adapters.yandex_rasp import YandexRaspAdapter
 from aviapars.config import settings
@@ -44,6 +45,7 @@ async def main() -> None:
                 cache_ttl_s=settings.cache_ttl_s.yandex_rasp_price,
             )
         )
+        registry.register(RzdDirectAdapter(cache_ttl_s=settings.cache_ttl_s.rzd_direct))
 
         bot = create_bot(settings.telegram_bot_token)
         dp = create_dispatcher()

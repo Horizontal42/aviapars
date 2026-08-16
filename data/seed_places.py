@@ -19,6 +19,17 @@ exact-normalized-string only (lowercase, ё->е); cities that don't match
 left without yandex_code and yandex_rasp search skips them — same graceful
 degradation as any other missing-data case in this project, not a crash.
 
+Also backfills `rzd_code` on city rows for the `rzd_direct` adapter, via
+pass.rzd.ru's own `/suggester` autocomplete endpoint (verified live,
+2026-08-17 — no bulk station dump exists for this source, unlike Yandex's
+stations_list, so this is one autocomplete request per city with a 150ms
+pace between requests, paced deliberately since no rate limit is published).
+The endpoint returns city-level aggregate nodes flagged `ss: true` (e.g.
+Moscow -> 2000000, covering all of its individual vokzals for search
+purposes) alongside individual station entries; matching prefers the
+`ss: true` row on an exact normalized-name match, falling back to the first
+exact match of any kind.
+
 Run: python -m aviapars.db.migrate && python data/seed_places.py
 """
 
@@ -40,6 +51,9 @@ from aviapars.db.engine import connect  # noqa: E402
 CITIES_URL = "http://api.travelpayouts.com/data/ru/cities.json"
 AIRPORTS_URL = "http://api.travelpayouts.com/data/ru/airports.json"
 YANDEX_STATIONS_URL = "https://api.rasp.yandex-net.ru/v3.0/stations_list/"
+RZD_SUGGESTER_URL = "https://pass.rzd.ru/suggester"
+RZD_REQUEST_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; aviapars-seed/1.0)"}
+RZD_PACE_S = 0.15
 
 
 def _normalize(name: str) -> str:
@@ -154,6 +168,8 @@ async def main() -> None:
         else:
             print("YANDEX_RASP_API_KEY not set — skipping yandex_code backfill (train search won't work yet)")
 
+        await _backfill_rzd_codes(db)
+
 
 async def _backfill_yandex_codes(db: aiosqlite.Connection) -> None:
     async with aiohttp.ClientSession() as session:
@@ -185,6 +201,44 @@ async def _backfill_yandex_codes(db: aiosqlite.Connection) -> None:
             matched += 1
     await db.commit()
     print(f"yandex_code: matched {matched}/{len(city_rows)} cities against {len(settlement_codes)} Yandex settlements")
+
+
+async def _rzd_city_code(session: aiohttp.ClientSession, name_ru: str) -> str | None:
+    params = {"stationNamePart": name_ru.upper(), "lang": "ru", "lat": "0", "compactMode": "y"}
+    try:
+        async with session.get(
+            RZD_SUGGESTER_URL, params=params, timeout=aiohttp.ClientTimeout(total=10)
+        ) as resp:
+            if resp.status != 200:
+                return None
+            candidates = await resp.json(content_type=None)
+    except (aiohttp.ClientError, TimeoutError):
+        return None
+    if not candidates:
+        return None
+
+    target = _normalize(name_ru)
+    exact = [c for c in candidates if _normalize(c.get("n", "")) == target]
+    if not exact:
+        return None
+    city_node = next((c for c in exact if c.get("ss")), None)
+    return str((city_node or exact[0])["c"])
+
+
+async def _backfill_rzd_codes(db: aiosqlite.Connection) -> None:
+    async with db.execute("SELECT id, name_ru FROM places WHERE kind = 'city'") as cur:
+        city_rows = await cur.fetchall()
+
+    matched = 0
+    async with aiohttp.ClientSession(headers=RZD_REQUEST_HEADERS) as session:
+        for place_id, name_ru in city_rows:
+            code = await _rzd_city_code(session, name_ru)
+            if code:
+                await db.execute("UPDATE places SET rzd_code = ? WHERE id = ?", (code, place_id))
+                matched += 1
+            await asyncio.sleep(RZD_PACE_S)
+    await db.commit()
+    print(f"rzd_code: matched {matched}/{len(city_rows)} cities via pass.rzd.ru suggester")
 
 
 if __name__ == "__main__":

@@ -13,17 +13,21 @@ def _row_to_place(row: aiosqlite.Row) -> Place:
         name_en=row[3],
         iata=row[4],
         yandex_code=row[5],
-        city_id=row[6],
-        country=row[7],
-        region=row[8],
-        lat=row[9],
-        lon=row[10],
-        popularity=row[11],
-        is_hub_candidate=bool(row[12]),
+        rzd_code=row[6],
+        city_id=row[7],
+        country=row[8],
+        region=row[9],
+        lat=row[10],
+        lon=row[11],
+        popularity=row[12],
+        is_hub_candidate=bool(row[13]),
     )
 
 
-_COLUMNS = "id, kind, name_ru, name_en, iata, yandex_code, city_id, country, region, lat, lon, popularity, is_hub_candidate"
+_COLUMNS = (
+    "id, kind, name_ru, name_en, iata, yandex_code, rzd_code, city_id, country, region, lat, lon, "
+    "popularity, is_hub_candidate"
+)
 
 
 class PlacesRepo:

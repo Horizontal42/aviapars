@@ -34,6 +34,7 @@ class PlaceRef:
     place_id: int
     iata: str | None
     yandex_code: str | None
+    rzd_code: str | None
     city_id: int | None
 
 

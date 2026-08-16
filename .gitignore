@@ -23,5 +23,6 @@ config.yaml
 /var/
 data/places_seed.sqlite
 /stations.json
+/rzd_*.json
 
 *.log

@@ -1,0 +1,76 @@
+{
+  "result": "OK",
+  "tp": [
+    {
+      "from": "МОСКВА",
+      "fromCode": 2000000,
+      "where": "САНКТ-ПЕТЕРБУРГ",
+      "whereCode": 2004000,
+      "date": "27.08.2026",
+      "noSeats": false,
+      "defShowTime": "local",
+      "state": "Trains",
+      "list": [
+        {
+          "number": "022А",
+          "number2": "022А",
+          "carrier": "ТВЕРСК",
+          "brand": "Night Express",
+          "route0": "МОСКВА ОКТ",
+          "route1": "С-ПЕТЕР-ГЛ",
+          "date0": "27.08.2026",
+          "time0": "00:25",
+          "date1": "27.08.2026",
+          "time1": "08:53",
+          "timeInWay": "08:28",
+          "cars": [
+            { "type": "Люкс", "typeLoc": "СВ", "freeSeats": 2, "tariff": 13925, "servCls": "1Б" },
+            { "type": "Купе", "typeLoc": "Купе", "freeSeats": 139, "tariff": 5066, "servCls": "2Ф" }
+          ]
+        },
+        {
+          "number": "016А",
+          "number2": "016А",
+          "carrier": "ФПК",
+          "brand": "Арктика",
+          "route0": "МОСКВА ОКТ",
+          "route1": "МУРМАНСК",
+          "date0": "27.08.2026",
+          "time0": "00:46",
+          "date1": "27.08.2026",
+          "time1": "09:15",
+          "timeInWay": "08:29",
+          "cars": [
+            { "type": "Люкс", "typeLoc": "СВ", "freeSeats": 6, "pt": 5947, "tariff": 19865, "servCls": "1Э" },
+            { "type": "Купе", "typeLoc": "Купе", "freeSeats": 77, "pt": 2061, "tariff": 6886, "servCls": "2Т" },
+            { "type": "Плац", "typeLoc": "Плацкартный", "freeSeats": 57, "pt": 957, "tariff": 3199, "servCls": "3Б" }
+          ]
+        },
+        {
+          "number": "059Г",
+          "number2": "060*Г",
+          "carrier": "ФПК",
+          "brand": "Волга",
+          "route0": "Н.НОВГОРОД М",
+          "route1": "С-ПЕТЕР-ГЛ",
+          "date0": "27.08.2026",
+          "time0": "00:48",
+          "date1": "27.08.2026",
+          "time1": "09:50",
+          "timeInWay": "09:02",
+          "cars": [
+            { "type": "Люкс", "typeLoc": "СВ", "freeSeats": 10, "pt": 4797, "tariff": 16023, "servCls": "1Э" },
+            { "type": "Купе", "typeLoc": "Купе", "freeSeats": 29, "pt": 2084, "tariff": 6962, "servCls": "2К" },
+            { "type": "Купе", "typeLoc": "Купе", "freeSeats": 8, "pt": 2084, "tariff": 4504, "servCls": "2К", "disabledPerson": true }
+          ]
+        }
+      ],
+      "msgList": []
+    }
+  ],
+  "TransferSearchMode": "SEMI_AUTO",
+  "flFPKRoundBonus": false,
+  "AutoTransferMode": false,
+  "discounts": {},
+  "timestamp": "17.08.2026 01:48:49.994"
+}

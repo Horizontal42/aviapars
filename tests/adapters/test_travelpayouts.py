@@ -13,11 +13,11 @@ FIXTURE = Path(__file__).parent.parent / "fixtures" / "travelpayouts" / "month_m
 
 
 def _origin() -> PlaceRef:
-    return PlaceRef(place_id=1, iata="SVX", yandex_code=None, city_id=None)
+    return PlaceRef(place_id=1, iata="SVX", yandex_code=None, rzd_code=None, city_id=None)
 
 
 def _dest() -> PlaceRef:
-    return PlaceRef(place_id=2, iata="AER", yandex_code=None, city_id=None)
+    return PlaceRef(place_id=2, iata="AER", yandex_code=None, rzd_code=None, city_id=None)
 
 
 @pytest.fixture

@@ -13,11 +13,11 @@ FIXTURE = Path(__file__).parent.parent / "fixtures" / "yandex_rasp" / "search_mo
 
 
 def _origin() -> PlaceRef:
-    return PlaceRef(place_id=3, iata="MOW", yandex_code="c213", city_id=None)
+    return PlaceRef(place_id=3, iata="MOW", yandex_code="c213", rzd_code="2000000", city_id=None)
 
 
 def _dest() -> PlaceRef:
-    return PlaceRef(place_id=2, iata="LED", yandex_code="c2", city_id=None)
+    return PlaceRef(place_id=2, iata="LED", yandex_code="c2", rzd_code="2004000", city_id=None)
 
 
 @pytest.fixture
@@ -74,7 +74,7 @@ async def test_non_train_mode_returns_empty(adapter: YandexRaspAdapter) -> None:
 
 async def test_missing_yandex_code_returns_empty() -> None:
     a = YandexRaspAdapter(api_key="fake-key")
-    origin_no_code = PlaceRef(place_id=1, iata="GOJ", yandex_code=None, city_id=None)
+    origin_no_code = PlaceRef(place_id=1, iata="GOJ", yandex_code=None, rzd_code=None, city_id=None)
     q = SearchQuery(origin=origin_no_code, dest=_dest(), dates=(), pax=1, mode=Mode.TRAIN)
     result = await a.search(q)
     assert result.status == ResultStatus.EMPTY

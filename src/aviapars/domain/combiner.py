@@ -269,4 +269,10 @@ def _pool_key(origin: Place, dest: Place, mode: Mode) -> str:
 
 
 def _place_ref(place: Place) -> PlaceRef:
-    return PlaceRef(place_id=place.id, iata=place.iata, yandex_code=place.yandex_code, city_id=place.city_id)
+    return PlaceRef(
+        place_id=place.id,
+        iata=place.iata,
+        yandex_code=place.yandex_code,
+        rzd_code=place.rzd_code,
+        city_id=place.city_id,
+    )
