@@ -1,0 +1,214 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from collections import defaultdict
+from dataclasses import asdict
+from datetime import date, datetime
+from typing import Any, Literal
+
+import aiosqlite
+
+from aviapars.adapters import circuit
+from aviapars.adapters.base import (
+    HealthStatus,
+    Leg,
+    Mode,
+    Offer,
+    PlaceRef,
+    ResultStatus,
+    SearchQuery,
+    SearchResult,
+    SourceAdapter,
+    Tier,
+)
+from aviapars.adapters.cache import ResponseCache
+from aviapars.adapters.ratelimit import RateLimiter
+from aviapars.db.repo_health import HealthRepo
+
+Lane = Literal["scheduler", "interactive"]
+
+
+class AdapterRegistry:
+    """Uniform rate-limit/circuit-breaker/timeout/cache wrapper applied to every
+    adapter (§5 rule 5) — this is what keeps the 1 vCPU/1GB budget enforceable
+    and what a new adapter gets for free just by registering.
+    """
+
+    def __init__(
+        self,
+        db: aiosqlite.Connection,
+        *,
+        http_concurrency_global: int,
+        http_concurrency_interactive: int,
+        http_concurrency_per_source: int,
+    ) -> None:
+        self._adapters: dict[str, SourceAdapter] = {}
+        self._rate_limiter = RateLimiter()
+        self._health_repo = HealthRepo(db)
+        self._cache = ResponseCache(db)
+        self._global_sem = asyncio.Semaphore(http_concurrency_global)
+        self._interactive_sem = asyncio.Semaphore(http_concurrency_interactive)
+        self._per_source_concurrency = http_concurrency_per_source
+        self._per_source_sems: dict[str, asyncio.Semaphore] = defaultdict(
+            lambda: asyncio.Semaphore(self._per_source_concurrency)
+        )
+
+    def register(self, adapter: SourceAdapter) -> None:
+        self._adapters[adapter.id] = adapter
+
+    def all(self) -> list[SourceAdapter]:
+        return list(self._adapters.values())
+
+    def for_query(self, mode: Mode, origin_country: str, dest_country: str) -> list[SourceAdapter]:
+        """Filters by modes + countries (§5) — the two levers that bound how
+        many adapters get asked per route as the roster grows."""
+        matches = []
+        for adapter in self._adapters.values():
+            if mode not in adapter.modes:
+                continue
+            if adapter.countries is not None and not ({origin_country, dest_country} <= adapter.countries):
+                continue
+            matches.append(adapter)
+        return matches
+
+    async def search(
+        self,
+        adapter: SourceAdapter,
+        query: SearchQuery,
+        *,
+        lane: Lane = "scheduler",
+        allow_network: bool = True,
+        deadline_s: float | None = None,
+        bucket_wait_s: float | None = None,
+    ) -> SearchResult:
+        cache_key = self._cache_key(adapter.id, query)
+
+        if not allow_network:
+            cached = await self._cache.get(cache_key)
+            if cached is None:
+                return SearchResult(status=ResultStatus.CACHE_MISS, offers=[], partial=True)
+            return _deserialize_result(cached)
+
+        now = circuit.utcnow()
+        state = await self._health_repo.get_state(adapter.id)
+        if circuit.is_open(state, now):
+            return SearchResult(status=ResultStatus.BLOCKED, offers=[], partial=True, error="circuit open")
+
+        acquired = await self._rate_limiter.acquire(adapter.id, adapter.rate_limit, max_wait_s=bucket_wait_s)
+        if not acquired:
+            return SearchResult(status=ResultStatus.RATE_LIMITED, offers=[], partial=True)
+
+        http_sem = self._interactive_sem if lane == "interactive" else self._global_sem
+        source_sem = self._per_source_sems[adapter.id]
+        timeout_s = deadline_s or adapter.total_timeout_s
+
+        result: SearchResult
+        async with http_sem, source_sem:
+            try:
+                async with asyncio.timeout(timeout_s):
+                    result = await adapter.search(query)
+            except TimeoutError:
+                result = SearchResult(status=ResultStatus.TIMEOUT, offers=[], partial=True)
+            except Exception as exc:  # adapters must not raise (§5 rule 1) — belt-and-braces here
+                result = SearchResult(status=ResultStatus.UPSTREAM_ERROR, offers=[], partial=True, error=str(exc))
+
+        if result.status == ResultStatus.OK:
+            await self._health_repo.save_state(adapter.id, circuit.record_success(state))
+            await self._cache.set(
+                cache_key, adapter.id, _serialize_result(result), "application/json", adapter.default_cache_ttl_s
+            )
+        else:
+            await self._health_repo.save_state(
+                adapter.id,
+                circuit.record_failure(state, now),
+                error_kind=result.status.value,
+                error_msg=result.error,
+            )
+
+        return result
+
+    async def health_check_all(self) -> dict[str, HealthStatus]:
+        results: dict[str, HealthStatus] = {}
+        for source_id, adapter in self._adapters.items():
+            try:
+                async with asyncio.timeout(adapter.request_timeout_s):
+                    results[source_id] = await adapter.health_check()
+            except Exception as exc:
+                results[source_id] = HealthStatus(ok=False, detail=str(exc))
+        return results
+
+    @staticmethod
+    def _cache_key(source_id: str, query: SearchQuery) -> str:
+        dates = ",".join(d.isoformat() for d in query.dates)
+        return f"{source_id}:{query.origin.place_id}:{query.dest.place_id}:{query.mode.value}:{dates}:{query.pax}"
+
+
+def _serialize_result(result: SearchResult) -> bytes:
+    payload = {
+        "status": result.status.value,
+        "partial": result.partial,
+        "retry_after_s": result.retry_after_s,
+        "error": result.error,
+        "offers": [_offer_to_dict(o) for o in result.offers],
+    }
+    return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+
+def _deserialize_result(body: bytes) -> SearchResult:
+    payload = json.loads(body.decode("utf-8"))
+    return SearchResult(
+        status=ResultStatus(payload["status"]),
+        offers=[_offer_from_dict(o) for o in payload["offers"]],
+        partial=payload["partial"],
+        retry_after_s=payload.get("retry_after_s"),
+        error=payload.get("error"),
+    )
+
+
+def _offer_to_dict(offer: Offer) -> dict[str, Any]:
+    d = asdict(offer)
+    d["tier"] = offer.tier.value
+    d["observed_at"] = offer.observed_at.isoformat()
+    d["source_cached_at"] = offer.source_cached_at.isoformat() if offer.source_cached_at else None
+    d["expires_at"] = offer.expires_at.isoformat() if offer.expires_at else None
+    for leg in d["legs"]:
+        leg["mode"] = Mode(leg["mode"]).value if not isinstance(leg["mode"], str) else leg["mode"]
+        leg["depart_utc"] = leg["depart_utc"] if isinstance(leg["depart_utc"], str) else leg["depart_utc"].isoformat()
+        leg["depart_local"] = leg["depart_local"] if isinstance(leg["depart_local"], str) else leg["depart_local"].isoformat()
+        arrive = leg["arrive_utc"]
+        leg["arrive_utc"] = arrive if (arrive is None or isinstance(arrive, str)) else arrive.isoformat()
+    return d
+
+
+def _offer_from_dict(d: dict[str, Any]) -> Offer:
+    legs = tuple(
+        Leg(
+            mode=Mode(leg["mode"]),
+            from_place=PlaceRef(**leg["from_place"]),
+            to_place=PlaceRef(**leg["to_place"]),
+            depart_utc=datetime.fromisoformat(leg["depart_utc"]),
+            depart_local=datetime.fromisoformat(leg["depart_local"]),
+            carrier=leg.get("carrier"),
+            number=leg.get("number"),
+            arrive_utc=datetime.fromisoformat(leg["arrive_utc"]) if leg.get("arrive_utc") else None,
+            tz=leg.get("tz"),
+            fare_class=leg.get("fare_class"),
+            time_precision=leg.get("time_precision", "exact"),
+        )
+        for leg in d["legs"]
+    )
+    return Offer(
+        legs=legs,
+        price_minor=d["price_minor"],
+        currency=d["currency"],
+        deep_link=d["deep_link"],
+        source_id=d["source_id"],
+        tier=Tier(d["tier"]),
+        observed_at=datetime.fromisoformat(d["observed_at"]),
+        source_cached_at=datetime.fromisoformat(d["source_cached_at"]) if d["source_cached_at"] else None,
+        expires_at=datetime.fromisoformat(d["expires_at"]) if d["expires_at"] else None,
+        confidence=d["confidence"],
+        itinerary_hash=d["itinerary_hash"],
+        duration_minutes=d.get("duration_minutes"),
+    )
