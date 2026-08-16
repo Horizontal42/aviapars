@@ -6,14 +6,13 @@ import aiosqlite
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State
 from aiogram.types import CallbackQuery, Message
 
 from aviapars.config import settings
-from aviapars.db.repo_places import PlacesRepo
 from aviapars.db.repo_routes import RoutesRepo
 from aviapars.telegram.format import format_money
-from aviapars.telegram.keyboards import ModePick, PlacePick, mode_picker_kb, place_picker_kb
+from aviapars.telegram.keyboards import ModePick, PlacePick, mode_picker_kb
+from aviapars.telegram.place_picker import ask_place_pick
 from aviapars.telegram.states import AddRoute
 
 router = Router(name="add")
@@ -30,7 +29,7 @@ async def cmd_add(message: Message, state: FSMContext) -> None:
 
 @router.message(AddRoute.origin)
 async def on_origin_text(message: Message, state: FSMContext, db: aiosqlite.Connection) -> None:
-    await _ask_place_pick(message, state, db, next_state=AddRoute.origin_pick, storage_key="candidates_origin")
+    await ask_place_pick(message, state, db, next_state=AddRoute.origin_pick, storage_key="candidates_origin")
 
 
 @router.callback_query(AddRoute.origin_pick, PlacePick.filter())
@@ -46,7 +45,7 @@ async def on_origin_pick(query: CallbackQuery, callback_data: PlacePick, state: 
 
 @router.message(AddRoute.destination)
 async def on_destination_text(message: Message, state: FSMContext, db: aiosqlite.Connection) -> None:
-    await _ask_place_pick(message, state, db, next_state=AddRoute.destination_pick, storage_key="candidates_dest")
+    await ask_place_pick(message, state, db, next_state=AddRoute.destination_pick, storage_key="candidates_dest")
 
 
 @router.callback_query(AddRoute.destination_pick, PlacePick.filter())
@@ -143,16 +142,3 @@ async def on_interval_text(message: Message, state: FSMContext, db: aiosqlite.Co
         f"Проверяю каждые {minutes} мин.\n\n"
         f"Список маршрутов: /routes"
     )
-
-
-async def _ask_place_pick(
-    message: Message, state: FSMContext, db: aiosqlite.Connection, *, next_state: State, storage_key: str
-) -> None:
-    assert message.text is not None
-    places = await PlacesRepo(db).search_by_name(message.text)
-    if not places:
-        await message.answer("Ничего не нашёл. Попробуйте другое название города.")
-        return
-    await state.update_data({storage_key: places})
-    await state.set_state(next_state)
-    await message.answer("Выберите вариант:", reply_markup=place_picker_kb(places))

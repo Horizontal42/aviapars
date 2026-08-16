@@ -17,3 +17,18 @@ class AddRoute(StatesGroup):
     threshold = State()
     interval = State()
     confirm = State()
+
+
+class SearchFlow(StatesGroup):
+    """§10 /search — one-shot interactive search, no route saved unless the
+    user taps "Отслеживать". Current scope (one adapter, direct offers only):
+    single synchronous pass, no L0/L1 cache-then-live split, no hub/mixed
+    results, no manual leg picker — those need more than one leg-capable
+    source to mean anything (§8/§13 Phase D/E)."""
+
+    origin = State()
+    origin_pick = State()
+    destination = State()
+    destination_pick = State()
+    date = State()
+    results = State()

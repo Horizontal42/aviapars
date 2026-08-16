@@ -20,6 +20,15 @@ class RouteAction(CallbackData, prefix="r"):
     route_id: int
 
 
+class SearchTrack(CallbackData, prefix="st"):
+    """§10 "💾 Отслеживать" bridge from /search into /add. `idx` refers to the
+    offer list stashed in FSM state for the current search — no
+    search_sessions table yet (Phase E), so this only works within the same
+    conversation, not across a bot restart."""
+
+    idx: int
+
+
 def place_picker_kb(places: list[Place]) -> InlineKeyboardMarkup:
     """§10: `PlacePick` carries a short index, not the place — Telegram caps
     callback_data at 64 bytes, and a place name/id round-trips through the
@@ -37,6 +46,14 @@ def mode_picker_kb() -> InlineKeyboardMarkup:
     builder.button(text="✈️ Самолёт", callback_data=ModePick(value="plane").pack())
     builder.button(text="🚂 Поезд", callback_data=ModePick(value="train").pack())
     builder.button(text="🔀 Авто (оба)", callback_data=ModePick(value="auto").pack())
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def search_results_kb(n: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for i in range(n):
+        builder.button(text=f"💾 Отслеживать №{i + 1}", callback_data=SearchTrack(idx=i).pack())
     builder.adjust(1)
     return builder.as_markup()
 
