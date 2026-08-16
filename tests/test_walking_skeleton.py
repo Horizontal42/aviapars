@@ -21,7 +21,7 @@ from aviapars.notify.notifier import Notifier
 from aviapars.scheduler.worker import process_route
 
 MIGRATION = Path(__file__).parent.parent / "data" / "migrations" / "001_init.sql"
-FIXTURE = Path(__file__).parent / "fixtures" / "travelpayouts" / "month_matrix_pez_led_2026-09.json"
+FIXTURE = Path(__file__).parent / "fixtures" / "travelpayouts" / "month_matrix_svx_aer_2026-09.json"
 
 
 class FakeBot:
@@ -54,10 +54,10 @@ async def _disable_quiet_hours(db: aiosqlite.Connection, user: User) -> User:
 
 async def _seed_places(db: aiosqlite.Connection) -> tuple[int, int]:
     await db.execute(
-        "INSERT INTO places (id, kind, name_ru, iata, country, is_hub_candidate) VALUES (1, 'city', 'Пенза', 'PEZ', 'RU', 0)"
+        "INSERT INTO places (id, kind, name_ru, iata, country, is_hub_candidate) VALUES (1, 'city', 'Екатеринбург', 'SVX', 'RU', 0)"
     )
     await db.execute(
-        "INSERT INTO places (id, kind, name_ru, iata, country, is_hub_candidate) VALUES (2, 'city', 'Санкт-Петербург', 'LED', 'RU', 0)"
+        "INSERT INTO places (id, kind, name_ru, iata, country, is_hub_candidate) VALUES (2, 'city', 'Сочи', 'AER', 'RU', 0)"
     )
     await db.commit()
     return 1, 2
@@ -73,15 +73,15 @@ async def test_cheap_direct_flight_triggers_notification(db: aiosqlite.Connectio
     routes_repo = RoutesRepo(db)
     route = await routes_repo.create(
         user_id=user.tg_user_id,
-        title="Пенза → Санкт-Петербург",
+        title="Екатеринбург → Сочи",
         origin_place_id=origin_id,
         dest_place_id=dest_id,
         mode_pref="plane",
         date_mode="fixed",
-        fixed_dates=["2026-09-18"],
+        fixed_dates=["2026-09-29"],
         window_start_offset_days=None,
         window_length_days=None,
-        max_price=700000,  # 7000 RUB in kopecks — the fixture's cheapest direct is 6675 RUB
+        max_price=700000,  # 7000 RUB in kopecks — the fixture's cheapest direct is 6101 RUB
         max_price_currency="RUB",
     )
 
@@ -114,8 +114,8 @@ async def test_cheap_direct_flight_triggers_notification(db: aiosqlite.Connectio
     assert len(bot.sent) == 1
     chat_id, text = bot.sent[0]
     assert chat_id == 555
-    assert "6 675" in text or "6675" in text
-    assert "Пенза → Санкт-Петербург" in text
+    assert "6 101" in text or "6101" in text
+    assert "Екатеринбург → Сочи" in text
 
     async with db.execute("SELECT COUNT(*) FROM price_observations WHERE route_id = ?", (route.id,)) as cur:
         row = await cur.fetchone()
@@ -130,12 +130,12 @@ async def test_price_above_threshold_does_not_notify(db: aiosqlite.Connection, m
     routes_repo = RoutesRepo(db)
     route = await routes_repo.create(
         user_id=user.tg_user_id,
-        title="Пенза → Санкт-Петербург",
+        title="Екатеринбург → Сочи",
         origin_place_id=origin_id,
         dest_place_id=dest_id,
         mode_pref="plane",
         date_mode="fixed",
-        fixed_dates=["2026-09-18"],
+        fixed_dates=["2026-09-29"],
         window_start_offset_days=None,
         window_length_days=None,
         max_price=100,  # 1 RUB — nothing will ever be this cheap

@@ -9,15 +9,15 @@ import pytest
 from aviapars.adapters.base import Mode, PlaceRef, ResultStatus, SearchQuery
 from aviapars.adapters.travelpayouts import TravelpayoutsAdapter
 
-FIXTURE = Path(__file__).parent.parent / "fixtures" / "travelpayouts" / "month_matrix_pez_led_2026-09.json"
+FIXTURE = Path(__file__).parent.parent / "fixtures" / "travelpayouts" / "month_matrix_svx_aer_2026-09.json"
 
 
 def _origin() -> PlaceRef:
-    return PlaceRef(place_id=1, iata="PEZ", yandex_code=None, city_id=None)
+    return PlaceRef(place_id=1, iata="SVX", yandex_code=None, city_id=None)
 
 
 def _dest() -> PlaceRef:
-    return PlaceRef(place_id=2, iata="LED", yandex_code=None, city_id=None)
+    return PlaceRef(place_id=2, iata="AER", yandex_code=None, city_id=None)
 
 
 @pytest.fixture
@@ -43,16 +43,16 @@ async def test_only_direct_flights_are_kept(adapter: TravelpayoutsAdapter) -> No
 
 
 async def test_offer_fields_are_honest_about_missing_detail(adapter: TravelpayoutsAdapter) -> None:
-    q = SearchQuery(origin=_origin(), dest=_dest(), dates=(date(2026, 9, 18),), pax=1, mode=Mode.PLANE)
+    q = SearchQuery(origin=_origin(), dest=_dest(), dates=(date(2026, 9, 29),), pax=1, mode=Mode.PLANE)
     result = await adapter.search(q)
 
     assert len(result.offers) == 1
     offer = result.offers[0]
-    assert offer.price_minor == 667500  # 6675 RUB -> kopecks
+    assert offer.price_minor == 610100  # 6101 RUB -> kopecks
     assert offer.currency == "RUB"
     assert offer.expires_at is None  # month-matrix never gives one — see plan §7
     assert offer.source_cached_at is not None  # mapped from found_at
-    assert offer.duration_minutes == 125
+    assert offer.duration_minutes == 240
     assert "marker=732612" in (offer.deep_link or "")
 
     leg = offer.legs[0]
@@ -63,11 +63,11 @@ async def test_offer_fields_are_honest_about_missing_detail(adapter: Travelpayou
 
 
 async def test_date_filter_narrows_to_requested_dates(adapter: TravelpayoutsAdapter) -> None:
-    q = SearchQuery(origin=_origin(), dest=_dest(), dates=(date(2026, 9, 16),), pax=1, mode=Mode.PLANE)
+    q = SearchQuery(origin=_origin(), dest=_dest(), dates=(date(2026, 9, 25),), pax=1, mode=Mode.PLANE)
     result = await adapter.search(q)
 
     assert len(result.offers) == 1
-    assert result.offers[0].legs[0].depart_utc.date() == date(2026, 9, 16)
+    assert result.offers[0].legs[0].depart_utc.date() == date(2026, 9, 25)
 
 
 async def test_non_plane_mode_returns_empty(adapter: TravelpayoutsAdapter) -> None:

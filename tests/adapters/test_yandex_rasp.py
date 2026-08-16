@@ -74,7 +74,7 @@ async def test_non_train_mode_returns_empty(adapter: YandexRaspAdapter) -> None:
 
 async def test_missing_yandex_code_returns_empty() -> None:
     a = YandexRaspAdapter(api_key="fake-key")
-    origin_no_code = PlaceRef(place_id=1, iata="PEZ", yandex_code=None, city_id=None)
+    origin_no_code = PlaceRef(place_id=1, iata="GOJ", yandex_code=None, city_id=None)
     q = SearchQuery(origin=origin_no_code, dest=_dest(), dates=(), pax=1, mode=Mode.TRAIN)
     result = await a.search(q)
     assert result.status == ResultStatus.EMPTY
