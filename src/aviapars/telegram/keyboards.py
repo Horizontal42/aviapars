@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+from aiogram.filters.callback_data import CallbackData
+from aiogram.types import InlineKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+from aviapars.db.models import Place
+
+
+class PlacePick(CallbackData, prefix="pl"):
+    idx: int
+
+
+class ModePick(CallbackData, prefix="md"):
+    value: str
+
+
+class RouteAction(CallbackData, prefix="r"):
+    action: str  # pause|resume|check|delete
+    route_id: int
+
+
+def place_picker_kb(places: list[Place]) -> InlineKeyboardMarkup:
+    """§10: `PlacePick` carries a short index, not the place — Telegram caps
+    callback_data at 64 bytes, and a place name/id round-trips through the
+    FSM-stored candidate list instead."""
+    builder = InlineKeyboardBuilder()
+    for i, place in enumerate(places):
+        label = f"{place.name_ru}" + (f" ({place.iata})" if place.iata else "")
+        builder.button(text=label, callback_data=PlacePick(idx=i).pack())
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def mode_picker_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✈️ Самолёт", callback_data=ModePick(value="plane").pack())
+    builder.button(text="🚂 Поезд", callback_data=ModePick(value="train").pack())
+    builder.button(text="🔀 Авто (оба)", callback_data=ModePick(value="auto").pack())
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def route_card_kb(route_id: int, *, active: bool) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    if active:
+        builder.button(text="⏸ Пауза", callback_data=RouteAction(action="pause", route_id=route_id).pack())
+    else:
+        builder.button(text="▶️ Возобновить", callback_data=RouteAction(action="resume", route_id=route_id).pack())
+    builder.button(text="🔍 Проверить сейчас", callback_data=RouteAction(action="check", route_id=route_id).pack())
+    builder.button(text="🗑 Удалить", callback_data=RouteAction(action="delete", route_id=route_id).pack())
+    builder.adjust(2, 1)
+    return builder.as_markup()

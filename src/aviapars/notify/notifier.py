@@ -13,7 +13,11 @@ from aviapars.telegram.format import format_deal_card
 
 
 class TelegramSender(Protocol):
-    async def send_message(self, chat_id: int, text: str) -> None: ...
+    """Structural subset of aiogram's Bot that Notifier actually needs — Bot's
+    real send_message() has many more optional params and returns a Message,
+    both compatible with this narrower Protocol at the call sites that use it."""
+
+    async def send_message(self, chat_id: int, text: str) -> object: ...
 
 
 class Notifier:
