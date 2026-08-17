@@ -19,6 +19,9 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
 ]
+solver = [
+    "patchright>=1.40",  # undetected Playwright fork — JS-challenge bootstrap only, never reads content
+]
 
 [tool.mypy]
 strict = true

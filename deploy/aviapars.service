@@ -11,8 +11,15 @@ ExecStart=/opt/aviapars/.venv/bin/python -m aviapars
 Restart=on-failure
 RestartSec=10
 
+# MemoryMax has headroom above the ~230-330MB steady state for s7_direct's rare
+# browser-solver fallback (ephemeral patchright/chromium subprocess, only spawned when
+# the cheap cached-session path fails — see adapters/s7_direct.py, solver/). No cgroup
+# isolation for that subprocess: it inherits this same slice. Acceptable because it's
+# on-demand, not scheduled, and bounded by BrowserSolverClient's own timeout — a spike
+# hitting MemoryMax just kills the solve attempt, s7_direct returns EMPTY, nothing else
+# in the process is affected (never-raise adapter contract).
 MemoryHigh=450M
-MemoryMax=700M
+MemoryMax=900M
 CPUWeight=50
 Nice=5
 WatchdogSec=300

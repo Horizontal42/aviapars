@@ -5,6 +5,7 @@ import logging
 
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.adapters.rzd_direct import RzdDirectAdapter
+from aviapars.adapters.s7_direct import S7DirectAdapter
 from aviapars.adapters.travelpayouts import TravelpayoutsAdapter
 from aviapars.adapters.yandex_rasp import YandexRaspAdapter
 from aviapars.config import settings
@@ -12,6 +13,7 @@ from aviapars.db.engine import connect
 from aviapars.db.migrate import migrate
 from aviapars.db.repo_jobs import JobsRepo
 from aviapars.db.repo_notifications import NotificationsRepo
+from aviapars.db.repo_sessions import SessionsRepo
 from aviapars.notify.dedupe import DedupeGate
 from aviapars.notify.notifier import Notifier
 from aviapars.scheduler.tick import run_scheduler_loop
@@ -46,6 +48,15 @@ async def main() -> None:
             )
         )
         registry.register(RzdDirectAdapter(cache_ttl_s=settings.cache_ttl_s.rzd_direct))
+
+        sessions_repo = SessionsRepo(db)
+        registry.register(
+            S7DirectAdapter(
+                session_getter=lambda: sessions_repo.get("s7_direct"),
+                session_setter=lambda payload, expires_at: sessions_repo.save("s7_direct", payload, expires_at),
+                cache_ttl_s=settings.cache_ttl_s.airline_direct,
+            )
+        )
 
         bot = create_bot(settings.telegram_bot_token)
         dp = create_dispatcher()

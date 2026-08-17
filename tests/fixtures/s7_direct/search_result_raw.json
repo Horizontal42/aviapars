@@ -1,0 +1,555 @@
+{
+  "optionSets": [
+    {
+      "route": {
+        "origin": "SVX",
+        "destination": "LED"
+      },
+      "flightOptions": [
+        {
+          "id": "01a00cc8-f2d8-700c-9ea2-34c1cfccf369",
+          "route": {
+            "duration": {
+              "amountInMinutes": 790,
+              "days": 0,
+              "hours": 13,
+              "minutes": 10
+            },
+            "segments": [
+              {
+                "departureDate": "2026-08-19T21:55:00",
+                "departureTimeZone": "Europe/Moscow",
+                "arrivalDate": "2026-08-19T23:10:00",
+                "arrivalTimeZone": "Europe/Moscow",
+                "operatingAirline": {
+                  "code": "S7",
+                  "name": "S7 Airlines",
+                  "flightNumber": "1196"
+                }
+              },
+              {
+                "departureDate": "2026-08-20T09:30:00",
+                "departureTimeZone": "Europe/Moscow",
+                "arrivalDate": "2026-08-20T11:05:00",
+                "arrivalTimeZone": "Europe/Moscow",
+                "operatingAirline": {
+                  "code": "S7",
+                  "name": "S7 Airlines",
+                  "flightNumber": "1003"
+                }
+              }
+            ]
+          },
+          "solutions": {
+            "BASICECONOMY": {
+              "id": "01a00cc8-f2de-7005-a630-1a41fbe30934",
+              "flightOptionId": "01a00cc8-f2d8-700c-9ea2-34c1cfccf369",
+              "fareFamily": "BASICECONOMY",
+              "available": true,
+              "pricing": {
+                "total": {
+                  "price": {
+                    "amount": 26799,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 26799,
+                    "currency": "RUB"
+                  }
+                },
+                "base": {
+                  "price": {
+                    "amount": 21990,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 21990,
+                    "currency": "RUB"
+                  }
+                },
+                "taxes": {
+                  "price": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  }
+                },
+                "reissuePrice": {
+                  "price": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  }
+                }
+              }
+            },
+            "PLUSECONOMY": {
+              "id": "01a00cc8-f2df-7000-a5fd-609f6c4c1f1b",
+              "flightOptionId": "01a00cc8-f2d8-700c-9ea2-34c1cfccf369",
+              "fareFamily": "PLUSECONOMY",
+              "available": true,
+              "pricing": {
+                "total": {
+                  "price": {
+                    "amount": 61624,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 61624,
+                    "currency": "RUB"
+                  }
+                },
+                "base": {
+                  "price": {
+                    "amount": 56815,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 56815,
+                    "currency": "RUB"
+                  }
+                },
+                "taxes": {
+                  "price": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  }
+                },
+                "reissuePrice": {
+                  "price": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  }
+                }
+              }
+            },
+            "STANDARDECONOMY": {
+              "id": "01a00cc8-f2df-7004-a607-981f38ca545f",
+              "flightOptionId": "01a00cc8-f2d8-700c-9ea2-34c1cfccf369",
+              "fareFamily": "STANDARDECONOMY",
+              "available": true,
+              "pricing": {
+                "total": {
+                  "price": {
+                    "amount": 33059,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 33059,
+                    "currency": "RUB"
+                  }
+                },
+                "base": {
+                  "price": {
+                    "amount": 28250,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 28250,
+                    "currency": "RUB"
+                  }
+                },
+                "taxes": {
+                  "price": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  }
+                },
+                "reissuePrice": {
+                  "price": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "01a00cc8-f2d8-7000-bde7-5660214ed94e",
+          "route": {
+            "duration": {
+              "amountInMinutes": 1315,
+              "days": 0,
+              "hours": 21,
+              "minutes": 55
+            },
+            "segments": [
+              {
+                "departureDate": "2026-08-19T21:55:00",
+                "departureTimeZone": "Europe/Moscow",
+                "arrivalDate": "2026-08-19T23:10:00",
+                "arrivalTimeZone": "Europe/Moscow",
+                "operatingAirline": {
+                  "code": "S7",
+                  "name": "S7 Airlines",
+                  "flightNumber": "1196"
+                }
+              },
+              {
+                "departureDate": "2026-08-20T18:15:00",
+                "departureTimeZone": "Europe/Moscow",
+                "arrivalDate": "2026-08-20T19:50:00",
+                "arrivalTimeZone": "Europe/Moscow",
+                "operatingAirline": {
+                  "code": "S7",
+                  "name": "S7 Airlines",
+                  "flightNumber": "1007"
+                }
+              }
+            ]
+          },
+          "solutions": {
+            "BASICECONOMY": {
+              "id": "01a00cc8-f2d9-7001-b447-a1375086187d",
+              "flightOptionId": "01a00cc8-f2d8-7000-bde7-5660214ed94e",
+              "fareFamily": "BASICECONOMY",
+              "available": true,
+              "pricing": {
+                "total": {
+                  "price": {
+                    "amount": 17719,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 17719,
+                    "currency": "RUB"
+                  }
+                },
+                "base": {
+                  "price": {
+                    "amount": 12910,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 12910,
+                    "currency": "RUB"
+                  }
+                },
+                "taxes": {
+                  "price": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  }
+                },
+                "reissuePrice": {
+                  "price": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  }
+                }
+              }
+            },
+            "PLUSECONOMY": {
+              "id": "01a00cc8-f2da-7000-8cf8-8f6b1652abf9",
+              "flightOptionId": "01a00cc8-f2d8-7000-bde7-5660214ed94e",
+              "fareFamily": "PLUSECONOMY",
+              "available": true,
+              "pricing": {
+                "total": {
+                  "price": {
+                    "amount": 40769,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 40769,
+                    "currency": "RUB"
+                  }
+                },
+                "base": {
+                  "price": {
+                    "amount": 35960,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 35960,
+                    "currency": "RUB"
+                  }
+                },
+                "taxes": {
+                  "price": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  }
+                },
+                "reissuePrice": {
+                  "price": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  }
+                }
+              }
+            },
+            "STANDARDECONOMY": {
+              "id": "01a00cc8-f2db-7000-a698-28a3bf3531c6",
+              "flightOptionId": "01a00cc8-f2d8-7000-bde7-5660214ed94e",
+              "fareFamily": "STANDARDECONOMY",
+              "available": true,
+              "pricing": {
+                "total": {
+                  "price": {
+                    "amount": 21179,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 21179,
+                    "currency": "RUB"
+                  }
+                },
+                "base": {
+                  "price": {
+                    "amount": 16370,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 16370,
+                    "currency": "RUB"
+                  }
+                },
+                "taxes": {
+                  "price": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  }
+                },
+                "reissuePrice": {
+                  "price": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "01a00cc8-f2d8-7006-85e4-92b18e44f6a8",
+          "route": {
+            "duration": {
+              "amountInMinutes": 1225,
+              "days": 0,
+              "hours": 20,
+              "minutes": 25
+            },
+            "segments": [
+              {
+                "departureDate": "2026-08-19T21:55:00",
+                "departureTimeZone": "Europe/Moscow",
+                "arrivalDate": "2026-08-19T23:10:00",
+                "arrivalTimeZone": "Europe/Moscow",
+                "operatingAirline": {
+                  "code": "S7",
+                  "name": "S7 Airlines",
+                  "flightNumber": "1196"
+                }
+              },
+              {
+                "departureDate": "2026-08-20T16:45:00",
+                "departureTimeZone": "Europe/Moscow",
+                "arrivalDate": "2026-08-20T18:20:00",
+                "arrivalTimeZone": "Europe/Moscow",
+                "operatingAirline": {
+                  "code": "S7",
+                  "name": "S7 Airlines",
+                  "flightNumber": "1005"
+                }
+              }
+            ]
+          },
+          "solutions": {
+            "BASICECONOMY": {
+              "id": "01a00cc8-f2dc-7000-8059-e55b1882a36b",
+              "flightOptionId": "01a00cc8-f2d8-7006-85e4-92b18e44f6a8",
+              "fareFamily": "BASICECONOMY",
+              "available": true,
+              "pricing": {
+                "total": {
+                  "price": {
+                    "amount": 20114,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 20114,
+                    "currency": "RUB"
+                  }
+                },
+                "base": {
+                  "price": {
+                    "amount": 15305,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 15305,
+                    "currency": "RUB"
+                  }
+                },
+                "taxes": {
+                  "price": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  }
+                },
+                "reissuePrice": {
+                  "price": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  }
+                }
+              }
+            },
+            "PLUSECONOMY": {
+              "id": "01a00cc8-f2dd-7000-bf89-a45936ed8352",
+              "flightOptionId": "01a00cc8-f2d8-7006-85e4-92b18e44f6a8",
+              "fareFamily": "PLUSECONOMY",
+              "available": true,
+              "pricing": {
+                "total": {
+                  "price": {
+                    "amount": 44804,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 44804,
+                    "currency": "RUB"
+                  }
+                },
+                "base": {
+                  "price": {
+                    "amount": 39995,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 39995,
+                    "currency": "RUB"
+                  }
+                },
+                "taxes": {
+                  "price": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  }
+                },
+                "reissuePrice": {
+                  "price": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  }
+                }
+              }
+            },
+            "STANDARDECONOMY": {
+              "id": "01a00cc8-f2dd-7007-811a-4f3273b25444",
+              "flightOptionId": "01a00cc8-f2d8-7006-85e4-92b18e44f6a8",
+              "fareFamily": "STANDARDECONOMY",
+              "available": true,
+              "pricing": {
+                "total": {
+                  "price": {
+                    "amount": 23639,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 23639,
+                    "currency": "RUB"
+                  }
+                },
+                "base": {
+                  "price": {
+                    "amount": 18830,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 18830,
+                    "currency": "RUB"
+                  }
+                },
+                "taxes": {
+                  "price": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 4809,
+                    "currency": "RUB"
+                  }
+                },
+                "reissuePrice": {
+                  "price": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  },
+                  "salePrice": {
+                    "amount": 0,
+                    "currency": "RUB"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
