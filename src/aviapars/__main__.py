@@ -61,7 +61,7 @@ async def main() -> None:
             )
         )
 
-        bot = create_bot(settings.telegram_bot_token)
+        bot = create_bot(settings.telegram_bot_token, proxy_url=settings.telegram_proxy_url)
         dp = create_dispatcher()
 
         notifications_repo = NotificationsRepo(db)

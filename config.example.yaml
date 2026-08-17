@@ -52,3 +52,8 @@ interactive_bucket_wait_s: 2
 notifications_per_route_per_day: 3
 # минимальный интервал между повторными уведомлениями об одной и той же цене (часы)
 notification_dedupe_cooldown_h: 12
+
+# прокси для сессии бота с Telegram API (не для адаптеров-источников — те всегда напрямую).
+# Нужен, если хостинг блокирует api.telegram.org (например VDS в России).
+# null = без прокси. Пример: socks5://127.0.0.1:10808
+telegram_proxy_url: null

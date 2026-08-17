@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     notifications_per_route_per_day: int = 3
     notification_dedupe_cooldown_h: int = 12
 
+    # SOCKS5/HTTP proxy for the bot's Telegram session only — adapters (travelpayouts,
+    # yandex_rasp, rzd_direct, s7_direct) stay direct. None = no proxy (default, local dev).
+    telegram_proxy_url: str | None = None
+
     @classmethod
     def settings_customise_sources(
         cls,

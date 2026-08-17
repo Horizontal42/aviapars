@@ -10,6 +10,7 @@ dependencies = [
     "selectolax>=0.3.21",
     "curl_cffi>=0.7",
     "pydantic-settings[yaml]>=2.5",
+    "aiohttp-socks>=0.9",  # SOCKS5 proxy for the bot's Telegram session (api.telegram.org is blocked from RU hosting)
     "tzdata>=2024.1",  # zoneinfo has no IANA db on Windows; harmless no-op on Linux
 ]
 
