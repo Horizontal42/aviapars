@@ -1,0 +1,322 @@
+{
+  "result": "ok",
+  "gotoPassengers": false,
+  "flights": [
+    {
+      "chainIndex": 0,
+      "chainId": "60336473",
+      "flights": [
+        {
+          "id": 60336473,
+          "company": {
+            "code_en": "DP",
+            "name_en": "Pobeda",
+            "code": "DP",
+            "name": "Pobeda"
+          },
+          "carrier": "DP",
+          "racenumber": "515",
+          "departuredate": "10.09.2026",
+          "date": "10.09.2026",
+          "departuretime": "23:35",
+          "arrivaldate": "11.09.2026",
+          "arrivaltime": "04:25",
+          "airplane": "BOEING 737-800 (WINGLETS) PASSENGER",
+          "airplaneName": "BOEING 737-800 (WINGLETS) PASSENGER",
+          "vehicleCodeEn": "73H",
+          "destinationport": "SVX",
+          "destinationportName": "",
+          "destinationcity": "SVX",
+          "destinationcityName": "Yekaterinburg",
+          "originport": "LED",
+          "originportName": "",
+          "origincity": "LED",
+          "origincityName": "St Petersburg",
+          "originTerminal": "1",
+          "flighttime": "02:50",
+          "delaydays": 0,
+          "departuredayshift": 0,
+          "arrivaldayshift": 1,
+          "landings": []
+        }
+      ],
+      "connections": [],
+      "flightTime": "02:50"
+    },
+    {
+      "chainIndex": 0,
+      "chainId": "60336474-60336475",
+      "flights": [
+        {
+          "id": 60336474,
+          "company": {
+            "code_en": "DP",
+            "name_en": "Pobeda",
+            "code": "DP",
+            "name": "Pobeda"
+          },
+          "carrier": "DP",
+          "racenumber": "6822",
+          "departuredate": "10.09.2026",
+          "date": "10.09.2026",
+          "departuretime": "21:25",
+          "arrivaldate": "10.09.2026",
+          "arrivaltime": "22:50",
+          "airplane": "BOEING 737-800 (WINGLETS) PASSENGER",
+          "airplaneName": "BOEING 737-800 (WINGLETS) PASSENGER",
+          "vehicleCodeEn": "73H",
+          "destinationport": "SVO",
+          "destinationportName": "Sheremetyevo",
+          "destinationcity": "MOW",
+          "destinationcityName": "Moscow",
+          "originport": "LED",
+          "originportName": "",
+          "origincity": "LED",
+          "origincityName": "St Petersburg",
+          "originTerminal": "1",
+          "destinationTerminal": "D",
+          "flighttime": "01:25",
+          "delaydays": 0,
+          "departuredayshift": 0,
+          "arrivaldayshift": 0,
+          "landings": []
+        },
+        {
+          "id": 60336475,
+          "company": {
+            "code_en": "DP",
+            "name_en": "Pobeda",
+            "code": "DP",
+            "name": "Pobeda"
+          },
+          "carrier": "DP",
+          "racenumber": "6541",
+          "departuredate": "11.09.2026",
+          "date": "11.09.2026",
+          "departuretime": "00:20",
+          "arrivaldate": "11.09.2026",
+          "arrivaltime": "04:45",
+          "airplane": "BOEING 737-800 (WINGLETS) PASSENGER",
+          "airplaneName": "BOEING 737-800 (WINGLETS) PASSENGER",
+          "vehicleCodeEn": "73H",
+          "destinationport": "SVX",
+          "destinationportName": "",
+          "destinationcity": "SVX",
+          "destinationcityName": "Yekaterinburg",
+          "originport": "SVO",
+          "originportName": "Sheremetyevo",
+          "origincity": "MOW",
+          "origincityName": "Moscow",
+          "originTerminal": "D",
+          "flighttime": "02:25",
+          "delaydays": 0,
+          "departuredayshift": 1,
+          "arrivaldayshift": 1,
+          "landings": []
+        }
+      ],
+      "connections": [
+        {
+          "city": "MOW",
+          "cityName": "Moscow",
+          "previousAirport": "SVO",
+          "previousAirportName": "Sheremetyevo",
+          "nextAirport": "SVO",
+          "nextAirportName": "Sheremetyevo",
+          "previousTerminal": "D",
+          "nextTerminal": "D",
+          "time": "01:30"
+        }
+      ],
+      "flightTime": "05:20"
+    },
+    {
+      "chainIndex": 0,
+      "chainId": "60336476-60336477",
+      "flights": [
+        {
+          "id": 60336476,
+          "company": {
+            "code_en": "DP",
+            "name_en": "Pobeda",
+            "code": "DP",
+            "name": "Pobeda"
+          },
+          "carrier": "DP",
+          "racenumber": "6824",
+          "departuredate": "10.09.2026",
+          "date": "10.09.2026",
+          "departuretime": "17:35",
+          "arrivaldate": "10.09.2026",
+          "arrivaltime": "19:00",
+          "airplane": "BOEING 737-800 (WINGLETS) PASSENGER",
+          "airplaneName": "BOEING 737-800 (WINGLETS) PASSENGER",
+          "vehicleCodeEn": "73H",
+          "destinationport": "SVO",
+          "destinationportName": "Sheremetyevo",
+          "destinationcity": "MOW",
+          "destinationcityName": "Moscow",
+          "originport": "LED",
+          "originportName": "",
+          "origincity": "LED",
+          "origincityName": "St Petersburg",
+          "originTerminal": "1",
+          "destinationTerminal": "D",
+          "flighttime": "01:25",
+          "delaydays": 0,
+          "departuredayshift": 0,
+          "arrivaldayshift": 0,
+          "landings": []
+        },
+        {
+          "id": 60336477,
+          "company": {
+            "code_en": "DP",
+            "name_en": "Pobeda",
+            "code": "DP",
+            "name": "Pobeda"
+          },
+          "carrier": "DP",
+          "racenumber": "6543",
+          "departuredate": "10.09.2026",
+          "date": "10.09.2026",
+          "departuretime": "23:35",
+          "arrivaldate": "11.09.2026",
+          "arrivaltime": "04:00",
+          "airplane": "BOEING 737-800 (WINGLETS) PASSENGER",
+          "airplaneName": "BOEING 737-800 (WINGLETS) PASSENGER",
+          "vehicleCodeEn": "73H",
+          "destinationport": "SVX",
+          "destinationportName": "",
+          "destinationcity": "SVX",
+          "destinationcityName": "Yekaterinburg",
+          "originport": "SVO",
+          "originportName": "Sheremetyevo",
+          "origincity": "MOW",
+          "origincityName": "Moscow",
+          "originTerminal": "D",
+          "flighttime": "02:25",
+          "delaydays": 0,
+          "departuredayshift": 0,
+          "arrivaldayshift": 1,
+          "landings": []
+        }
+      ],
+      "connections": [
+        {
+          "city": "MOW",
+          "cityName": "Moscow",
+          "previousAirport": "SVO",
+          "previousAirportName": "Sheremetyevo",
+          "nextAirport": "SVO",
+          "nextAirportName": "Sheremetyevo",
+          "previousTerminal": "D",
+          "nextTerminal": "D",
+          "time": "04:35"
+        }
+      ],
+      "flightTime": "08:25"
+    }
+  ],
+  "promoCodeStatus": "EMPTY_PROMO_CODE",
+  "prices": [
+    {
+      "60336476-60336477": [
+        {
+          "clientId": 8315,
+          "price": "14298.00",
+          "originalPrice": "14298.00",
+          "currency": "RUB",
+          "brand": "DP.EC.Y.1.ST",
+          "requestedBrands": "ST",
+          "available": 2,
+          "promoCodeStatus": "EMPTY_PROMO_CODE"
+        },
+        {
+          "clientId": 8315,
+          "price": "20198.00",
+          "originalPrice": "20198.00",
+          "currency": "RUB",
+          "brand": "DP.EC.Y.2.AD",
+          "requestedBrands": "AD",
+          "available": 2,
+          "promoCodeStatus": "EMPTY_PROMO_CODE"
+        },
+        {
+          "clientId": 8315,
+          "price": "26898.00",
+          "originalPrice": "26898.00",
+          "currency": "RUB",
+          "brand": "DP.EC.Y.3.MX",
+          "requestedBrands": "MX",
+          "available": 2,
+          "promoCodeStatus": "EMPTY_PROMO_CODE"
+        }
+      ],
+      "60336474-60336475": [
+        {
+          "clientId": 8315,
+          "price": "13098.00",
+          "originalPrice": "13098.00",
+          "currency": "RUB",
+          "brand": "DP.EC.Y.1.ST",
+          "requestedBrands": "ST",
+          "available": 2,
+          "promoCodeStatus": "EMPTY_PROMO_CODE"
+        },
+        {
+          "clientId": 8315,
+          "price": "18998.00",
+          "originalPrice": "18998.00",
+          "currency": "RUB",
+          "brand": "DP.EC.Y.2.AD",
+          "requestedBrands": "AD",
+          "available": 2,
+          "promoCodeStatus": "EMPTY_PROMO_CODE"
+        },
+        {
+          "clientId": 8315,
+          "price": "25698.00",
+          "originalPrice": "25698.00",
+          "currency": "RUB",
+          "brand": "DP.EC.Y.3.MX",
+          "requestedBrands": "MX",
+          "available": 2,
+          "promoCodeStatus": "EMPTY_PROMO_CODE"
+        }
+      ],
+      "60336473": [
+        {
+          "clientId": 8315,
+          "price": "8999.00",
+          "originalPrice": "8999.00",
+          "currency": "RUB",
+          "brand": "DP.EC.Y.1.ST",
+          "requestedBrands": "ST",
+          "available": 8,
+          "promoCodeStatus": "EMPTY_PROMO_CODE"
+        },
+        {
+          "clientId": 8315,
+          "price": "12099.00",
+          "originalPrice": "12099.00",
+          "currency": "RUB",
+          "brand": "DP.EC.Y.2.AD",
+          "requestedBrands": "AD",
+          "available": 8,
+          "promoCodeStatus": "EMPTY_PROMO_CODE"
+        },
+        {
+          "clientId": 8315,
+          "price": "15499.00",
+          "originalPrice": "15499.00",
+          "currency": "RUB",
+          "brand": "DP.EC.Y.3.MX",
+          "requestedBrands": "MX",
+          "available": 8,
+          "promoCodeStatus": "EMPTY_PROMO_CODE"
+        }
+      ]
+    }
+  ]
+}

@@ -67,3 +67,8 @@ notification_dedupe_cooldown_h: 12
 # Нужен, если хостинг блокирует api.telegram.org (например VDS в России).
 # null = без прокси. Пример: socks5://127.0.0.1:10808
 telegram_proxy_url: null
+
+# прокси только для pobeda_direct — Победа банит датацентровые/VPN IP по типу адреса,
+# помогает только настоящий резидентский IP (например через домашний Tailscale-релей
+# админа). Никак не связан с telegram_proxy_url. null = без прокси (напрямую, будет BLOCKED).
+pobeda_proxy_url: null

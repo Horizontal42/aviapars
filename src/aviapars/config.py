@@ -83,6 +83,12 @@ class Settings(BaseSettings):
     # yandex_rasp, rzd_direct, s7_direct) stay direct. None = no proxy (default, local dev).
     telegram_proxy_url: str | None = None
 
+    # SOCKS5 proxy for pobeda_direct only — Pobeda's WAF blocks every datacenter/VPN IP
+    # tried (VDS itself, 3 VPN exits) but not a genuine residential one, so this points at
+    # a relay reachable over the admin's own home Tailscale connection. Unrelated to
+    # telegram_proxy_url — different egress, different reason. None = no proxy (direct).
+    pobeda_proxy_url: str | None = None
+
     @classmethod
     def settings_customise_sources(
         cls,
