@@ -22,13 +22,21 @@ degradation as any other missing-data case in this project, not a crash.
 Also backfills `rzd_code` on city rows for the `rzd_direct` adapter, via
 pass.rzd.ru's own `/suggester` autocomplete endpoint (verified live,
 2026-08-17 — no bulk station dump exists for this source, unlike Yandex's
-stations_list, so this is one autocomplete request per city with a 150ms
-pace between requests, paced deliberately since no rate limit is published).
-The endpoint returns city-level aggregate nodes flagged `ss: true` (e.g.
-Moscow -> 2000000, covering all of its individual vokzals for search
-purposes) alongside individual station entries; matching prefers the
-`ss: true` row on an exact normalized-name match, falling back to the first
-exact match of any kind.
+stations_list, so this is one autocomplete request per city with a pace
+between requests, paced deliberately since no rate limit is published).
+
+Correction from a live re-check (2026-08-17, second pass): the endpoint does
+NOT reliably return a bare city-level node, and no candidate ever carries an
+`ss` flag in practice — that first assumption was simply wrong and made the
+matcher exact-string-only, which silently missed most multi-syllable or
+hyphenated cities (Екатеринбург only ever appears as "ЕКАТЕРИНБУРГ-ПАССАЖИРС",
+Пенза as "ПЕНЗА 1", Нижний Новгород as "НИЖНИЙ НОВГОРОД (ВСЕ ВОКЗАЛЫ)") —
+233/335 cities ended up with no rzd_code at all from the original run.
+Matching now takes the candidate whose name, split on the first comma, starts
+with the target city name (handling a `-SUFFIX`/` SUFFIX` station qualifier),
+preferring an exact head match over a suffixed one, and the highest `S`
+(relevance) score as a tiebreaker. Re-verified against Moscow/SPb/Sochi (the
+three previously-exact matches) to confirm this doesn't change their codes.
 
 Run: python -m aviapars.db.migrate && python data/seed_places.py
 """
@@ -53,7 +61,7 @@ AIRPORTS_URL = "http://api.travelpayouts.com/data/ru/airports.json"
 YANDEX_STATIONS_URL = "https://api.rasp.yandex-net.ru/v3.0/stations_list/"
 RZD_SUGGESTER_URL = "https://pass.rzd.ru/suggester"
 RZD_REQUEST_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; aviapars-seed/1.0)"}
-RZD_PACE_S = 0.15
+RZD_PACE_S = 0.4  # gentler than the original 0.15s — a leading suspect for pass.rzd.ru IP-banning the seeder
 
 
 def _normalize(name: str) -> str:
@@ -218,11 +226,21 @@ async def _rzd_city_code(session: aiohttp.ClientSession, name_ru: str) -> str | 
         return None
 
     target = _normalize(name_ru)
-    exact = [c for c in candidates if _normalize(c.get("n", "")) == target]
-    if not exact:
+    # RZD rarely returns a bare city-name node — station names carry a
+    # qualifier ("ЕКАТЕРИНБУРГ-ПАССАЖИРС", "ПЕНЗА 1", "НИЖНИЙ НОВГОРОД (ВСЕ
+    # ВОКЗАЛЫ)") — so match on the head before the first comma, preferring an
+    # exact head match over a suffixed one, tiebreaking on RZD's own `S` score.
+    scored: list[tuple[int, int, dict[str, Any]]] = []
+    for c in candidates:
+        head = _normalize(c.get("n", "").split(",")[0].strip())
+        if head == target:
+            scored.append((2, c.get("S", 0), c))
+        elif head.startswith(target + "-") or head.startswith(target + " ") or head.startswith(target + "("):
+            scored.append((1, c.get("S", 0), c))
+    if not scored:
         return None
-    city_node = next((c for c in exact if c.get("ss")), None)
-    return str((city_node or exact[0])["c"])
+    scored.sort(key=lambda t: (-t[0], -t[1]))
+    return str(scored[0][2]["c"])
 
 
 async def _backfill_rzd_codes(db: aiosqlite.Connection) -> None:
