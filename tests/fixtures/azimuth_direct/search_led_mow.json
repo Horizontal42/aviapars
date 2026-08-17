@@ -1,0 +1,303 @@
+[
+  {
+    "method": "get-availability",
+    "result": {
+      "error": {
+        "code": "OK",
+        "description": "",
+        "data": [],
+        "stack": ""
+      },
+      "currency": "RUB",
+      "currency_format": "# руб",
+      "currency_thousands_separator": "",
+      "currency_decimal_separator": ".",
+      "currency_decimal_count": "0",
+      "exact_time_sig": 237,
+      "exact_time_sig_matrix": 189,
+      "exact_time_tsh": 752,
+      "min_prices": [
+        {
+          "min_price": "6780.00",
+          "flight_dates": [
+            {
+              "date": "19.09.2026",
+              "direction": "TO"
+            }
+          ]
+        },
+        {
+          "min_price": "6780.00",
+          "flight_dates": [
+            {
+              "date": "21.09.2026",
+              "direction": "TO"
+            }
+          ]
+        }
+      ],
+      "directions": [
+        {
+          "direction": "TO",
+          "date": "19.09.2026",
+          "min_direction_price": "6780.00",
+          "latin_only": "N",
+          "flights": [
+            {
+              "latin_only": "N",
+              "duration": 6900,
+              "stops": 0,
+              "segments": [
+                {
+                  "ak": "A4",
+                  "oak": "A4",
+                  "ak_full_name": "Азимут",
+                  "flight_number": "7020",
+                  "plane_type": "SU9",
+                  "plane_type_name": "SSJ-100",
+                  "departure_date": "19.09.2026",
+                  "departure_time": "07:30",
+                  "departure_utc": "19.09.2026 04:30:00",
+                  "departure_airport_code": "LED",
+                  "arrival_date": "19.09.2026",
+                  "arrival_time": "09:25",
+                  "arrival_utc": "19.09.2026 06:25:00",
+                  "arrival_airport_code": "VKO",
+                  "departure_city_code": "LED",
+                  "arrival_city_code": "MOW",
+                  "departure_city_full_name": "Санкт-Петербург",
+                  "departure_airport_full_name": "Пулково",
+                  "arrival_city_full_name": "Москва",
+                  "arrival_airport_full_name": "Внуково",
+                  "duration": 6900,
+                  "class": "",
+                  "rbd": "",
+                  "layover_time": "0",
+                  "stops": [],
+                  "bagtype": "",
+                  "bagallowance": "",
+                  "doctype_list": "СР,ПС,ПСП,НП,УДЛ,ВУЛ,ВБ",
+                  "standby": "N",
+                  "airport_checkin": "19.09.2026 04:30:46",
+                  "airport_checkin_utc": "19.09.2026 01:30:00"
+                }
+              ],
+              "offers": [
+                {
+                  "marketing_fare_id": "1930",
+                  "marketing_fare_code": "Легкий",
+                  "marketing_fare_code2": "LIGHT",
+                  "fare_code": "LLTOW",
+                  "fare_rules_key": "%212%2F000%2F00%2F%C04%2F225%2F1482%2F%C04%2F11002%2F1060%2F%2F0%2F0%2F1100%2F15%2FLLTOW%2F%2F%D1%CF%D2%2F%CC%CE%C2%2F16%2F%40%25%23LLTOW%40%25%231M%40%25%23%40%25%2323%CE%D0%D1|LLTOW|1M|",
+                  "price": "6780.00",
+                  "offer_id": "0_0",
+                  "seat_count": 5,
+                  "products": [
+                    {
+                      "passcat": "ADT",
+                      "price": "6780.00",
+                      "fare": "6780.00",
+                      "taxes": "0.00",
+                      "count": 1,
+                      "sum_price": "6780.00",
+                      "netprice": null
+                    }
+                  ],
+                  "fare_services": [
+                    {
+                      "name": "Ручная кладь",
+                      "code": "PROP_DSP_CABIN_BAG",
+                      "text": "5 кг",
+                      "value": "5 кг",
+                      "status": "INCLUDED"
+                    },
+                    {
+                      "name": "Багаж",
+                      "code": "PROP_DSP_BAGGAGE",
+                      "text": "Платно",
+                      "value": "Платно",
+                      "status": "CHARGE"
+                    },
+                    {
+                      "name": "Возврат билета",
+                      "code": "PROP_DSP_TKT_RETURN",
+                      "text": "Нет",
+                      "value": "Нет",
+                      "status": "NOT_AVAILABLE"
+                    }
+                  ],
+                  "segment_data": [
+                    {
+                      "class": "E",
+                      "marketing_fare_code2": "LIGHT",
+                      "rbd": "L"
+                    }
+                  ]
+                },
+                {
+                  "marketing_fare_id": "1932",
+                  "marketing_fare_code": "Гибкий",
+                  "marketing_fare_code2": "FLEX",
+                  "fare_code": "LFLOW",
+                  "fare_rules_key": "%212%2F000%2F00%2F%C04%2F225%2F1482%2F%C04%2F11002%2F1060%2F%2F0%2F0%2F2100%2F25%2FLFLOW%2F%2F%D1%CF%D2%2F%CC%CE%C2%2F16%2F%40%25%23LFLOW%40%25%231M%40%25%23%40%25%2323%CE%D0%D1|LFLOW|1M|",
+                  "price": "10780.00",
+                  "offer_id": "1_0",
+                  "seat_count": 5,
+                  "products": [
+                    {
+                      "passcat": "ADT",
+                      "price": "10780.00",
+                      "fare": "10780.00",
+                      "taxes": "0.00",
+                      "count": 1,
+                      "sum_price": "10780.00",
+                      "netprice": null
+                    }
+                  ],
+                  "fare_services": [
+                    {
+                      "name": "Ручная кладь",
+                      "code": "PROP_DSP_CABIN_BAG",
+                      "text": "5 кг",
+                      "value": "5 кг",
+                      "status": "INCLUDED"
+                    },
+                    {
+                      "name": "Багаж",
+                      "code": "PROP_DSP_BAGGAGE",
+                      "text": "1 место 23 кг",
+                      "value": "1 место 23 кг",
+                      "status": "INCLUDED"
+                    },
+                    {
+                      "name": "Возврат билета",
+                      "code": "PROP_DSP_TKT_RETURN",
+                      "text": "C удержанием",
+                      "value": "C удержанием",
+                      "status": "INCLUDED"
+                    }
+                  ],
+                  "segment_data": [
+                    {
+                      "class": "E",
+                      "marketing_fare_code2": "FLEX",
+                      "rbd": "L"
+                    }
+                  ]
+                },
+                {
+                  "marketing_fare_id": "1931",
+                  "marketing_fare_code": "Базовый",
+                  "marketing_fare_code2": "BASE",
+                  "fare_code": "SBSOW",
+                  "fare_rules_key": "%212%2F000%2F00%2F%C04%2F213%2F1443%2F%C04%2F11002%2F1060%2F%2F0%2F0%2F1000%2F25%2FSBSOW%2F%2F%D1%CF%D2%2F%CC%CE%C2%2F16%2F%40%25%23SBSOW%40%25%231M%40%25%23%40%25%2323%CE%D0%D1|SBSOW|1M|",
+                  "price": "25330.00",
+                  "offer_id": "2_0",
+                  "seat_count": 3,
+                  "products": [
+                    {
+                      "passcat": "ADT",
+                      "price": "25330.00",
+                      "fare": "25330.00",
+                      "taxes": "0.00",
+                      "count": 1,
+                      "sum_price": "25330.00",
+                      "netprice": null
+                    }
+                  ],
+                  "fare_services": [
+                    {
+                      "name": "Ручная кладь",
+                      "code": "PROP_DSP_CABIN_BAG",
+                      "text": "10 кг",
+                      "value": "10 кг",
+                      "status": "INCLUDED"
+                    },
+                    {
+                      "name": "Багаж",
+                      "code": "PROP_DSP_BAGGAGE",
+                      "text": "2 места 23 кг",
+                      "value": "2 места 23 кг",
+                      "status": "INCLUDED"
+                    },
+                    {
+                      "name": "Возврат билета",
+                      "code": "PROP_DSP_TKT_RETURN",
+                      "text": "До вылета с удержанием",
+                      "value": "До вылета с удержанием",
+                      "status": "INCLUDED"
+                    }
+                  ],
+                  "segment_data": [
+                    {
+                      "class": "E",
+                      "marketing_fare_code2": "BASE",
+                      "rbd": "S"
+                    }
+                  ]
+                },
+                {
+                  "marketing_fare_id": "1933",
+                  "marketing_fare_code": "Свободный",
+                  "marketing_fare_code2": "LEISURE",
+                  "fare_code": "WFROW",
+                  "fare_rules_key": "%212%2F000%2F00%2F%C04%2F211%2F1409%2F%C04%2F11001%2F1054%2F%2F0%2F0%2F1000%2F19%2FWFROW%2F%2F%D1%CF%D2%2F%CC%CE%C2%2F16%2F%40%25%23WFROW%40%25%231M%40%25%23%40%25%2323%CE%D0%D1|WFROW|1M|",
+                  "price": "27380.00",
+                  "offer_id": "3_0",
+                  "seat_count": 5,
+                  "products": [
+                    {
+                      "passcat": "ADT",
+                      "price": "27380.00",
+                      "fare": "27380.00",
+                      "taxes": "0.00",
+                      "count": 1,
+                      "sum_price": "27380.00",
+                      "netprice": null
+                    }
+                  ],
+                  "fare_services": [
+                    {
+                      "name": "Ручная кладь",
+                      "code": "PROP_DSP_CABIN_BAG",
+                      "text": "10 кг",
+                      "value": "10 кг",
+                      "status": "INCLUDED"
+                    },
+                    {
+                      "name": "Багаж",
+                      "code": "PROP_DSP_BAGGAGE",
+                      "text": "2 места 23 кг",
+                      "value": "2 места 23 кг",
+                      "status": "INCLUDED"
+                    },
+                    {
+                      "name": "Возврат билета",
+                      "code": "PROP_DSP_TKT_RETURN",
+                      "text": "Бесплатно",
+                      "value": "Бесплатно",
+                      "status": "INCLUDED"
+                    }
+                  ],
+                  "segment_data": [
+                    {
+                      "class": "E",
+                      "marketing_fare_code2": "LEISURE",
+                      "rbd": "W"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "direction": "TO",
+          "date": "21.09.2026",
+          "min_direction_price": "6780.00"
+        }
+      ]
+    },
+    "logId": "20260817232545_ae36479df77888a4b867ce1c3763ced9"
+  }
+]
