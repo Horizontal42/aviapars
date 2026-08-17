@@ -18,7 +18,7 @@ from aviapars.notify.dedupe import DedupeGate
 from aviapars.notify.notifier import Notifier
 from aviapars.scheduler.tick import run_scheduler_loop
 from aviapars.systemd_notify import notify, watchdog_loop
-from aviapars.telegram.bot import create_bot, create_dispatcher
+from aviapars.telegram.bot import create_bot, create_dispatcher, setup_commands
 
 _WATCHDOG_PING_INTERVAL_S = 100  # aviapars.service sets WatchdogSec=300 — 3x margin
 
@@ -80,6 +80,7 @@ async def main() -> None:
         watchdog_task = asyncio.create_task(watchdog_loop(_WATCHDOG_PING_INTERVAL_S))
         notify("READY=1")
         try:
+            await setup_commands(bot)
             await dp.start_polling(bot, db=db, registry=registry, notifier=notifier)
         finally:
             scheduler_task.cancel()

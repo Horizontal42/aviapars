@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 import aiosqlite
 from aiogram import Router
 from aiogram.filters import Command
@@ -12,8 +14,9 @@ from aviapars.db.repo_routes import RoutesRepo
 from aviapars.db.repo_users import UsersRepo
 from aviapars.notify.notifier import Notifier
 from aviapars.scheduler.worker import process_route
-from aviapars.telegram.format import format_money
-from aviapars.telegram.keyboards import RouteAction, route_card_kb
+from aviapars.domain.dates import selection_from_route
+from aviapars.telegram.format import describe_selection, format_money
+from aviapars.telegram.keyboards import RouteAction, route_card_kb, routes_list_kb
 
 router = Router(name="routes")
 
@@ -21,14 +24,20 @@ router = Router(name="routes")
 @router.message(Command("routes"))
 async def cmd_routes(message: Message, db: aiosqlite.Connection) -> None:
     assert message.from_user is not None
-    routes = await RoutesRepo(db).list_for_user(message.from_user.id)
+    await render_routes(message, message.from_user.id, db)
+
+
+async def render_routes(message: Message, user_id: int, db: aiosqlite.Connection) -> None:
+    routes = await RoutesRepo(db).list_for_user(user_id)
     if not routes:
-        await message.answer("Пока нет отслеживаемых маршрутов. /add — добавить.")
+        await message.answer("Пока нет отслеживаемых маршрутов.", reply_markup=routes_list_kb())
         return
+    today = date.today()
     for route in routes:
         status = "▶️ активен" if route.active else "⏸ на паузе"
         text = (
             f"{route.title}\n"
+            f"Даты: {describe_selection(selection_from_route(route), today)}\n"
             f"Порог: {format_money(route.max_price, route.max_price_currency)} · "
             f"каждые {route.poll_interval_min} мин · {status}"
         )
@@ -74,6 +83,7 @@ async def on_route_action(
             user=user,
             registry=registry,
             places_repo=PlacesRepo(db),
+            routes_repo=routes_repo,
             observations_repo=ObservationsRepo(db),
             notifier=notifier,
         )

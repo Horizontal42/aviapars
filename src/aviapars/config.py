@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     max_combo_candidates: int = 24
     max_hops_cap: int = 2
 
+    # Flexible date windows (§6). Sources that batch a whole month per request always get the
+    # full window; these caps only bound sources that spend one request per date.
+    flex_probe_dates_per_cycle: int = 7
+    flex_hub_probe_dates: int = 1
+    flex_search_probe_dates: int = 3  # /search is synchronous under a ~12s budget — much tighter
+
     search_session_ttl_min: int = 30
     search_sessions_per_user_cap: int = 5
 

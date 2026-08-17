@@ -9,6 +9,7 @@ import pytest
 
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.adapters.travelpayouts import TravelpayoutsAdapter
+from aviapars.config import settings
 from aviapars.db.models import User
 from aviapars.db.repo_jobs import JobsRepo
 from aviapars.db.repo_notifications import NotificationsRepo
@@ -108,6 +109,7 @@ async def test_cheap_direct_flight_triggers_notification(db: aiosqlite.Connectio
         user=user,
         registry=registry,
         places_repo=PlacesRepo(db),
+        routes_repo=routes_repo,
         observations_repo=ObservationsRepo(db),
         notifier=notifier,
     )
@@ -165,8 +167,79 @@ async def test_price_above_threshold_does_not_notify(db: aiosqlite.Connection, m
         user=user,
         registry=registry,
         places_repo=PlacesRepo(db),
+        routes_repo=routes_repo,
         observations_repo=ObservationsRepo(db),
         notifier=notifier,
     )
 
     assert bot.sent == []
+
+
+async def test_flexible_window_finds_a_date_the_user_never_named(
+    db: aiosqlite.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A flexible route stores a window, not a date. The batch-capable source
+    gets the whole window in one request (so the cheapest day in the month is
+    found even though nobody asked for that specific day), while the date
+    cursor moves on so one-request-per-date sources rotate through the window
+    over the next few cycles instead of scanning all 30 days every time.
+    """
+    origin_id, dest_id = await _seed_places(db)
+    users_repo = UsersRepo(db)
+    user = await users_repo.get_or_create(557, is_admin=True)
+    user = await _disable_quiet_hours(db, user)
+
+    routes_repo = RoutesRepo(db)
+    route = await routes_repo.create(
+        user_id=user.tg_user_id,
+        title="Екатеринбург → Сочи",
+        origin_place_id=origin_id,
+        dest_place_id=dest_id,
+        mode_pref="plane",
+        date_mode="flexible",
+        fixed_dates=None,
+        window_start_date="2026-09-01",
+        window_length_days=30,
+        max_price=700000,
+        max_price_currency="RUB",
+    )
+    assert route.date_cursor == 0
+
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+
+    async def fake_fetch_month(self, session, origin, dest, month, currency):
+        return payload["data"], True
+
+    monkeypatch.setattr(TravelpayoutsAdapter, "_fetch_month", fake_fetch_month)
+
+    registry = AdapterRegistry(
+        db, http_concurrency_global=2, http_concurrency_interactive=1, http_concurrency_per_source=1
+    )
+    registry.register(TravelpayoutsAdapter(token="fake", marker="fake"))
+
+    bot = FakeBot()
+    notifier = Notifier(
+        bot, NotificationsRepo(db), JobsRepo(db), DedupeGate(NotificationsRepo(db)), cooldown_h=12, daily_cap=3
+    )
+
+    await process_route(
+        route,
+        user=user,
+        registry=registry,
+        places_repo=PlacesRepo(db),
+        routes_repo=routes_repo,
+        observations_repo=ObservationsRepo(db),
+        notifier=notifier,
+    )
+
+    assert len(bot.sent) == 1
+
+    async with db.execute(
+        "SELECT COUNT(DISTINCT depart_date) FROM price_observations WHERE route_id = ?", (route.id,)
+    ) as cur:
+        row = await cur.fetchone()
+    assert row is not None and row[0] > 1  # whole window priced, not just one date
+
+    after = await routes_repo.get(route.id)
+    assert after is not None
+    assert after.date_cursor == settings.flex_probe_dates_per_cycle

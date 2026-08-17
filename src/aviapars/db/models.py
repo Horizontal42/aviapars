@@ -43,8 +43,10 @@ class Route:
     mode_pref: str  # plane|train|auto
     date_mode: str  # fixed|flexible
     fixed_dates: list[str] | None
+    window_start_date: str | None  # absolute anchor; NULL => rolling window off window_start_offset_days
     window_start_offset_days: int | None
     window_length_days: int | None
+    date_cursor: int
     max_price: int
     max_price_currency: str
     pax: int

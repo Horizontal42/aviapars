@@ -7,6 +7,18 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aviapars.db.models import Place
 
 
+class MenuAction(CallbackData, prefix="mn"):
+    """Navigation between top-level screens. Handled by a state-agnostic
+    router (`handlers/menu.py`) so «☰ Меню» works from inside any wizard step,
+    not only from screens that happen to be stateless."""
+
+    action: str  # root|add|routes|search|status|help
+
+
+class DatePick(CallbackData, prefix="dt"):
+    kind: str  # exact|around|range|any
+
+
 class PlacePick(CallbackData, prefix="pl"):
     idx: int
 
@@ -31,6 +43,67 @@ class SearchTrack(CallbackData, prefix="st"):
 
 _KIND_LABEL = {"city": "город", "airport": "аэропорт", "rail_station": "ж/д станция"}
 
+MENU_BUTTON_TEXT = "☰ Меню"
+
+
+def _menu_button(builder: InlineKeyboardBuilder) -> None:
+    builder.button(text=MENU_BUTTON_TEXT, callback_data=MenuAction(action="root").pack())
+
+
+def main_menu_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="➕ Добавить маршрут", callback_data=MenuAction(action="add").pack())
+    builder.button(text="📋 Мои маршруты", callback_data=MenuAction(action="routes").pack())
+    builder.button(text="🔎 Разовый поиск", callback_data=MenuAction(action="search").pack())
+    builder.button(text="📊 Состояние источников", callback_data=MenuAction(action="status").pack())
+    builder.button(text="❓ Помощь", callback_data=MenuAction(action="help").pack())
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def menu_only_kb() -> InlineKeyboardMarkup:
+    """Attached to every free-text wizard prompt: a step that asks the user to
+    type something still has to offer a way out (§10 button navigation)."""
+    builder = InlineKeyboardBuilder()
+    _menu_button(builder)
+    return builder.as_markup()
+
+
+def date_mode_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📅 Точная дата", callback_data=DatePick(kind="exact").pack())
+    builder.button(text="📅± Дата ±3 дня", callback_data=DatePick(kind="around").pack())
+    builder.button(text="🗓 Диапазон дат", callback_data=DatePick(kind="range").pack())
+    builder.button(text="🎲 Любая дата (30 дней)", callback_data=DatePick(kind="any").pack())
+    _menu_button(builder)
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def route_saved_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📋 Мои маршруты", callback_data=MenuAction(action="routes").pack())
+    builder.button(text="➕ Ещё маршрут", callback_data=MenuAction(action="add").pack())
+    _menu_button(builder)
+    builder.adjust(2, 1)
+    return builder.as_markup()
+
+
+def routes_list_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="➕ Добавить маршрут", callback_data=MenuAction(action="add").pack())
+    _menu_button(builder)
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def search_again_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔎 Новый поиск", callback_data=MenuAction(action="search").pack())
+    _menu_button(builder)
+    builder.adjust(2)
+    return builder.as_markup()
+
 
 def place_picker_kb(places: list[Place]) -> InlineKeyboardMarkup:
     """§10: `PlacePick` carries a short index, not the place — Telegram caps
@@ -41,6 +114,7 @@ def place_picker_kb(places: list[Place]) -> InlineKeyboardMarkup:
         kind = _KIND_LABEL.get(place.kind, place.kind)
         label = f"{place.name_ru}, {kind}" + (f" ({place.iata})" if place.iata else "")
         builder.button(text=label, callback_data=PlacePick(idx=i).pack())
+    _menu_button(builder)
     builder.adjust(1)
     return builder.as_markup()
 
@@ -50,6 +124,7 @@ def mode_picker_kb() -> InlineKeyboardMarkup:
     builder.button(text="✈️ Самолёт", callback_data=ModePick(value="plane").pack())
     builder.button(text="🚂 Поезд", callback_data=ModePick(value="train").pack())
     builder.button(text="🔀 Авто (оба)", callback_data=ModePick(value="auto").pack())
+    _menu_button(builder)
     builder.adjust(1)
     return builder.as_markup()
 
@@ -58,6 +133,8 @@ def search_results_kb(n: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for i in range(n):
         builder.button(text=f"💾 Отслеживать №{i + 1}", callback_data=SearchTrack(idx=i).pack())
+    builder.button(text="🔎 Новый поиск", callback_data=MenuAction(action="search").pack())
+    _menu_button(builder)
     builder.adjust(1)
     return builder.as_markup()
 
@@ -70,5 +147,6 @@ def route_card_kb(route_id: int, *, active: bool) -> InlineKeyboardMarkup:
         builder.button(text="▶️ Возобновить", callback_data=RouteAction(action="resume", route_id=route_id).pack())
     builder.button(text="🔍 Проверить сейчас", callback_data=RouteAction(action="check", route_id=route_id).pack())
     builder.button(text="🗑 Удалить", callback_data=RouteAction(action="delete", route_id=route_id).pack())
-    builder.adjust(2, 1)
+    _menu_button(builder)
+    builder.adjust(2, 1, 1)
     return builder.as_markup()

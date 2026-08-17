@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 from aviapars.adapters.base import Mode, Offer, PlaceRef, SearchQuery, Tier
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.db.models import Place
 from aviapars.db.repo_places import PlacesRepo
+from aviapars.domain.dates import DatePlan
 from aviapars.domain.transfers import transfer_policy
 from aviapars.domain.validator import freshness_gate
 
 MAX_COMBO_CANDIDATES_DEFAULT = 24
 MAX_HUBS_DEFAULT = 2
+HUB_PROBE_DATES_CAP_DEFAULT = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +28,11 @@ class SearchOpts:
     max_transfer_min: int | None = None
     max_total_hours: float | None = None
     max_combo_candidates: int = MAX_COMBO_CANDIDATES_DEFAULT
+    # Hub legs probe far fewer dates than the direct leg on purpose: a hub itinerary needs
+    # *matching* dates on both legs, so widening both sides multiplies one-request-per-date
+    # sources quadratically to produce pairs that _dates_composable then throws away. Batch
+    # sources still see the whole window on hub legs, since that costs them nothing.
+    hub_probe_dates_cap: int = HUB_PROBE_DATES_CAP_DEFAULT
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +61,7 @@ async def search_itineraries(
     *,
     origin: Place,
     dest: Place,
-    dates: tuple[date, ...],
+    dates: DatePlan,
     pax: int,
     modes: frozenset[Mode],
     opts: SearchOpts,
@@ -66,6 +73,11 @@ async def search_itineraries(
     routing counts too, not just mode-mixing), search origin->hub and
     hub->dest independently and combine. Cross-product is bounded by
     `opts.max_combo_candidates` since it's quadratic in `len(modes)`.
+
+    `dates` arrives already budget-resolved (`domain.dates.DatePlan`): each
+    adapter is asked for the whole window or just this cycle's probe slice
+    depending on its `supports_batch_dates`, so a flexible route costs a
+    bounded number of requests regardless of how wide its window is.
     """
     now = datetime.now(timezone.utc)
     itineraries: list[Itinerary] = []
@@ -92,7 +104,8 @@ async def search_itineraries(
             )
 
     hubs_tried: list[int] = []
-    if opts.max_hops >= 1:
+    if opts.max_hops >= 1 and not dates.is_empty:
+        hub_dates = dates.narrowed(opts.hub_probe_dates_cap)
         hubs = await _resolve_hubs(places_repo, origin, dest, opts)
         hubs_tried = [h.id for h in hubs]
         combo_count = 0
@@ -101,8 +114,8 @@ async def search_itineraries(
             leg_a_by_mode: dict[Mode, list[Offer]] = {}
             leg_b_by_mode: dict[Mode, list[Offer]] = {}
             for m in modes:
-                offers_a, meta_a = await _search_leg(registry, origin, hub, dates, pax, m, opts, now)
-                offers_b, meta_b = await _search_leg(registry, hub, dest, dates, pax, m, opts, now)
+                offers_a, meta_a = await _search_leg(registry, origin, hub, hub_dates, pax, m, opts, now)
+                offers_b, meta_b = await _search_leg(registry, hub, dest, hub_dates, pax, m, opts, now)
                 leg_a_by_mode[m] = offers_a[: opts.leg_pool_size]
                 leg_b_by_mode[m] = offers_b[: opts.leg_pool_size]
                 _merge_meta(meta_a, sources_used, sources_skipped)
@@ -118,6 +131,8 @@ async def search_itineraries(
                 for offer_a, offer_b in itertools.product(leg_a_by_mode[mode_a], leg_b_by_mode[mode_b]):
                     if combo_count >= opts.max_combo_candidates:
                         break
+                    if not _dates_composable(offer_a, offer_b):
+                        continue
                     combo_count += 1
                     itinerary = _compose(
                         offer_a, offer_b, max_transfer_min=opts.max_transfer_min, max_total_hours=opts.max_total_hours
@@ -149,7 +164,7 @@ async def _search_leg(
     registry: AdapterRegistry,
     origin: Place,
     dest: Place,
-    dates: tuple[date, ...],
+    dates: DatePlan,
     pax: int,
     mode: Mode,
     opts: SearchOpts,
@@ -157,12 +172,15 @@ async def _search_leg(
 ) -> tuple[list[Offer], _LegMeta]:
     origin_ref = _place_ref(origin)
     dest_ref = _place_ref(dest)
-    query = SearchQuery(origin=origin_ref, dest=dest_ref, dates=dates, pax=pax, mode=mode)
     adapters = [a for a in registry.for_query(mode, origin.country, dest.country) if a.tier in opts.tiers]
 
     meta = _LegMeta(sources_used=[], sources_skipped=[], oldest=None, partial=False)
     kept: list[Offer] = []
     for adapter in adapters:
+        wanted = dates.batch_dates if adapter.supports_batch_dates else dates.probe_dates
+        if not wanted:
+            continue
+        query = SearchQuery(origin=origin_ref, dest=dest_ref, dates=wanted, pax=pax, mode=mode)
         result = await registry.search(adapter, query, allow_network=opts.allow_network, deadline_s=opts.deadline_s)
         if result.partial:
             meta.partial = True
@@ -179,6 +197,17 @@ async def _search_leg(
 
     kept.sort(key=lambda o: o.price_minor)
     return kept, meta
+
+
+def _dates_composable(leg_a: Offer, leg_b: Offer) -> bool:
+    """Both legs of a hub itinerary have to be the same trip. Once a route can
+    carry a whole date window, the leg pools span different days, and pairing
+    a flight on the 5th with a train on the 20th would be nonsense that the
+    transfer check can't catch on its own — `date_only` discovery offers have
+    no real timestamp to compare (see `_compose`)."""
+    a = leg_a.legs[0].depart_utc.date()
+    b = leg_b.legs[0].depart_utc.date()
+    return 0 <= (b - a).days <= 1
 
 
 def _compose(leg_a: Offer, leg_b: Offer, *, max_transfer_min: int | None, max_total_hours: float | None) -> Itinerary:

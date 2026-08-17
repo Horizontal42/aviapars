@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from aviapars.adapters.base import Mode
 from aviapars.domain.combiner import Itinerary
+from aviapars.domain.dates import DatePlan, DateSelection, window
 
 MODE_EMOJI: dict[Mode, str] = {
     Mode.PLANE: "✈️",
@@ -15,6 +16,36 @@ def format_mode_label(modes: list[Mode]) -> str:
     """«✈️+🚂 через Москву» style label. Works for any number/order of modes,
     including a future third mode — see plans/squishy-scribbling-dawn.md §5."""
     return "+".join(MODE_EMOJI[m] for m in modes)
+
+
+def format_date(day: date) -> str:
+    return day.strftime("%d.%m.%Y")
+
+
+def describe_selection(sel: DateSelection, today: date) -> str:
+    """One-line «какие даты отслеживаем» for route cards and confirmations."""
+    days = window(sel, today)
+    if not days:
+        return "даты уже прошли"
+    if sel.mode == "fixed":
+        return ", ".join(format_date(d) for d in days)
+    if sel.window_start is None:
+        return f"любая дата: {format_date(days[0])} – {format_date(days[-1])} ({len(days)} дн., окно едет вперёд)"
+    return f"{format_date(days[0])} – {format_date(days[-1])} ({len(days)} дн.)"
+
+
+def describe_checked_dates(sel: DateSelection, plan: DatePlan, today: date) -> str:
+    """Says what was *actually* queried, not what was asked for. A wide window
+    is never fully scanned by one-request-per-date sources in a single pass
+    (§6), so claiming otherwise would be a lie the user can't check."""
+    total = len(window(sel, today))
+    if sel.mode == "fixed" or len(plan.probe_dates) >= total:
+        return f"Проверено дат: {total}"
+    probed = ", ".join(format_date(d) for d in plan.probe_dates)
+    return (
+        f"Из окна в {total} дн. точечно проверено {len(plan.probe_dates)}: {probed}. "
+        f"Источники с пакетной выдачей отдают всё окно целиком."
+    )
 
 
 _CURRENCY_SUFFIX = {"RUB": "₽", "USD": "$", "EUR": "€"}

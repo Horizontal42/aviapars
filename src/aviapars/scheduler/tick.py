@@ -75,6 +75,7 @@ async def _run_due_routes(
                 user=user,
                 registry=registry,
                 places_repo=places_repo,
+                routes_repo=routes_repo,
                 observations_repo=observations_repo,
                 notifier=notifier,
             )

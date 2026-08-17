@@ -9,7 +9,8 @@ from aviapars.db.models import Route
 
 _COLUMNS = (
     "id, user_id, title, origin_place_id, dest_place_id, mode_pref, date_mode, fixed_dates, "
-    "window_start_offset_days, window_length_days, max_price, max_price_currency, pax, "
+    "window_start_date, window_start_offset_days, window_length_days, date_cursor, "
+    "max_price, max_price_currency, pax, "
     "allow_hub_routing, hub_place_ids, max_hops, max_transfer_min, max_total_hours, "
     "poll_interval_min, active, next_run_at, last_run_at, created_at"
 )
@@ -25,21 +26,23 @@ def _row_to_route(row: aiosqlite.Row) -> Route:
         mode_pref=row[5],
         date_mode=row[6],
         fixed_dates=json.loads(row[7]) if row[7] else None,
-        window_start_offset_days=row[8],
-        window_length_days=row[9],
-        max_price=row[10],
-        max_price_currency=row[11],
-        pax=row[12],
-        allow_hub_routing=bool(row[13]),
-        hub_place_ids=json.loads(row[14]) if row[14] else None,
-        max_hops=row[15],
-        max_transfer_min=row[16],
-        max_total_hours=row[17],
-        poll_interval_min=row[18],
-        active=bool(row[19]),
-        next_run_at=row[20],
-        last_run_at=row[21],
-        created_at=row[22],
+        window_start_date=row[8],
+        window_start_offset_days=row[9],
+        window_length_days=row[10],
+        date_cursor=row[11],
+        max_price=row[12],
+        max_price_currency=row[13],
+        pax=row[14],
+        allow_hub_routing=bool(row[15]),
+        hub_place_ids=json.loads(row[16]) if row[16] else None,
+        max_hops=row[17],
+        max_transfer_min=row[18],
+        max_total_hours=row[19],
+        poll_interval_min=row[20],
+        active=bool(row[21]),
+        next_run_at=row[22],
+        last_run_at=row[23],
+        created_at=row[24],
     )
 
 
@@ -57,8 +60,9 @@ class RoutesRepo:
         mode_pref: str,
         date_mode: str,
         fixed_dates: list[str] | None,
-        window_start_offset_days: int | None,
-        window_length_days: int | None,
+        window_start_date: str | None = None,
+        window_start_offset_days: int | None = None,
+        window_length_days: int | None = None,
         max_price: int,
         max_price_currency: str,
         pax: int = 1,
@@ -74,10 +78,11 @@ class RoutesRepo:
             """
             INSERT INTO routes (
                 user_id, title, origin_place_id, dest_place_id, mode_pref, date_mode, fixed_dates,
-                window_start_offset_days, window_length_days, max_price, max_price_currency, pax,
+                window_start_date, window_start_offset_days, window_length_days,
+                max_price, max_price_currency, pax,
                 allow_hub_routing, hub_place_ids, max_hops, max_transfer_min, max_total_hours,
                 poll_interval_min, active, next_run_at, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
             """,
             (
                 user_id,
@@ -87,6 +92,7 @@ class RoutesRepo:
                 mode_pref,
                 date_mode,
                 json.dumps(fixed_dates) if fixed_dates else None,
+                window_start_date,
                 window_start_offset_days,
                 window_length_days,
                 max_price,
@@ -137,6 +143,10 @@ class RoutesRepo:
             "UPDATE routes SET next_run_at = ?, last_run_at = ? WHERE id = ?",
             (next_run_at.isoformat(), ran_at.isoformat(), route_id),
         )
+        await self._db.commit()
+
+    async def set_date_cursor(self, route_id: int, cursor: int) -> None:
+        await self._db.execute("UPDATE routes SET date_cursor = ? WHERE id = ?", (cursor, route_id))
         await self._db.commit()
 
     async def set_active(self, route_id: int, active: bool) -> None:
