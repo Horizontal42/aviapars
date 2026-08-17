@@ -7,3 +7,5 @@ ALTER TABLE routes ADD COLUMN window_start_date TEXT;
 -- Round-robin position through a flexible window for one-request-per-date sources (§6):
 -- each cycle probes the next slice instead of re-querying 30 dates every time.
 ALTER TABLE routes ADD COLUMN date_cursor INTEGER NOT NULL DEFAULT 0;
+
+INSERT INTO schema_migrations (version) VALUES (5);
