@@ -45,6 +45,34 @@ sudo systemctl start aviapars
 Tailscale/SSH работают независимо от процесса бота — cgroup-лимиты (`MemoryMax`/`CPUWeight`
 в `aviapars.service`) не дают боту исчерпать ресурсы всего сервера.
 
+## Прокси для Telegram (нужен на VDS в РФ — `api.telegram.org` заблокирован)
+
+Только сессия бота идёт через прокси; все адаптеры-источники остаются на прямом соединении
+(см. `ARCHITECTURE.md`). Прокси — локальный SOCKS5, поднятый `xray-core` поверх VLESS Reality
+(или любого другого туннеля, который отдаёт SOCKS5/HTTP на localhost):
+
+```bash
+bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+```
+
+`/usr/local/etc/xray/config.json` — inbound `socks` на `127.0.0.1:<port>`, outbound —
+параметры вашего VLESS/Reality-сервера (сервер, uuid, publicKey, shortId, sni и т.д. — из
+подписки провайдера). Затем:
+
+```bash
+sudo systemctl enable --now xray
+curl -x socks5h://127.0.0.1:<port> https://api.telegram.org   # должен ответить, не таймаутить
+```
+
+В `config.yaml` бота:
+
+```yaml
+telegram_proxy_url: socks5://127.0.0.1:<port>
+```
+
+Перезапустить бота (`systemctl restart aviapars`) — `telegram_proxy_url: null` (по умолчанию)
+означает прямое соединение, без прокси.
+
 ## Обновление
 
 ```bash
