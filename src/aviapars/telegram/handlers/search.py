@@ -12,8 +12,9 @@ from aviapars.adapters.base import Mode, Tier
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.config import settings
 from aviapars.db.repo_places import PlacesRepo
+from aviapars.db.models import Route
 from aviapars.domain.combiner import Itinerary, SearchOpts, search_itineraries
-from aviapars.domain.dates import DateSelection, resolve_date_plan
+from aviapars.domain.dates import DateSelection, resolve_date_plan, selection_from_route
 from aviapars.telegram import date_picker
 from aviapars.telegram.format import (
     describe_checked_dates,
@@ -53,6 +54,25 @@ async def start_wizard(message: Message, state: FSMContext) -> None:
 @router.message(Command("search"))
 async def cmd_search(message: Message, state: FSMContext) -> None:
     await start_wizard(message, state)
+
+
+async def start_from_route(
+    message: Message, state: FSMContext, db: aiosqlite.Connection, registry: AdapterRegistry, route: Route
+) -> None:
+    """Bridge from a route card's «🔎 Варианты» (§10) — the same one-shot search,
+    pre-filled from the route's own origin/destination/dates, nothing saved."""
+    await state.clear()
+    places_repo = PlacesRepo(db)
+    origin = await places_repo.get(route.origin_place_id)
+    dest = await places_repo.get(route.dest_place_id)
+    assert origin is not None and dest is not None
+    await state.update_data(
+        origin_place_id=origin.id,
+        origin_title=origin.name_ru,
+        dest_place_id=dest.id,
+        dest_title=dest.name_ru,
+    )
+    await _run_search(message, state, db, registry, selection_from_route(route))
 
 
 @router.message(SearchFlow.origin)

@@ -5,6 +5,7 @@ from datetime import date
 import aiosqlite
 from aiogram import Router
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from aviapars.adapters.registry import AdapterRegistry
@@ -16,6 +17,7 @@ from aviapars.notify.notifier import Notifier
 from aviapars.scheduler.worker import process_route
 from aviapars.domain.dates import selection_from_route
 from aviapars.telegram.format import describe_selection, format_money
+from aviapars.telegram.handlers import search as search_handlers
 from aviapars.telegram.keyboards import RouteAction, route_card_kb, routes_list_kb
 
 router = Router(name="routes")
@@ -48,6 +50,7 @@ async def render_routes(message: Message, user_id: int, db: aiosqlite.Connection
 async def on_route_action(
     query: CallbackQuery,
     callback_data: RouteAction,
+    state: FSMContext,
     db: aiosqlite.Connection,
     registry: AdapterRegistry,
     notifier: Notifier,
@@ -89,3 +92,7 @@ async def on_route_action(
         )
         assert query.message is not None
         await query.message.answer("Проверил. Если что-то нашлось ниже порога — уведомление придёт отдельно.")
+    elif callback_data.action == "search":
+        await query.answer()  # search below outlives Telegram's callback deadline
+        if isinstance(query.message, Message):
+            await search_handlers.start_from_route(query.message, state, db, registry, route)

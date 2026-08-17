@@ -28,7 +28,7 @@ class ModePick(CallbackData, prefix="md"):
 
 
 class RouteAction(CallbackData, prefix="r"):
-    action: str  # pause|resume|check|delete
+    action: str  # pause|resume|check|search|delete
     route_id: int
 
 
@@ -146,7 +146,8 @@ def route_card_kb(route_id: int, *, active: bool) -> InlineKeyboardMarkup:
     else:
         builder.button(text="▶️ Возобновить", callback_data=RouteAction(action="resume", route_id=route_id).pack())
     builder.button(text="🔍 Проверить сейчас", callback_data=RouteAction(action="check", route_id=route_id).pack())
+    builder.button(text="🔎 Варианты", callback_data=RouteAction(action="search", route_id=route_id).pack())
     builder.button(text="🗑 Удалить", callback_data=RouteAction(action="delete", route_id=route_id).pack())
     _menu_button(builder)
-    builder.adjust(2, 1, 1)
+    builder.adjust(2, 2, 1)
     return builder.as_markup()
