@@ -26,6 +26,9 @@ solver = [
 [tool.mypy]
 strict = true
 python_version = "3.12"
+platform = "linux"  # deploys to Ubuntu only (§11) — dev happens on Windows, but stdlib
+# surface (e.g. socket.AF_UNIX for systemd_notify.py) should be checked against the
+# platform that actually matters, not whatever OS mypy happens to run on locally
 
 [[tool.mypy.overrides]]
 # optional dep (pyproject [solver] extra) — untyped whether or not it's installed

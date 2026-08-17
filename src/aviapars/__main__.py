@@ -17,7 +17,10 @@ from aviapars.db.repo_sessions import SessionsRepo
 from aviapars.notify.dedupe import DedupeGate
 from aviapars.notify.notifier import Notifier
 from aviapars.scheduler.tick import run_scheduler_loop
+from aviapars.systemd_notify import notify, watchdog_loop
 from aviapars.telegram.bot import create_bot, create_dispatcher
+
+_WATCHDOG_PING_INTERVAL_S = 100  # aviapars.service sets WatchdogSec=300 — 3x margin
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("aviapars")
@@ -74,10 +77,13 @@ async def main() -> None:
         )
 
         scheduler_task = asyncio.create_task(run_scheduler_loop(db, registry, notifier))
+        watchdog_task = asyncio.create_task(watchdog_loop(_WATCHDOG_PING_INTERVAL_S))
+        notify("READY=1")
         try:
             await dp.start_polling(bot, db=db, registry=registry, notifier=notifier)
         finally:
             scheduler_task.cancel()
+            watchdog_task.cancel()
             await bot.session.close()
 
 
