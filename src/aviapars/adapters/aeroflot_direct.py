@@ -63,7 +63,7 @@ class AeroflotDirectAdapter:
     total_timeout_s = 30
 
     def __init__(self, *, rate_limit: RateLimitPolicy | None = None, cache_ttl_s: int = 1800) -> None:
-        self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=10.0)
+        self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=15.0)
         self.default_cache_ttl_s = cache_ttl_s
 
     async def search(self, q: SearchQuery) -> SearchResult:
