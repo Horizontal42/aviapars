@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from aviapars.adapters.aeroflot_direct import AeroflotDirectAdapter
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.adapters.rzd_direct import RzdDirectAdapter
 from aviapars.adapters.s7_direct import S7DirectAdapter
@@ -51,6 +52,7 @@ async def main() -> None:
             )
         )
         registry.register(RzdDirectAdapter(cache_ttl_s=settings.cache_ttl_s.rzd_direct))
+        registry.register(AeroflotDirectAdapter(cache_ttl_s=settings.cache_ttl_s.airline_direct))
 
         sessions_repo = SessionsRepo(db)
         registry.register(
