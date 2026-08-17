@@ -32,6 +32,10 @@ class Settings(BaseSettings):
         env_file=REPO_ROOT / ".env",
         env_file_encoding="utf-8",
         yaml_file=REPO_ROOT / "config.yaml",
+        # Not the default: without it the yaml is read in the OS locale encoding, so a
+        # config.yaml copied from config.example.yaml (Russian comments, as instructed at the
+        # top of that file) blows up with UnicodeDecodeError on a cp1251 Windows box.
+        yaml_file_encoding="utf-8",
         extra="ignore",
     )
 
