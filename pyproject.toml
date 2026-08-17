@@ -27,6 +27,13 @@ solver = [
 strict = true
 python_version = "3.12"
 
+[[tool.mypy.overrides]]
+# optional dep (pyproject [solver] extra) — untyped whether or not it's installed
+# in the environment mypy runs in, so an inline ignore would flip between
+# import-not-found/unused-ignore depending on local install state.
+module = "patchright.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

@@ -35,7 +35,7 @@ async def solve(target: str, params: dict[str, str]) -> dict[str, Any] | None:
         return None
 
     try:
-        from patchright.async_api import async_playwright  # type: ignore[import-not-found]  # optional dep, see module docstring
+        from patchright.async_api import async_playwright
     except ImportError:
         return None
 
