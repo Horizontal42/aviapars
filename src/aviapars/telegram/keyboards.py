@@ -29,13 +29,17 @@ class SearchTrack(CallbackData, prefix="st"):
     idx: int
 
 
+_KIND_LABEL = {"city": "город", "airport": "аэропорт", "rail_station": "ж/д станция"}
+
+
 def place_picker_kb(places: list[Place]) -> InlineKeyboardMarkup:
     """§10: `PlacePick` carries a short index, not the place — Telegram caps
     callback_data at 64 bytes, and a place name/id round-trips through the
     FSM-stored candidate list instead."""
     builder = InlineKeyboardBuilder()
     for i, place in enumerate(places):
-        label = f"{place.name_ru}" + (f" ({place.iata})" if place.iata else "")
+        kind = _KIND_LABEL.get(place.kind, place.kind)
+        label = f"{place.name_ru}, {kind}" + (f" ({place.iata})" if place.iata else "")
         builder.button(text=label, callback_data=PlacePick(idx=i).pack())
     builder.adjust(1)
     return builder.as_markup()

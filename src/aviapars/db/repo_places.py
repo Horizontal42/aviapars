@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import aiosqlite
 
+from aviapars.db.engine import normalize_place_query
 from aviapars.db.models import Place
 
 
@@ -41,15 +42,18 @@ class PlacesRepo:
 
     async def search_by_name(self, query: str, *, limit: int = 6) -> list[Place]:
         """Sub-millisecond local lookup backing the /add and /search place picker
-        (§10) — no external API call. Simple substring match, case-insensitive;
-        ranked by popularity so a well-known city outranks an obscure station
-        with a similar name.
+        (§10) — no external API call. Match is against `normalize(name)`
+        (casefold + strip spaces/hyphens/punctuation, see db/engine.py) so
+        "Санкт-Петербург", "санкт петербург" and "saint-petersburg" all hit —
+        plain SQL LIKE only case-folds ASCII, never Cyrillic. Ranked by
+        popularity so a well-known city outranks an obscure station with a
+        similar name.
         """
-        like = f"%{query.strip()}%"
+        like = f"%{normalize_place_query(query)}%"
         async with self._db.execute(
             f"""
             SELECT {_COLUMNS} FROM places
-            WHERE name_ru LIKE ? OR name_en LIKE ? OR iata = ?
+            WHERE normalize(name_ru) LIKE ? OR normalize(name_en) LIKE ? OR iata = ?
             ORDER BY popularity DESC
             LIMIT ?
             """,
