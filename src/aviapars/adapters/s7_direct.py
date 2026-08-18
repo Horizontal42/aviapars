@@ -95,8 +95,6 @@ class S7DirectAdapter:
         if not q.origin.iata or not q.dest.iata or not q.dates:
             return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="missing iata/date")
 
-        depart_date = q.dates[0]  # confirmation tier: one specific leg/date (plan §6 L2)
-
         async with aiohttp.ClientSession() as loc_session:
             origin_id = await self._resolve_location_id(loc_session, q.origin.iata)
             dest_id = await self._resolve_location_id(loc_session, q.dest.iata)
@@ -104,21 +102,34 @@ class S7DirectAdapter:
             return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="location not found")
 
         cookies = await self._get_cached_cookies()
-        offers, ok = await self._try_search(q, depart_date, origin_id, dest_id, cookies)
-        if ok:
-            status = ResultStatus.OK if offers else ResultStatus.EMPTY
-            return SearchResult(status=status, offers=offers, partial=False)
+        offers: list[Offer] = []
+        blocked = False
+        solver_tried = False
+        for depart_date in q.dates:
+            day_offers, ok = await self._try_search(q, depart_date, origin_id, dest_id, cookies)
+            if not ok and not solver_tried:
+                # Only ever solve once per search() call — the challenge is session/browser
+                # scoped, not per-date (see class docstring), and a fresh browser subprocess
+                # per date in a 7-date cycle would be both slow and pointless.
+                solver_tried = True
+                solved = await self._solver.solve("s7", {"AA1": q.dest.iata, "DA1": q.origin.iata, "CUR": "RUB"})
+                if solved is None:
+                    blocked = True
+                    break  # persistent block — further dates would fail the same way
+                cookies = solved["cookies"]
+                await self._save_session(cookies)
+                day_offers, ok = await self._try_search(q, depart_date, origin_id, dest_id, cookies)
+            if not ok:
+                blocked = True
+                break
+            offers.extend(day_offers)
 
-        solved = await self._solver.solve("s7", {"AA1": q.dest.iata, "DA1": q.origin.iata, "CUR": "RUB"})
-        if solved is None:
-            return SearchResult(status=ResultStatus.BLOCKED, offers=[], partial=False, error="challenge unsolved")
-
-        new_cookies: dict[str, str] = solved["cookies"]
-        await self._save_session(new_cookies)
-        offers, ok = await self._try_search(q, depart_date, origin_id, dest_id, new_cookies)
-        if not ok:
-            return SearchResult(status=ResultStatus.BLOCKED, offers=[], partial=False, error="still blocked after solve")
-        status = ResultStatus.OK if offers else ResultStatus.EMPTY
+        if offers:
+            status = ResultStatus.OK
+        elif blocked:
+            status = ResultStatus.BLOCKED
+        else:
+            status = ResultStatus.EMPTY
         return SearchResult(status=status, offers=offers, partial=False)
 
     async def _get_cached_cookies(self) -> dict[str, str] | None:

@@ -56,7 +56,7 @@ class AzimuthDirectAdapter:
     countries: frozenset[str] | None = frozenset({"RU"})  # regional Southern Russia carrier
     supports_batch_dates = False
     request_timeout_s = 15
-    total_timeout_s = 30
+    total_timeout_s = 60  # up to flex_probe_dates_per_cycle (default 7) sequential POSTs
 
     def __init__(self, *, rate_limit: RateLimitPolicy | None = None, cache_ttl_s: int = 1800) -> None:
         self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=10.0)
@@ -68,8 +68,6 @@ class AzimuthDirectAdapter:
         if not q.origin.iata or not q.dest.iata or not q.dates:
             return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="missing iata/date")
 
-        depart_date = q.dates[0]  # confirmation tier: one specific leg/date (plan §6 L2)
-
         try:
             async with AsyncSession(impersonate="chrome", timeout=self.request_timeout_s) as session:
                 init_resp = await session.post(RPC_URL, headers=_HEADERS, json=[["init", _INIT_PARAMS]])
@@ -77,43 +75,73 @@ class AzimuthDirectAdapter:
                 if init_resp.status_code != 200 or not token:
                     return SearchResult(status=ResultStatus.BLOCKED, offers=[], partial=False, error="init failed")
 
-                avail_headers = {**_HEADERS, "Authorization": token}
-                avail_body = [
-                    [
-                        "get-availability",
-                        {
-                            "owrt": "OW",
-                            "departure_point": q.origin.iata,
-                            "arrival_point": q.dest.iata,
-                            "outbound_date": depart_date.strftime("%d.%m.%Y"),
-                            "return_date": "",
-                            "adult_count": str(q.pax),
-                            "child_count": "0",
-                            "infant_count": "0",
-                            "direct_only": "",
-                            "date_range": 1,
-                            "promocode": "",
-                            "return_full_names": "Y",
-                            "child_alone": "",
-                        },
-                    ]
-                ]
-                resp = await session.post(RPC_URL, headers=avail_headers, json=avail_body)
+                offers: list[Offer] = []
+                blocked = False
+                partial = False
+                for depart_date in q.dates:
+                    day_offers, outcome = await self._search_day(session, q, token, depart_date)
+                    if outcome == "blocked":
+                        blocked = True
+                        continue
+                    if outcome == "error":
+                        partial = True
+                        continue
+                    offers.extend(day_offers)
         except Exception:
+            # only the init/session setup itself lands here — _search_day catches its own
+            # per-date exceptions so one bad date can't discard offers already collected
+            # from the others in this same batch.
             return SearchResult(status=ResultStatus.UPSTREAM_ERROR, offers=[], partial=False, error="request failed")
 
+        if offers:
+            status = ResultStatus.OK
+        elif blocked:
+            status = ResultStatus.BLOCKED
+        elif partial:
+            status = ResultStatus.UPSTREAM_ERROR
+        else:
+            status = ResultStatus.EMPTY
+        return SearchResult(status=status, offers=offers, partial=partial)
+
+    async def _search_day(
+        self, session: Any, q: SearchQuery, token: str, depart_date: date
+    ) -> tuple[list[Offer], str]:
+        """Returns (offers, outcome) where outcome is "ok" (incl. legitimately empty),
+        "blocked" (non-200), or "error" (parse failure) — mirrors rzd_direct's per-day
+        result so one bad date in the window doesn't sink the whole cycle."""
+        avail_headers = {**_HEADERS, "Authorization": token}
+        avail_body = [
+            [
+                "get-availability",
+                {
+                    "owrt": "OW",
+                    "departure_point": q.origin.iata,
+                    "arrival_point": q.dest.iata,
+                    "outbound_date": depart_date.strftime("%d.%m.%Y"),
+                    "return_date": "",
+                    "adult_count": str(q.pax),
+                    "child_count": "0",
+                    "infant_count": "0",
+                    "direct_only": "",
+                    "date_range": 1,
+                    "promocode": "",
+                    "return_full_names": "Y",
+                    "child_alone": "",
+                },
+            ]
+        ]
+        try:
+            resp = await session.post(RPC_URL, headers=avail_headers, json=avail_body)
+        except Exception:
+            return [], "error"
         if resp.status_code != 200:
-            return SearchResult(
-                status=ResultStatus.UPSTREAM_ERROR, offers=[], partial=False, error=f"http {resp.status_code}"
-            )
+            return [], "blocked"
         try:
             payload = resp.json()
         except ValueError:
-            return SearchResult(status=ResultStatus.PARSE_ERROR, offers=[], partial=False, error="bad json")
+            return [], "error"
 
-        offers = self._parse_offers(payload, q, depart_date)
-        status = ResultStatus.OK if offers else ResultStatus.EMPTY
-        return SearchResult(status=status, offers=offers, partial=False)
+        return self._parse_offers(payload, q, depart_date), "ok"
 
     def _parse_offers(self, payload: list[dict[str, Any]], q: SearchQuery, depart_date: date) -> list[Offer]:
         offers: list[Offer] = []

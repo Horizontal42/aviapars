@@ -170,6 +170,78 @@ async def test_falls_back_to_browser_solver_when_challenge_blocks(monkeypatch: p
     assert saved["payload"]["cookies"]["cfidsw-s7-ibe"] == "fresh-token"
 
 
+async def test_multiple_dates_each_get_their_own_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    # regression: search() used to read only q.dates[0] and silently drop the rest of
+    # whatever window the combiner handed it (up to flex_probe_dates_per_cycle dates per
+    # cycle, see domain/dates.py).
+    adapter = S7DirectAdapter()
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    offers = adapter._parse_offers(payload, _query(), date(2026, 8, 19))
+    seen_dates: list[date] = []
+
+    async def fake_resolve(self: S7DirectAdapter, session: Any, iata: str) -> str:
+        return f"loc-{iata}"
+
+    async def fake_try_search(
+        self: S7DirectAdapter, q: SearchQuery, depart_date: date, *args: Any, **kwargs: Any
+    ) -> tuple[list[Any], bool]:
+        seen_dates.append(depart_date)
+        return offers, True
+
+    async def fail_if_called(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("browser solver must not be invoked when the cheap path already succeeded")
+
+    monkeypatch.setattr(S7DirectAdapter, "_resolve_location_id", fake_resolve)
+    monkeypatch.setattr(S7DirectAdapter, "_try_search", fake_try_search)
+    monkeypatch.setattr(adapter._solver, "solve", fail_if_called)
+
+    dates = (date(2026, 8, 19), date(2026, 8, 20), date(2026, 8, 21))
+    q = SearchQuery(origin=_origin(), dest=_dest(), dates=dates, pax=1, mode=Mode.PLANE)
+    result = await adapter.search(q)
+
+    assert seen_dates == list(dates)
+    assert result.status == ResultStatus.OK
+    assert len(result.offers) == 9  # 3 offers per date x 3 dates
+
+
+async def test_solver_invoked_at_most_once_across_multiple_dates(monkeypatch: pytest.MonkeyPatch) -> None:
+    adapter = S7DirectAdapter()
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    offers = adapter._parse_offers(payload, _query(), date(2026, 8, 19))
+    calls = {"try_search": 0, "solve": 0}
+
+    async def fake_resolve(self: S7DirectAdapter, session: Any, iata: str) -> str:
+        return f"loc-{iata}"
+
+    async def fake_try_search(self: S7DirectAdapter, *args: Any, **kwargs: Any) -> tuple[list[Any], bool]:
+        calls["try_search"] += 1
+        # only the very first attempt (date 1's cheap-path try) is blocked; every call
+        # after the one solve, including date 2 and date 3's first attempts, succeeds
+        if calls["try_search"] == 1:
+            return [], False
+        return offers, True
+
+    async def fake_solve(target: str, params: dict[str, str]) -> dict[str, Any]:
+        calls["solve"] += 1
+        return {"cookies": {"cfidsw-s7-ibe": "fresh-token"}, "user_agent": "x"}
+
+    async def fake_setter(payload_: dict[str, Any], expires_at: datetime) -> None:
+        pass
+
+    monkeypatch.setattr(S7DirectAdapter, "_resolve_location_id", fake_resolve)
+    monkeypatch.setattr(S7DirectAdapter, "_try_search", fake_try_search)
+    monkeypatch.setattr(adapter._solver, "solve", fake_solve)
+    adapter._session_setter = fake_setter
+
+    dates = (date(2026, 8, 19), date(2026, 8, 20), date(2026, 8, 21))
+    q = SearchQuery(origin=_origin(), dest=_dest(), dates=dates, pax=1, mode=Mode.PLANE)
+    result = await adapter.search(q)
+
+    assert calls["solve"] == 1  # never re-spawns the browser for later dates in the batch
+    assert result.status == ResultStatus.OK
+    assert len(result.offers) == 9  # date1's post-solve retry + date2 + date3, 3 offers each
+
+
 async def test_blocked_when_browser_solver_also_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     adapter = S7DirectAdapter()
 

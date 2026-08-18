@@ -100,6 +100,50 @@ async def test_missing_dates_returns_empty() -> None:
     assert result.status == ResultStatus.EMPTY
 
 
+async def test_multiple_dates_reuse_one_init_token(monkeypatch: Any) -> None:
+    # regression: search() used to read only q.dates[0] and silently drop the rest of
+    # whatever window the combiner handed it (up to flex_probe_dates_per_cycle dates per
+    # cycle, see domain/dates.py). Also proves init is called once, not once per date —
+    # the token is a one-time-cheap-extra-request thing, not per-date state.
+    seen_dates: list[str] = []
+    calls = {"n": 0}
+
+    class FakeInitResp:
+        status_code = 200
+        headers = {"Authorization": "Bearer test-token"}
+
+    class FakeAvailResp:
+        status_code = 200
+
+        def json(self) -> Any:
+            return [{"method": "get-availability", "result": {"directions": []}}]
+
+    class FakeSession:
+        async def __aenter__(self) -> "FakeSession":
+            return self
+
+        async def __aexit__(self, *exc: object) -> None:
+            return None
+
+        async def post(self, *args: Any, **kwargs: Any) -> Any:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return FakeInitResp()
+            seen_dates.append(kwargs["json"][0][1]["outbound_date"])
+            return FakeAvailResp()
+
+    monkeypatch.setattr("aviapars.adapters.azimuth_direct.AsyncSession", lambda **kw: FakeSession())
+
+    adapter = AzimuthDirectAdapter()
+    dates = (date(2026, 9, 10), date(2026, 9, 11), date(2026, 9, 12))
+    q = SearchQuery(origin=_origin(), dest=_dest(), dates=dates, pax=1, mode=Mode.PLANE)
+    result = await adapter.search(q)
+
+    assert calls["n"] == 4  # 1 init + 3 get-availability
+    assert seen_dates == ["10.09.2026", "11.09.2026", "12.09.2026"]
+    assert result.status == ResultStatus.EMPTY  # each date legitimately empty, not a failure
+
+
 async def test_init_failure_returns_blocked(monkeypatch: Any) -> None:
     class FakeResp:
         status_code = 200

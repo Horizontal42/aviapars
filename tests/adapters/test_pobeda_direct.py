@@ -67,6 +67,40 @@ async def test_missing_dates_returns_empty() -> None:
     assert result.status == ResultStatus.EMPTY
 
 
+async def test_multiple_dates_each_get_their_own_request(monkeypatch: Any) -> None:
+    # regression: search() used to read only q.dates[0] and silently drop the rest of
+    # whatever window the combiner handed it (up to flex_probe_dates_per_cycle dates per
+    # cycle, see domain/dates.py).
+    seen_dates: list[str] = []
+
+    class FakeResp:
+        status_code = 200
+
+        def json(self) -> Any:
+            return {"result": "ok", "flights": [], "prices": [{}]}
+
+    class FakeSession:
+        async def __aenter__(self) -> "FakeSession":
+            return self
+
+        async def __aexit__(self, *exc: object) -> None:
+            return None
+
+        async def post(self, *args: Any, **kwargs: Any) -> FakeResp:
+            seen_dates.append(kwargs["data"]["date[0]"])
+            return FakeResp()
+
+    monkeypatch.setattr("aviapars.adapters.pobeda_direct.AsyncSession", lambda **kw: FakeSession())
+
+    adapter = PobedaDirectAdapter()
+    dates = (date(2026, 9, 10), date(2026, 9, 11), date(2026, 9, 12))
+    q = SearchQuery(origin=_origin(), dest=_dest(), dates=dates, pax=1, mode=Mode.PLANE)
+    result = await adapter.search(q)
+
+    assert seen_dates == ["10.09.2026", "11.09.2026", "12.09.2026"]
+    assert result.status == ResultStatus.EMPTY  # each date legitimately empty, not a failure
+
+
 async def test_waf_block_returns_blocked_status(monkeypatch: Any) -> None:
     class FakeResp:
         status_code = 403
