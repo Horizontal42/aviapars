@@ -9,6 +9,7 @@ from aiogram.types import CallbackQuery, Message
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.telegram.handlers import add, routes, search, status
 from aviapars.telegram.keyboards import MenuAction, main_menu_kb
+from aviapars.telegram.screen import Screen, screen_for
 
 router = Router(name="menu")
 
@@ -29,19 +30,21 @@ HELP_TEXT = (
 )
 
 
-async def show_menu(message: Message) -> None:
-    await message.answer(MENU_TEXT, reply_markup=main_menu_kb())
+async def show_menu(screen: Screen) -> None:
+    await screen.show(MENU_TEXT, reply_markup=main_menu_kb())
 
 
 @router.message(Command("menu"))
 async def cmd_menu(message: Message, state: FSMContext) -> None:
+    screen = await screen_for(message, state)
     await state.clear()
-    await show_menu(message)
+    await show_menu(screen)
 
 
 @router.message(Command("help"))
-async def cmd_help(message: Message) -> None:
-    await message.answer(HELP_TEXT, reply_markup=main_menu_kb())
+async def cmd_help(message: Message, state: FSMContext) -> None:
+    screen = await screen_for(message, state)
+    await screen.show(HELP_TEXT, reply_markup=main_menu_kb())
 
 
 @router.callback_query(MenuAction.filter())
@@ -57,25 +60,25 @@ async def on_menu_action(
     confirmation: nothing is written to the DB until the wizard's last step,
     so there is nothing to lose, and a "точно выйти?" prompt on every tap
     would be pure friction.
+
+    A flow boundary keeps the same screen rather than starting a fresh message:
+    the bot owns exactly one evolving message per chat, so /search → ☰ → /add
+    rewrites what is already on screen instead of stacking three of them.
     """
-    await state.clear()
-    assert query.message is not None
     assert query.from_user is not None
-    message = query.message
-    if not isinstance(message, Message):
-        await query.answer()
-        return
+    screen = await screen_for(query, state)
+    await state.clear()
 
     if callback_data.action == "add":
-        await add.start_wizard(message, state)
+        await add.start_wizard(screen, state)
     elif callback_data.action == "search":
-        await search.start_wizard(message, state)
+        await search.start_wizard(screen, state)
     elif callback_data.action == "routes":
-        await routes.render_routes(message, query.from_user.id, db)
+        await routes.render_routes(screen, query.from_user.id, db)
     elif callback_data.action == "status":
-        await status.render_status(message, db, registry)
+        await status.render_status(screen, db, registry)
     elif callback_data.action == "help":
-        await message.answer(HELP_TEXT, reply_markup=main_menu_kb())
+        await screen.show(HELP_TEXT, reply_markup=main_menu_kb())
     else:
-        await show_menu(message)
+        await show_menu(screen)
     await query.answer()

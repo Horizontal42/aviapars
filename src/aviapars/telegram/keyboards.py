@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from typing import Sequence
+
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from aviapars.db.models import Place
+from aviapars.db.models import Place, Route
 
 
 class MenuAction(CallbackData, prefix="mn"):
@@ -36,7 +38,7 @@ class ThresholdScopePick(CallbackData, prefix="ts"):
 
 
 class RouteAction(CallbackData, prefix="r"):
-    action: str  # pause|resume|check|search|delete|notify|interval
+    action: str  # open|pause|resume|check|search|delete|notify|interval
     route_id: int
 
 
@@ -109,8 +111,23 @@ def route_saved_kb() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def routes_list_kb() -> InlineKeyboardMarkup:
+def routes_list_kb(routes: Sequence[Route] = ()) -> InlineKeyboardMarkup:
+    """One button per route, opening its card on the same screen.
+
+    The alternative — a message per route, as this used to be — is what made
+    /routes spray N messages into the chat on every tap. Cards are independent
+    of each other, but only one of them is ever being acted on, so "list →
+    open one → act → back to list" fits a single evolving screen exactly.
+    No pagination: this is a personal bot with a handful of routes, and a
+    scrollable keyboard handles that fine.
+    """
     builder = InlineKeyboardBuilder()
+    for route in routes:
+        state_mark = "▶️" if route.active else "⏸"
+        builder.button(
+            text=f"{state_mark} {route.title}",
+            callback_data=RouteAction(action="open", route_id=route.id).pack(),
+        )
     builder.button(text="➕ Добавить маршрут", callback_data=MenuAction(action="add").pack())
     _menu_button(builder)
     builder.adjust(1)
@@ -190,6 +207,7 @@ def route_card_kb(route_id: int, *, active: bool, notification_mode: str = "inst
     builder.button(text="⏱ Интервал проверки", callback_data=RouteAction(action="interval", route_id=route_id).pack())
     builder.button(text="🔎 Варианты", callback_data=RouteAction(action="search", route_id=route_id).pack())
     builder.button(text="🗑 Удалить", callback_data=RouteAction(action="delete", route_id=route_id).pack())
+    builder.button(text="⬅️ К списку", callback_data=MenuAction(action="routes").pack())
     _menu_button(builder)
-    builder.adjust(2, 1, 2, 1, 1)
+    builder.adjust(2, 1, 2, 1, 2)
     return builder.as_markup()

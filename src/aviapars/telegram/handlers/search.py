@@ -39,7 +39,8 @@ from aviapars.telegram.keyboards import (
     search_again_kb,
     search_results_kb,
 )
-from aviapars.telegram.place_picker import ask_place_pick
+from aviapars.telegram.place_picker import ask_place_pick, resolve_pick
+from aviapars.telegram.screen import Screen, screen_for
 from aviapars.telegram.states import AddRoute, SearchFlow
 
 router = Router(name="search")
@@ -47,21 +48,19 @@ router = Router(name="search")
 _RESULTS_SHOWN = 5
 
 
-async def start_wizard(message: Message, state: FSMContext) -> None:
+async def start_wizard(screen: Screen, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(SearchFlow.origin)
-    await message.answer(
-        "Разовый поиск (маршрут не сохраняется). Откуда? Напишите город.", reply_markup=menu_only_kb()
-    )
+    await screen.show("Разовый поиск (маршрут не сохраняется). Откуда? Напишите город.", reply_markup=menu_only_kb())
 
 
 @router.message(Command("search"))
 async def cmd_search(message: Message, state: FSMContext) -> None:
-    await start_wizard(message, state)
+    await start_wizard(await screen_for(message, state), state)
 
 
 async def start_from_route(
-    message: Message, state: FSMContext, db: aiosqlite.Connection, registry: AdapterRegistry, route: Route
+    screen: Screen, state: FSMContext, db: aiosqlite.Connection, registry: AdapterRegistry, route: Route
 ) -> None:
     """Bridge from a route card's «🔎 Варианты» (§10) — the same one-shot search,
     pre-filled from the route's own origin/destination/dates, nothing saved."""
@@ -79,46 +78,60 @@ async def start_from_route(
         # and this button means "show me what's out there for *this* route".
         mode_pref=route.mode_pref,
     )
-    await _run_search(message, state, db, registry, selection_from_route(route))
+    await _run_search(screen, state, db, registry, selection_from_route(route))
 
 
 @router.message(SearchFlow.origin)
 async def on_search_origin_text(message: Message, state: FSMContext, db: aiosqlite.Connection) -> None:
-    await ask_place_pick(message, state, db, next_state=SearchFlow.origin_pick, storage_key="candidates_origin")
+    assert message.text is not None
+    await ask_place_pick(
+        await screen_for(message, state),
+        state,
+        db,
+        text=message.text,
+        pick_state=SearchFlow.origin_pick,
+        storage_key="candidates_origin",
+    )
 
 
 @router.callback_query(SearchFlow.origin_pick, PlacePick.filter())
 async def on_search_origin_pick(query: CallbackQuery, callback_data: PlacePick, state: FSMContext) -> None:
     data = await state.get_data()
-    candidates = data.get("candidates_origin")
-    if not candidates or not 0 <= callback_data.idx < len(candidates):
+    place = resolve_pick(data.get("candidates_origin"), callback_data.idx)
+    if place is None:
         await query.answer("Список устарел, начните заново: /search", show_alert=True)
         return
-    place = candidates[callback_data.idx]
     await state.update_data(origin_place_id=place.id, origin_title=place.name_ru)
     await state.set_state(SearchFlow.destination)
-    assert query.message is not None
-    await query.message.answer(f"Откуда: {place.name_ru}. Теперь куда?", reply_markup=menu_only_kb())
+    screen = await screen_for(query, state)
+    await screen.show(f"Откуда: {place.name_ru}. Теперь куда?", reply_markup=menu_only_kb())
     await query.answer()
 
 
 @router.message(SearchFlow.destination)
 async def on_search_destination_text(message: Message, state: FSMContext, db: aiosqlite.Connection) -> None:
-    await ask_place_pick(message, state, db, next_state=SearchFlow.destination_pick, storage_key="candidates_dest")
+    assert message.text is not None
+    await ask_place_pick(
+        await screen_for(message, state),
+        state,
+        db,
+        text=message.text,
+        pick_state=SearchFlow.destination_pick,
+        storage_key="candidates_dest",
+    )
 
 
 @router.callback_query(SearchFlow.destination_pick, PlacePick.filter())
 async def on_search_destination_pick(query: CallbackQuery, callback_data: PlacePick, state: FSMContext) -> None:
     data = await state.get_data()
-    candidates = data.get("candidates_dest")
-    if not candidates or not 0 <= callback_data.idx < len(candidates):
+    place = resolve_pick(data.get("candidates_dest"), callback_data.idx)
+    if place is None:
         await query.answer("Список устарел, начните заново: /search", show_alert=True)
         return
-    place = candidates[callback_data.idx]
     await state.update_data(dest_place_id=place.id, dest_title=place.name_ru)
     await state.set_state(SearchFlow.mode)
-    assert query.message is not None
-    await query.message.answer(f"Куда: {place.name_ru}. Какой транспорт?", reply_markup=mode_picker_kb())
+    screen = await screen_for(query, state)
+    await screen.show(f"Куда: {place.name_ru}. Какой транспорт?", reply_markup=mode_picker_kb())
     await query.answer()
 
 
@@ -126,8 +139,8 @@ async def on_search_destination_pick(query: CallbackQuery, callback_data: PlaceP
 async def on_search_mode_pick(query: CallbackQuery, callback_data: ModePick, state: FSMContext) -> None:
     await state.update_data(mode_pref=callback_data.value)
     await state.set_state(SearchFlow.date_mode)
-    assert query.message is not None
-    await query.message.answer(f"{MODE_LABEL[callback_data.value]}. Когда?", reply_markup=date_mode_kb())
+    screen = await screen_for(query, state)
+    await screen.show(f"{MODE_LABEL[callback_data.value]}. Когда?", reply_markup=date_mode_kb())
     await query.answer()
 
 
@@ -135,19 +148,17 @@ async def on_search_mode_pick(query: CallbackQuery, callback_data: ModePick, sta
 async def on_search_date_mode_pick(
     query: CallbackQuery, callback_data: DatePick, state: FSMContext, db: aiosqlite.Connection, registry: AdapterRegistry
 ) -> None:
-    if not isinstance(query.message, Message):
-        await query.answer()
-        return
+    screen = await screen_for(query, state)
     ready = date_picker.selection_for(callback_data.kind)
     if ready is not None:
         await query.answer()  # answered up front: the search below outlives Telegram's callback deadline
-        await _run_search(query.message, state, db, registry, ready)
+        await _run_search(screen, state, db, registry, ready)
         return
     prompt = date_picker.prompt_for(callback_data.kind)
     assert prompt is not None
     await state.update_data(date_kind=callback_data.kind)
     await state.set_state(SearchFlow.date_value)
-    await query.message.answer(prompt, reply_markup=menu_only_kb())
+    await screen.show(prompt, reply_markup=menu_only_kb())
     await query.answer()
 
 
@@ -156,16 +167,17 @@ async def on_search_date_value_text(
     message: Message, state: FSMContext, db: aiosqlite.Connection, registry: AdapterRegistry
 ) -> None:
     assert message.text is not None
+    screen = await screen_for(message, state)
     data = await state.get_data()
     parsed = date_picker.parse_selection(data["date_kind"], message.text, date.today())
     if isinstance(parsed, str):
-        await message.answer(parsed, reply_markup=menu_only_kb())
+        await screen.show(parsed, reply_markup=menu_only_kb())
         return
-    await _run_search(message, state, db, registry, parsed)
+    await _run_search(screen, state, db, registry, parsed)
 
 
 async def _run_search(
-    message: Message,
+    screen: Screen,
     state: FSMContext,
     db: aiosqlite.Connection,
     registry: AdapterRegistry,
@@ -182,7 +194,7 @@ async def _run_search(
     today = date.today()
     plan, _ = resolve_date_plan(selection, today=today, probe_budget=settings.flex_search_probe_dates)
     if plan.is_empty:
-        await message.answer("В этом окне не осталось будущих дат.", reply_markup=search_again_kb())
+        await screen.show("В этом окне не осталось будущих дат.", reply_markup=search_again_kb())
         await state.clear()
         return
 
@@ -192,7 +204,7 @@ async def _run_search(
     dest = await places_repo.get(data["dest_place_id"])
     assert origin is not None and dest is not None
 
-    await message.answer("🔎 Ищу варианты, включая через хаб…")
+    await screen.show("🔎 Ищу варианты, включая через хаб…")
     # A mode with no registered adapter (or no coverage for these places) just contributes
     # zero offers — search_itineraries degrades to whatever sources actually answered.
     # `.get` with a default covers the one entry point that skips the picker on purpose
@@ -223,7 +235,7 @@ async def _run_search(
     if not outcome.itineraries:
         skipped = ", ".join(f"{sid} ({reason})" for sid, reason in outcome.sources_skipped)
         note = f"\nПропущены источники: {skipped}" if skipped else ""
-        await message.answer(f"Ничего не нашёл.\n{checked}{note}", reply_markup=search_again_kb())
+        await screen.show(f"Ничего не нашёл.\n{checked}{note}", reply_markup=search_again_kb())
         await state.clear()
         return
 
@@ -248,7 +260,7 @@ async def _run_search(
         results_selection=selection,
     )
     await state.set_state(SearchFlow.results)
-    await message.answer("\n".join(lines), reply_markup=search_results_kb(len(top)))
+    await screen.show("\n".join(lines), reply_markup=search_results_kb(len(top)))
 
 
 def _render_itinerary_line(itinerary: Itinerary) -> str:
@@ -296,9 +308,9 @@ async def on_search_track(query: CallbackQuery, callback_data: SearchTrack, stat
         date_selection=selection,
     )
     await state.set_state(AddRoute.threshold)
-    assert query.message is not None
+    screen = await screen_for(query, state)
     suggested_rub = (itinerary.price_minor // 100 // 500) * 500
-    await query.message.answer(
+    await screen.show(
         f"Маршрут «{data['results_route_title']}» — беру эти параметры.\n"
         f"Даты: {describe_selection(selection, date.today())}.\n"
         f"При какой цене прислать уведомление? Введите сумму в рублях "
