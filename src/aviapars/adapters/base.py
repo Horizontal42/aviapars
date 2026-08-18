@@ -5,6 +5,8 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Awaitable, Callable, Protocol, TypeVar
 
+from curl_cffi.const import CurlIpResolve, CurlOpt
+
 
 class Tier(Enum):
     DISCOVERY = "discovery"
@@ -135,6 +137,15 @@ def probe_dates_total_timeout_s(per_date_s: float, *, setup_s: float = 0.0) -> i
 
     return int(per_date_s * settings.flex_probe_dates_per_cycle + setup_s)
 
+
+# Passed as `curl_options=CURL_FORCE_IPV4` to every curl_cffi AsyncSession in the
+# roster. Root-caused live (2026-08-19): this VDS has an IPv6 stack (only a
+# Tailscale ULA address, no real public IPv6 route) but curl_cffi still races
+# AAAA/A lookups and IPv6/IPv4 connection attempts by default — forcing IPv4-only
+# resolution took a live ~50% failure rate on repeated identical requests down to
+# 0/10 in the same test. `with_dns_retry` below stays on as a backstop for
+# whatever residual transport hiccups aren't this specific IPv6 issue.
+CURL_FORCE_IPV4: dict[int, int] = {CurlOpt.IPRESOLVE: CurlIpResolve.V4}
 
 _T = TypeVar("_T")
 

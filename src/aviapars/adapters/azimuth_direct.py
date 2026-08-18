@@ -8,6 +8,7 @@ from typing import Any
 from curl_cffi.requests import AsyncSession
 
 from aviapars.adapters.base import (
+    CURL_FORCE_IPV4,
     HealthStatus,
     Leg,
     Mode,
@@ -72,7 +73,9 @@ class AzimuthDirectAdapter:
             return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="missing iata/date")
 
         try:
-            async with AsyncSession(impersonate="chrome", timeout=self.request_timeout_s) as session:
+            async with AsyncSession(
+                impersonate="chrome", timeout=self.request_timeout_s, curl_options=CURL_FORCE_IPV4
+            ) as session:
                 init_resp = await with_dns_retry(
                     lambda: session.post(RPC_URL, headers=_HEADERS, json=[["init", _INIT_PARAMS]])
                 )

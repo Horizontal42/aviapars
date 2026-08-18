@@ -12,6 +12,7 @@ import aiohttp
 from curl_cffi.requests import AsyncSession
 
 from aviapars.adapters.base import (
+    CURL_FORCE_IPV4,
     HealthStatus,
     Leg,
     Mode,
@@ -199,7 +200,11 @@ class S7DirectAdapter:
         """Returns (offers, ok). ok=False means the antibot challenge blocked this
         attempt (caller falls back to the browser solver) — distinct from ok=True with
         offers=[], which is a legitimate empty search result."""
-        session_kwargs: dict[str, Any] = {"impersonate": "chrome", "timeout": self.request_timeout_s}
+        session_kwargs: dict[str, Any] = {
+            "impersonate": "chrome",
+            "timeout": self.request_timeout_s,
+            "curl_options": CURL_FORCE_IPV4,
+        }
         if cookies:
             session_kwargs["cookies"] = cookies
 

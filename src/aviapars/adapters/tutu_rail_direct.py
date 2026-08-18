@@ -9,6 +9,7 @@ from curl_cffi.requests import AsyncSession
 
 from aviapars.adapters._tutu_common import select_price_variant
 from aviapars.adapters.base import (
+    CURL_FORCE_IPV4,
     HealthStatus,
     Leg,
     Mode,
@@ -101,7 +102,9 @@ class TutuRailDirectAdapter:
         offers: list[Offer] = []
         blocked = False
         partial = False
-        async with AsyncSession(impersonate="chrome", timeout=self.request_timeout_s) as session:
+        async with AsyncSession(
+            impersonate="chrome", timeout=self.request_timeout_s, curl_options=CURL_FORCE_IPV4
+        ) as session:
             for depart_date in q.dates:
                 day_offers, outcome = await self._search_day(session, q, depart_date)
                 if outcome == "blocked":

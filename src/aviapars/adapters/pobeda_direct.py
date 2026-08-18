@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from curl_cffi.requests import AsyncSession
 
 from aviapars.adapters.base import (
+    CURL_FORCE_IPV4,
     HealthStatus,
     Leg,
     Mode,
@@ -123,7 +124,11 @@ class PobedaDirectAdapter:
         if not q.origin.iata or not q.dest.iata or not q.dates:
             return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="missing iata/date")
 
-        session_kwargs: dict[str, Any] = {"impersonate": "chrome", "timeout": self.request_timeout_s}
+        session_kwargs: dict[str, Any] = {
+            "impersonate": "chrome",
+            "timeout": self.request_timeout_s,
+            "curl_options": CURL_FORCE_IPV4,
+        }
         if self._proxy_url:
             session_kwargs["proxy"] = self._proxy_url
 

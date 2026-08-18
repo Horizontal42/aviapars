@@ -11,6 +11,7 @@ from curl_cffi.requests import AsyncSession
 
 from aviapars.adapters._tutu_common import select_price_variant
 from aviapars.adapters.base import (
+    CURL_FORCE_IPV4,
     HealthStatus,
     Leg,
     Mode,
@@ -99,7 +100,9 @@ class TutuAviaDirectAdapter:
         offers: list[Offer] = []
         blocked = False
         partial = False
-        async with AsyncSession(impersonate="chrome", timeout=self.request_timeout_s) as session:
+        async with AsyncSession(
+            impersonate="chrome", timeout=self.request_timeout_s, curl_options=CURL_FORCE_IPV4
+        ) as session:
             origin_id = await self._resolve_city_id(session, q.origin.iata)
             dest_id = await self._resolve_city_id(session, q.dest.iata)
             if origin_id is None or dest_id is None:
@@ -301,7 +304,9 @@ class TutuAviaDirectAdapter:
 
     async def health_check(self) -> HealthStatus:
         try:
-            async with AsyncSession(impersonate="chrome", timeout=self.request_timeout_s) as session:
+            async with AsyncSession(
+                impersonate="chrome", timeout=self.request_timeout_s, curl_options=CURL_FORCE_IPV4
+            ) as session:
                 city_id = await self._resolve_city_id(session, "MOW")
             return HealthStatus(ok=city_id is not None)
         except Exception as exc:  # health_check should never crash the caller (§5 rule 1 spirit)
