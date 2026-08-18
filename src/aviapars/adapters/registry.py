@@ -53,6 +53,11 @@ class AdapterRegistry:
         self._per_source_sems: dict[str, asyncio.Semaphore] = defaultdict(
             lambda: asyncio.Semaphore(self._per_source_concurrency)
         )
+        # get_state -> compute -> save_state is a read-modify-write with an `await` gap in
+        # the middle — a scheduler cycle and a concurrent /search can both read the same
+        # consecutive_failures, then both write back the same +1, silently losing one
+        # failure's worth of count. One lock per source serializes that sequence.
+        self._health_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
     def register(self, adapter: SourceAdapter) -> None:
         self._adapters[adapter.id] = adapter
@@ -91,7 +96,8 @@ class AdapterRegistry:
             return _deserialize_result(cached)
 
         now = circuit.utcnow()
-        state = await self._health_repo.get_state(adapter.id)
+        async with self._health_locks[adapter.id]:
+            state = await self._health_repo.get_state(adapter.id)
         if circuit.is_open(state, now):
             return SearchResult(status=ResultStatus.BLOCKED, offers=[], partial=True, error="circuit open")
 
@@ -119,15 +125,20 @@ class AdapterRegistry:
         # ticket prices for a route/date, which turns out to be common) would trip the circuit
         # breaker after 5 empty-but-successful queries and get wrongly marked "down".
         healthy = result.status in (ResultStatus.OK, ResultStatus.EMPTY)
-        if healthy:
-            await self._health_repo.save_state(adapter.id, circuit.record_success(state))
-        else:
-            await self._health_repo.save_state(
-                adapter.id,
-                circuit.record_failure(state, now),
-                error_kind=result.status.value,
-                error_msg=result.error,
-            )
+        async with self._health_locks[adapter.id]:
+            # re-read rather than reuse the pre-HTTP-call `state` above — that value can be
+            # arbitrarily stale by now (the adapter call may have taken the full timeout),
+            # and computing off it would silently overwrite a concurrent task's update.
+            fresh_state = await self._health_repo.get_state(adapter.id)
+            if healthy:
+                await self._health_repo.save_state(adapter.id, circuit.record_success(fresh_state))
+            else:
+                await self._health_repo.save_state(
+                    adapter.id,
+                    circuit.record_failure(fresh_state, now),
+                    error_kind=result.status.value,
+                    error_msg=result.error,
+                )
         if result.status == ResultStatus.OK:
             await self._cache.set(
                 cache_key, adapter.id, _serialize_result(result), "application/json", adapter.default_cache_ttl_s
