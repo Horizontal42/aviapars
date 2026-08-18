@@ -10,10 +10,13 @@ from aiogram.types import Message
 
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.db.repo_jobs import JobsRepo
+from aviapars.telegram.format import describe_age, screen_text
 from aviapars.telegram.keyboards import menu_only_kb
 from aviapars.telegram.screen import Screen, screen_for
 
 router = Router(name="status")
+
+TITLE = "📊 Источники"
 
 _STATUS_EMOJI = {"ok": "✅", "degraded": "⚠️", "down": "❌"}
 
@@ -26,7 +29,8 @@ async def cmd_status(
 
 
 async def render_status(screen: Screen, db: aiosqlite.Connection, registry: AdapterRegistry) -> None:
-    lines = ["<b>Источники:</b>"]
+    now = datetime.now(timezone.utc)
+    lines = []
     async with db.execute(
         "SELECT source_id, status, last_success_at, consecutive_failures FROM source_health"
     ) as cursor:
@@ -35,15 +39,28 @@ async def render_status(screen: Screen, db: aiosqlite.Connection, registry: Adap
     for adapter in registry.all():
         row = rows.get(adapter.id)
         if row is None:
-            lines.append(f"{_STATUS_EMOJI['ok']} {adapter.display_name} — ещё не опрашивался")
+            lines.append(f"⚪ {adapter.display_name} — ещё не опрашивал")
             continue
         _, status, last_success, failures = row
         emoji = _STATUS_EMOJI.get(status, "❓")
-        detail = f"последний успех: {last_success}" if last_success else f"подряд ошибок: {failures}"
+        moment = _parse_moment(last_success)
+        detail = f"отвечал {describe_age(moment, now)}" if moment else f"ошибок подряд: {failures}"
         lines.append(f"{emoji} {adapter.display_name} — {detail}")
 
-    jobs_repo = JobsRepo(db)
-    due_jobs = await jobs_repo.due(now=datetime.now(timezone.utc), limit=100)
-    lines.append(f"\nОжидают обработки: {len(due_jobs)}")
+    due_jobs = await JobsRepo(db).due(now=now, limit=100)
+    await screen.show(
+        screen_text(TITLE, "\n".join(lines), f"Уведомлений в очереди: {len(due_jobs)}."),
+        reply_markup=menu_only_kb(),
+    )
 
-    await screen.show("\n".join(lines), reply_markup=menu_only_kb())
+
+def _parse_moment(value: object) -> datetime | None:
+    """`source_health.last_success_at` is written as an ISO string; anything the
+    column can hold that isn't one just means "no known last success"."""
+    if not isinstance(value, str):
+        return None
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=timezone.utc)

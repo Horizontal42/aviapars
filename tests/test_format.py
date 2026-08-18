@@ -1,14 +1,18 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from aviapars.adapters.base import Leg, Mode, Offer, PlaceRef, Tier
 from aviapars.domain.combiner import Itinerary
+from aviapars.domain.dates import exact_date
 from aviapars.telegram.format import (
     MIXED_GROUP,
+    describe_age,
+    describe_draft,
     describe_thresholds,
     format_deal_card,
     mode_group,
+    screen_text,
     select_top_itineraries,
 )
 
@@ -198,3 +202,41 @@ def test_unconfirmed_card_shows_source_and_age() -> None:
 
     assert "⚠️ Не подтверждено" in card
     assert "Туту.ру (самолёты)" in card
+
+
+def test_screen_text_skips_empty_blocks() -> None:
+    assert screen_text("Заголовок", "", "тело") == "<b>Заголовок</b>\n\nтело"
+
+
+def test_draft_line_grows_with_the_wizard() -> None:
+    """The wizard is one message being rewritten, so each step has to carry the
+    earlier answers itself — they are no longer visible above the prompt."""
+    today = date(2026, 9, 1)
+    assert describe_draft({}, today) == ""
+    assert describe_draft({"origin_title": "Екатеринбург"}, today) == "Екатеринбург → …"
+
+    full = describe_draft(
+        {
+            "origin_title": "Екатеринбург",
+            "dest_title": "Сочи",
+            "mode_pref": "plane",
+            "date_selection": exact_date(date(2026, 9, 29)),
+        },
+        today,
+    )
+    assert full == "Екатеринбург → Сочи · ✈️ Самолёт · 29.09.2026"
+
+
+def test_draft_line_ignores_junk_in_state() -> None:
+    assert describe_draft({"mode_pref": "teleport", "date_selection": "вчера"}, date(2026, 9, 1)) == ""
+
+
+def test_age_is_relative_and_rounded_down() -> None:
+    now = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
+    assert describe_age(now - timedelta(seconds=30), now) == "только что"
+    assert describe_age(now - timedelta(minutes=5, seconds=59), now) == "5 мин назад"
+    assert describe_age(now - timedelta(hours=2), now) == "2 ч назад"
+    assert describe_age(now - timedelta(days=3, hours=5), now) == "3 дн. назад"
+    # A source_health row written a hair in the future (clock skew) must not read
+    # as "-1 мин назад".
+    assert describe_age(now + timedelta(minutes=1), now) == "только что"

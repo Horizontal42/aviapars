@@ -6,7 +6,7 @@ import aiosqlite
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
 from aviapars.adapters.base import Tier
 from aviapars.adapters.registry import AdapterRegistry
@@ -20,15 +20,17 @@ from aviapars.telegram import date_picker
 from aviapars.telegram.format import (
     MODE_GROUP_TITLE,
     describe_checked_dates,
+    describe_draft,
     describe_selection,
     format_date,
     format_mode_label,
     format_money,
     mode_group,
+    screen_text,
     select_top_itineraries,
 )
+from aviapars.telegram.handlers import add as add_handlers
 from aviapars.telegram.keyboards import (
-    MODE_LABEL,
     DatePick,
     ModePick,
     PlacePick,
@@ -45,13 +47,27 @@ from aviapars.telegram.states import AddRoute, SearchFlow
 
 router = Router(name="search")
 
+TITLE = "🔎 Разовый поиск"
+
 _RESULTS_SHOWN = 5
+
+
+async def step(screen: Screen, state: FSMContext, prompt: str, *, reply_markup: InlineKeyboardMarkup | None) -> None:
+    """Same one-screen shape as the /add wizard (handlers/add.step) — title,
+    what's chosen so far, then the question."""
+    data = await state.get_data()
+    await screen.show(screen_text(TITLE, describe_draft(data, date.today()), prompt), reply_markup=reply_markup)
 
 
 async def start_wizard(screen: Screen, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(SearchFlow.origin)
-    await screen.show("Разовый поиск (маршрут не сохраняется). Откуда? Напишите город.", reply_markup=menu_only_kb())
+    await step(
+        screen,
+        state,
+        "Ищу варианты прямо сейчас и ничего не сохраняю.\n\nОткуда едем? Напишите город.",
+        reply_markup=menu_only_kb(),
+    )
 
 
 @router.message(Command("search"))
@@ -84,13 +100,13 @@ async def start_from_route(
 async def _origin_picked(screen: Screen, state: FSMContext, place: Place) -> None:
     await state.update_data(origin_place_id=place.id, origin_title=place.name_ru)
     await state.set_state(SearchFlow.destination)
-    await screen.show(f"Откуда: {place.name_ru}. Теперь куда?", reply_markup=menu_only_kb())
+    await step(screen, state, "Куда едем? Напишите город.", reply_markup=menu_only_kb())
 
 
 async def _destination_picked(screen: Screen, state: FSMContext, place: Place) -> None:
     await state.update_data(dest_place_id=place.id, dest_title=place.name_ru)
     await state.set_state(SearchFlow.mode)
-    await screen.show(f"Куда: {place.name_ru}. Какой транспорт?", reply_markup=mode_picker_kb())
+    await step(screen, state, "Чем добираемся?", reply_markup=mode_picker_kb())
 
 
 @router.message(SearchFlow.origin)
@@ -101,6 +117,7 @@ async def on_search_origin_text(message: Message, state: FSMContext, db: aiosqli
         screen,
         state,
         db,
+        title=TITLE,
         text=message.text,
         pick_state=SearchFlow.origin_pick,
         storage_key="candidates_origin",
@@ -127,6 +144,7 @@ async def on_search_destination_text(message: Message, state: FSMContext, db: ai
         screen,
         state,
         db,
+        title=TITLE,
         text=message.text,
         pick_state=SearchFlow.destination_pick,
         storage_key="candidates_dest",
@@ -149,8 +167,7 @@ async def on_search_destination_pick(query: CallbackQuery, callback_data: PlaceP
 async def on_search_mode_pick(query: CallbackQuery, callback_data: ModePick, state: FSMContext) -> None:
     await state.update_data(mode_pref=callback_data.value)
     await state.set_state(SearchFlow.date_mode)
-    screen = await screen_for(query, state)
-    await screen.show(f"{MODE_LABEL[callback_data.value]}. Когда?", reply_markup=date_mode_kb())
+    await step(await screen_for(query, state), state, "Когда едем?", reply_markup=date_mode_kb())
     await query.answer()
 
 
@@ -168,7 +185,7 @@ async def on_search_date_mode_pick(
     assert prompt is not None
     await state.update_data(date_kind=callback_data.kind)
     await state.set_state(SearchFlow.date_value)
-    await screen.show(prompt, reply_markup=menu_only_kb())
+    await step(screen, state, prompt, reply_markup=menu_only_kb())
     await query.answer()
 
 
@@ -181,7 +198,7 @@ async def on_search_date_value_text(
     data = await state.get_data()
     parsed = date_picker.parse_selection(data["date_kind"], message.text, date.today())
     if isinstance(parsed, str):
-        await screen.show(parsed, reply_markup=menu_only_kb())
+        await step(screen, state, parsed, reply_markup=menu_only_kb())
         return
     await _run_search(screen, state, db, registry, parsed)
 
@@ -202,19 +219,24 @@ async def _run_search(
     still return the whole window, so wide-window results do show up.
     """
     today = date.today()
+    data = await state.get_data()
+    title = f"🔎 {data['origin_title']} → {data['dest_title']}"
     plan, _ = resolve_date_plan(selection, today=today, probe_budget=settings.flex_search_probe_dates)
     if plan.is_empty:
-        await screen.show("В этом окне не осталось будущих дат.", reply_markup=search_again_kb())
+        await screen.show(
+            screen_text(title, "⚠️ В этом окне не осталось будущих дат."), reply_markup=search_again_kb()
+        )
         await state.clear()
         return
 
-    data = await state.get_data()
     places_repo = PlacesRepo(db)
     origin = await places_repo.get(data["origin_place_id"])
     dest = await places_repo.get(data["dest_place_id"])
     assert origin is not None and dest is not None
 
-    await screen.show("🔎 Ищу варианты, включая через хаб…")
+    await screen.show(
+        screen_text(title, describe_selection(selection, today), "⏳ Ищу варианты, в том числе через хаб…")
+    )
     # A mode with no registered adapter (or no coverage for these places) just contributes
     # zero offers — search_itineraries degrades to whatever sources actually answered.
     # `.get` with a default covers the one entry point that skips the picker on purpose
@@ -244,14 +266,16 @@ async def _run_search(
     checked = describe_checked_dates(selection, plan, today)
     if not outcome.itineraries:
         skipped = ", ".join(f"{sid} ({reason})" for sid, reason in outcome.sources_skipped)
-        note = f"\nПропущены источники: {skipped}" if skipped else ""
-        await screen.show(f"Ничего не нашёл.\n{checked}{note}", reply_markup=search_again_kb())
+        note = f"\nНе ответили: {skipped}." if skipped else ""
+        await screen.show(
+            screen_text(title, describe_selection(selection, today), f"Ничего не нашёл.\n{checked}{note}"),
+            reply_markup=search_again_kb(),
+        )
         await state.clear()
         return
 
     top = select_top_itineraries(outcome.itineraries, limit=_RESULTS_SHOWN)
-    lines = [f"🔎 {data['origin_title']} → {data['dest_title']} · {describe_selection(selection, today)}"]
-    lines.append(f"Найдено {len(outcome.itineraries)} вариант(ов), показываю {len(top)}")
+    lines = [f"Нашёл вариантов: {len(outcome.itineraries)}. Показываю {len(top)} самых дешёвых:", ""]
     # Headers only when there is actually something to separate — a plane-only search
     # gets the same flat list it always had, not a lone «✈️ Авиабилеты» banner.
     grouped = len({mode_group(it) for it in top}) > 1
@@ -259,38 +283,40 @@ async def _run_search(
     for i, itinerary in enumerate(top, start=1):
         group = mode_group(itinerary)
         if grouped and group != current_group:
+            if current_group is not None:
+                lines.append("")
             current_group = group
-            lines.append(f"\n{MODE_GROUP_TITLE.get(group, group)}")
+            lines.append(f"<b>{MODE_GROUP_TITLE.get(group, group)}</b>")
         lines.append(f"{i}️⃣ {_render_itinerary_line(itinerary)}")
-    lines.append(f"\n{checked}")
 
+    legend = "✅ цена подтверждена перевозчиком · ⚠️ из кэша агрегатора"
     await state.update_data(
         results_itineraries=top,
         results_route_title=f"{data['origin_title']} → {data['dest_title']}",
         results_selection=selection,
     )
     await state.set_state(SearchFlow.results)
-    await screen.show("\n".join(lines), reply_markup=search_results_kb(len(top)))
+    await screen.show(
+        screen_text(title, describe_selection(selection, today), "\n".join(lines), legend, checked),
+        reply_markup=search_results_kb(len(top)),
+    )
 
 
 def _render_itinerary_line(itinerary: Itinerary) -> str:
     all_legs = [leg for offer in itinerary.offers for leg in offer.legs]
-    modes = [leg.mode for leg in all_legs]
-    mode_label = format_mode_label(modes)
+    mode_label = format_mode_label([leg.mode for leg in all_legs])
     price = format_money(itinerary.price_minor, itinerary.currency)
     # local, not UTC — see telegram/format.py's format_deal_card for why.
     depart = format_date(all_legs[0].depart_local.date())
-    dur = ""
-    if itinerary.duration_minutes is not None:
-        h, m = divmod(itinerary.duration_minutes, 60)
-        dur = f" · {h}ч{f' {m}м' if m else ''}"
-    hub_note = ""
+    parts = [f"<b>{price}</b>", depart, mode_label]
     if len(itinerary.offers) > 1:
         hub_place = all_legs[0].to_place
-        hub_note = f" через {hub_place.iata or hub_place.place_id}"
+        parts[-1] += f" через {hub_place.iata or hub_place.place_id}"
+    if itinerary.duration_minutes is not None:
+        h, m = divmod(itinerary.duration_minutes, 60)
+        parts.append(f"{h}ч{f' {m:02d}м' if m else ''}")
     confirmed_all = all(o.tier == Tier.CONFIRMATION for o in itinerary.offers)
-    confirmed = " ✅" if confirmed_all else " ⚠️ не подтверждено"
-    return f"{price} · {depart} {mode_label}{hub_note}{dur}{confirmed}"
+    return " · ".join(parts) + (" ✅" if confirmed_all else " ⚠️")
 
 
 @router.callback_query(SearchFlow.results, SearchTrack.filter())
@@ -320,11 +346,12 @@ async def on_search_track(query: CallbackQuery, callback_data: SearchTrack, stat
     await state.set_state(AddRoute.threshold)
     screen = await screen_for(query, state)
     suggested_rub = (itinerary.price_minor // 100 // 500) * 500
-    await screen.show(
-        f"Маршрут «{data['results_route_title']}» — беру эти параметры.\n"
-        f"Даты: {describe_selection(selection, date.today())}.\n"
-        f"При какой цене прислать уведомление? Введите сумму в рублях "
-        f"(например {suggested_rub or itinerary.price_minor // 100}).",
+    await add_handlers.step(
+        screen,
+        state,
+        "Беру места, транспорт и даты из этого поиска.\n\n"
+        f"Ниже какой цены присылать уведомление?\nСумма в рублях, "
+        f"например {suggested_rub or itinerary.price_minor // 100}.",
         reply_markup=menu_only_kb(),
     )
     await query.answer()

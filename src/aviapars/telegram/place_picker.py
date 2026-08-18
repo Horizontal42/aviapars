@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+from html import escape
 from typing import Awaitable, Callable
 
 import aiosqlite
@@ -8,6 +10,7 @@ from aiogram.fsm.state import State
 
 from aviapars.db.models import Place
 from aviapars.db.repo_places import PlacesRepo
+from aviapars.telegram.format import describe_draft, screen_text
 from aviapars.telegram.keyboards import menu_only_kb, place_picker_kb
 from aviapars.telegram.screen import Screen
 
@@ -17,6 +20,7 @@ async def ask_place_pick(
     state: FSMContext,
     db: aiosqlite.Connection,
     *,
+    title: str,
     text: str,
     pick_state: State,
     storage_key: str,
@@ -30,9 +34,14 @@ async def ask_place_pick(
     choice" per wizard.
     """
     places = await PlacesRepo(db).search_by_name(text)
+    # Whatever the user typed goes back onto an HTML-parsed screen, so it is escaped here
+    # rather than trusted — a stray "<" would otherwise make Telegram reject the message.
+    quoted = f"«{escape(text.strip(), quote=False)}»"
+    data = await state.get_data()
+    draft = describe_draft(data, date.today())
     if not places:
         await screen.show(
-            f"Ничего не нашёл по запросу «{text}». Попробуйте другое название города.",
+            screen_text(title, draft, f"⚠️ Ничего не нашёл по запросу {quoted}. Попробуйте другое название."),
             reply_markup=menu_only_kb(),
         )
         return
@@ -43,7 +52,10 @@ async def ask_place_pick(
         return
     await state.update_data({storage_key: places})
     await state.set_state(pick_state)
-    await screen.show("Выберите вариант:", reply_markup=place_picker_kb(places))
+    await screen.show(
+        screen_text(title, draft, f"По запросу {quoted} нашлось несколько мест. Какое нужно?"),
+        reply_markup=place_picker_kb(places),
+    )
 
 
 def resolve_pick(candidates: object, idx: int) -> Place | None:

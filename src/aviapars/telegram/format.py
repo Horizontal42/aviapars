@@ -1,15 +1,49 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from typing import Mapping
 
 from aviapars.adapters.base import Mode
+from aviapars.db.models import Route
 from aviapars.domain.combiner import Itinerary, itinerary_modes
-from aviapars.domain.dates import DatePlan, DateSelection, window
+from aviapars.domain.dates import DatePlan, DateSelection, selection_from_route, window
+from aviapars.telegram.keyboards import MODE_LABEL
 
 MODE_EMOJI: dict[Mode, str] = {
     Mode.PLANE: "✈️",
     Mode.TRAIN: "🚂",
 }
+
+
+def screen_text(title: str, *blocks: str) -> str:
+    """Every screen the bot draws has the same shape: a bold title, then
+    optional context, then the question. Worth having one place for it now that
+    all of them are literally the same Telegram message being rewritten —
+    inconsistent headings read as glitches rather than as separate screens."""
+    return "\n\n".join([f"<b>{title}</b>", *(block for block in blocks if block)])
+
+
+def describe_draft(data: Mapping[str, object], today: date) -> str:
+    """«Екатеринбург → Сочи · ✈️ Самолёт · 25.09.2026 – 05.10.2026» — what the
+    wizard has collected so far.
+
+    Only worth showing since the wizard became one evolving message: the earlier
+    answers used to be visible right above the current prompt, and now they
+    aren't, so the screen has to carry them itself.
+    """
+    parts: list[str] = []
+    origin, dest = data.get("origin_title"), data.get("dest_title")
+    if isinstance(origin, str) and isinstance(dest, str):
+        parts.append(f"{origin} → {dest}")
+    elif isinstance(origin, str):
+        parts.append(f"{origin} → …")
+    mode = data.get("mode_pref")
+    if isinstance(mode, str) and mode in MODE_LABEL:
+        parts.append(MODE_LABEL[mode])
+    selection = data.get("date_selection")
+    if isinstance(selection, DateSelection):
+        parts.append(describe_selection(selection, today))
+    return " · ".join(parts)
 
 
 def format_mode_label(modes: list[Mode]) -> str:
@@ -92,9 +126,10 @@ def describe_selection(sel: DateSelection, today: date) -> str:
         return "даты уже прошли"
     if sel.mode == "fixed":
         return ", ".join(format_date(d) for d in days)
+    span = f"{format_date(days[0])} – {format_date(days[-1])}"
     if sel.window_start is None:
-        return f"любая дата: {format_date(days[0])} – {format_date(days[-1])} ({len(days)} дн., окно едет вперёд)"
-    return f"{format_date(days[0])} – {format_date(days[-1])} ({len(days)} дн.)"
+        return f"{span} ({len(days)} дн., окно едет вперёд)"
+    return f"{span} ({len(days)} дн.)"
 
 
 def describe_checked_dates(sel: DateSelection, plan: DatePlan, today: date) -> str:
@@ -103,22 +138,39 @@ def describe_checked_dates(sel: DateSelection, plan: DatePlan, today: date) -> s
     (§6), so claiming otherwise would be a lie the user can't check."""
     total = len(window(sel, today))
     if sel.mode == "fixed" or len(plan.probe_dates) >= total:
-        return f"Проверено дат: {total}"
+        return f"Проверено дат: {total}."
     probed = ", ".join(format_date(d) for d in plan.probe_dates)
     return (
         f"Из окна в {total} дн. точечно проверено {len(plan.probe_dates)}: {probed}. "
-        f"Источники с пакетной выдачей отдают всё окно целиком."
+        f"Источники с пакетной выдачей смотрят всё окно целиком."
     )
 
 
 _NOTIFICATION_MODE_LABEL = {
     "instant": "⚡ сразу, как найдётся",
-    "digest": "📬 раз в день, лучшая цена за сутки",
+    # Not "лучшая цена за сутки": every crossing of the threshold is still its own
+    # message, digest only holds them until quiet hours end (см. ARCHITECTURE.md).
+    "digest": "📬 раз в день, все находки разом",
 }
 
 
 def describe_notification_mode(mode: str) -> str:
     return _NOTIFICATION_MODE_LABEL.get(mode, mode)
+
+
+def describe_age(moment: datetime, now: datetime) -> str:
+    """Relative, human-sized. A raw ISO timestamp in a status list is something
+    the reader has to subtract in their head to get the one fact they wanted."""
+    seconds = max(0, int((now - moment).total_seconds()))
+    if seconds < 60:
+        return "только что"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes} мин назад"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours} ч назад"
+    return f"{hours // 24} дн. назад"
 
 
 _CURRENCY_SUFFIX = {"RUB": "₽", "USD": "$", "EUR": "€"}
@@ -140,6 +192,24 @@ def describe_thresholds(max_price: int, currency: str, by_mode: dict[str, int] |
     # Mode declaration order, which is also the order the wizard asks in.
     parts = [f"{MODE_EMOJI[m]} {format_money(by_mode[m.value], currency)}" for m in Mode if m.value in by_mode]
     return " · ".join(parts) if parts else format_money(max_price, currency)
+
+
+def format_route_card(route: Route, today: date) -> str:
+    """The tracked-route card. Same block in both places it appears — the
+    /add confirmation and /routes — so "what I saved" and "what I'm watching"
+    can't drift into two different-looking descriptions of one route."""
+    status = "▶️ активен" if route.active else "⏸ на паузе"
+    return screen_text(
+        route.title,
+        "\n".join(
+            [
+                f"🗓 {describe_selection(selection_from_route(route), today)}",
+                f"💰 Порог: {describe_thresholds(route.max_price, route.max_price_currency, route.max_price_by_mode)}",
+                f"⏱ Проверяю каждые {route.poll_interval_min} мин · {status}",
+                f"🔔 Уведомления: {describe_notification_mode(route.notification_mode)}",
+            ]
+        ),
+    )
 
 
 def format_deal_card(
@@ -180,9 +250,10 @@ def format_deal_card(
     # Telegram client. Each leg gets its own two-line block (route, then carrier/time/price)
     # for the same reason: three facts crammed onto one line read as a wall of text.
     lines = [
-        f"🔥 {route_title}",
-        f"Цена: {price} (порог: {threshold})",
-        f"Дата: {depart_date.strftime('%d.%m.%Y')} · {mode_label}",
+        f"<b>🔥 {route_title}</b>",
+        "",
+        f"💰 {price} · порог {threshold}",
+        f"🗓 {depart_date.strftime('%d.%m.%Y')} · {mode_label}",
         "",
     ]
     multi_leg = len(itinerary.offers) > 1
@@ -211,7 +282,7 @@ def format_deal_card(
 
     source_str = ", ".join(sorted({source_names.get(o.source_id, o.source_id) for o in itinerary.offers}))
     if confirmed:
-        lines.append(f"✅ Подтверждено · только что · {source_str}")
+        lines.append(f"✅ Подтверждено у перевозчика · только что · {source_str}")
     else:
         cached_ats = [o.source_cached_at for o in itinerary.offers if o.source_cached_at is not None]
         age_h = _age_hours(min(cached_ats)) if cached_ats else None

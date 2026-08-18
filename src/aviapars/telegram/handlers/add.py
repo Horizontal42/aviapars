@@ -6,14 +6,14 @@ import aiosqlite
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
 from aviapars.config import settings
 from aviapars.db.models import Place
 from aviapars.db.repo_routes import RoutesRepo
 from aviapars.domain.dates import DateSelection, to_route_fields
 from aviapars.telegram import date_picker
-from aviapars.telegram.format import describe_notification_mode, describe_selection, describe_thresholds
+from aviapars.telegram.format import describe_draft, format_route_card, screen_text
 from aviapars.telegram.keyboards import (
     MODE_LABEL,
     DatePick,
@@ -34,6 +34,8 @@ from aviapars.telegram.states import AddRoute
 
 router = Router(name="add")
 
+TITLE = "➕ Новый маршрут"
+
 # Sanity ceilings, not real limits — no real ticket costs this much, no route needs polling
 # this rarely. Without them an absurd digit string (e.g. 19 digits) overflows timedelta()
 # or SQLite's bind for max_price and takes down the whole scheduler tick, not just this route.
@@ -41,11 +43,19 @@ _MAX_PRICE_RUB = 100_000_000
 _MAX_INTERVAL_MIN = 43_200  # 30 days
 
 
+async def step(screen: Screen, state: FSMContext, prompt: str, *, reply_markup: InlineKeyboardMarkup | None) -> None:
+    """One wizard step = the same message rewritten. Each step therefore repeats
+    the title and everything chosen so far: the earlier prompts are no longer
+    sitting above it to look back at."""
+    data = await state.get_data()
+    await screen.show(screen_text(TITLE, describe_draft(data, date.today()), prompt), reply_markup=reply_markup)
+
+
 async def start_wizard(screen: Screen, state: FSMContext) -> None:
-    """Entry point shared by /add and the main menu's «➕ Добавить маршрут»."""
+    """Entry point shared by /add and the main menu's «➕ Новый маршрут»."""
     await state.clear()
     await state.set_state(AddRoute.origin)
-    await screen.show("Откуда летим/едем? Напишите город.", reply_markup=menu_only_kb())
+    await step(screen, state, "Откуда едем? Напишите город.", reply_markup=menu_only_kb())
 
 
 @router.message(Command("add"))
@@ -56,13 +66,13 @@ async def cmd_add(message: Message, state: FSMContext) -> None:
 async def _origin_picked(screen: Screen, state: FSMContext, place: Place) -> None:
     await state.update_data(origin_place_id=place.id, origin_title=place.name_ru)
     await state.set_state(AddRoute.destination)
-    await screen.show(f"Откуда: {place.name_ru}. Теперь куда?", reply_markup=menu_only_kb())
+    await step(screen, state, "Куда едем? Напишите город.", reply_markup=menu_only_kb())
 
 
 async def _destination_picked(screen: Screen, state: FSMContext, place: Place) -> None:
     await state.update_data(dest_place_id=place.id, dest_title=place.name_ru)
     await state.set_state(AddRoute.mode)
-    await screen.show(f"Куда: {place.name_ru}. Какой транспорт?", reply_markup=mode_picker_kb())
+    await step(screen, state, "Чем добираемся?", reply_markup=mode_picker_kb())
 
 
 @router.message(AddRoute.origin)
@@ -73,6 +83,7 @@ async def on_origin_text(message: Message, state: FSMContext, db: aiosqlite.Conn
         screen,
         state,
         db,
+        title=TITLE,
         text=message.text,
         pick_state=AddRoute.origin_pick,
         storage_key="candidates_origin",
@@ -99,6 +110,7 @@ async def on_destination_text(message: Message, state: FSMContext, db: aiosqlite
         screen,
         state,
         db,
+        title=TITLE,
         text=message.text,
         pick_state=AddRoute.destination_pick,
         storage_key="candidates_dest",
@@ -121,11 +133,7 @@ async def on_destination_pick(query: CallbackQuery, callback_data: PlacePick, st
 async def on_mode_pick(query: CallbackQuery, callback_data: ModePick, state: FSMContext) -> None:
     await state.update_data(mode_pref=callback_data.value)
     await state.set_state(AddRoute.date_mode)
-    screen = await screen_for(query, state)
-    await screen.show(
-        f"{MODE_LABEL[callback_data.value]}. Насколько важна конкретная дата?",
-        reply_markup=date_mode_kb(),
-    )
+    await step(await screen_for(query, state), state, "Когда едем?", reply_markup=date_mode_kb())
     await query.answer()
 
 
@@ -141,7 +149,7 @@ async def on_date_mode_pick(query: CallbackQuery, callback_data: DatePick, state
     assert prompt is not None
     await state.update_data(date_kind=callback_data.kind)
     await state.set_state(AddRoute.date_value)
-    await screen.show(prompt, reply_markup=menu_only_kb())
+    await step(screen, state, prompt, reply_markup=menu_only_kb())
     await query.answer()
 
 
@@ -152,31 +160,30 @@ async def on_date_value_text(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     parsed = date_picker.parse_selection(data["date_kind"], message.text, date.today())
     if isinstance(parsed, str):
-        await screen.show(parsed, reply_markup=menu_only_kb())
+        await step(screen, state, parsed, reply_markup=menu_only_kb())
         return
     await _ask_threshold(screen, state, parsed)
 
 
 _SHARED_THRESHOLD_PROMPT = (
-    "При какой цене прислать уведомление? Введите сумму в рублях, например 8000.\n"
-    "Уведомление придёт только когда найдётся цена не выше этой."
+    "Ниже какой цены присылать уведомление?\nСумма в рублях, например 8000."
 )
 
 
 async def _ask_threshold(screen: Screen, state: FSMContext, selection: DateSelection) -> None:
     await state.update_data(date_selection=selection)
     data = await state.get_data()
-    dates_line = f"Даты: {describe_selection(selection, date.today())}.\n\n"
     # A single-mode route has nothing to split, so it goes straight to the one prompt it
     # always had — the extra question only exists for a route watching both.
     if data["mode_pref"] != "auto":
         await state.set_state(AddRoute.threshold)
-        await screen.show(dates_line + _SHARED_THRESHOLD_PROMPT, reply_markup=menu_only_kb())
+        await step(screen, state, _SHARED_THRESHOLD_PROMPT, reply_markup=menu_only_kb())
         return
     await state.set_state(AddRoute.threshold_scope)
-    await screen.show(
-        dates_line + "Маршрут следит и за самолётами, и за поездами.\n"
-        "Один порог цены на всё или отдельный на каждый вид транспорта?",
+    await step(
+        screen,
+        state,
+        "Маршрут следит и за самолётами, и за поездами.\nПорог цены — один на всё или свой на каждый вид?",
         reply_markup=threshold_scope_kb(),
     )
 
@@ -186,15 +193,15 @@ async def on_threshold_scope_pick(query: CallbackQuery, callback_data: Threshold
     screen = await screen_for(query, state)
     if callback_data.value == "shared":
         await state.set_state(AddRoute.threshold)
-        await screen.show(_SHARED_THRESHOLD_PROMPT, reply_markup=menu_only_kb())
+        await step(screen, state, _SHARED_THRESHOLD_PROMPT, reply_markup=menu_only_kb())
     else:
         await state.set_state(AddRoute.threshold_plane)
-        await screen.show(_per_mode_prompt("plane"), reply_markup=menu_only_kb())
+        await step(screen, state, _per_mode_prompt("plane"), reply_markup=menu_only_kb())
     await query.answer()
 
 
 def _per_mode_prompt(mode: str) -> str:
-    return f"Порог для «{MODE_LABEL[mode]}» — сумма в рублях, например 8000."
+    return f"Ниже какой цены присылать уведомление про «{MODE_LABEL[mode]}»?\nСумма в рублях, например 8000."
 
 
 def _parse_price_minor(text: str) -> int | str:
@@ -202,9 +209,9 @@ def _parse_price_minor(text: str) -> int | str:
     try:
         rub = int(text.strip().replace(" ", ""))
     except ValueError:
-        return "Введите число, например 8000."
+        return "⚠️ Нужно число — сумма в рублях, например 8000."
     if rub <= 0 or rub > _MAX_PRICE_RUB:
-        return f"Введите цену от 1 до {_MAX_PRICE_RUB:,} ₽.".replace(",", " ")
+        return f"⚠️ Нужна сумма от 1 до {_MAX_PRICE_RUB:,} ₽.".replace(",", " ")
     return rub * 100
 
 
@@ -214,7 +221,7 @@ async def on_threshold_text(message: Message, state: FSMContext) -> None:
     screen = await screen_for(message, state)
     parsed = _parse_price_minor(message.text)
     if isinstance(parsed, str):
-        await screen.show(parsed, reply_markup=menu_only_kb())
+        await step(screen, state, parsed, reply_markup=menu_only_kb())
         return
     await state.update_data(max_price_minor=parsed)
     await _ask_interval(screen, state)
@@ -226,11 +233,11 @@ async def on_threshold_plane_text(message: Message, state: FSMContext) -> None:
     screen = await screen_for(message, state)
     parsed = _parse_price_minor(message.text)
     if isinstance(parsed, str):
-        await screen.show(parsed, reply_markup=menu_only_kb())
+        await step(screen, state, parsed, reply_markup=menu_only_kb())
         return
     await state.update_data(max_price_plane_minor=parsed)
     await state.set_state(AddRoute.threshold_train)
-    await screen.show(_per_mode_prompt("train"), reply_markup=menu_only_kb())
+    await step(screen, state, _per_mode_prompt("train"), reply_markup=menu_only_kb())
 
 
 @router.message(AddRoute.threshold_train)
@@ -239,7 +246,7 @@ async def on_threshold_train_text(message: Message, state: FSMContext) -> None:
     screen = await screen_for(message, state)
     parsed = _parse_price_minor(message.text)
     if isinstance(parsed, str):
-        await screen.show(parsed, reply_markup=menu_only_kb())
+        await step(screen, state, parsed, reply_markup=menu_only_kb())
         return
     data = await state.get_data()
     by_mode = {"plane": data["max_price_plane_minor"], "train": parsed}
@@ -256,9 +263,11 @@ async def on_threshold_train_text(message: Message, state: FSMContext) -> None:
 
 async def _ask_interval(screen: Screen, state: FSMContext) -> None:
     await state.set_state(AddRoute.interval)
-    await screen.show(
-        f"Как часто проверять цену? Введите число минут (минимум {settings.poll_interval_floor_min}), "
-        f"например 60.",
+    await step(
+        screen,
+        state,
+        f"Как часто проверять цену?\nЧисло минут, не меньше {settings.poll_interval_floor_min} — "
+        f"обычно хватает 60.",
         reply_markup=menu_only_kb(),
     )
 
@@ -270,21 +279,25 @@ async def on_interval_text(message: Message, state: FSMContext) -> None:
     try:
         minutes = int(message.text.strip())
     except ValueError:
-        await screen.show("Введите целое число минут, например 60.", reply_markup=menu_only_kb())
+        await step(screen, state, "⚠️ Нужно целое число минут, например 60.", reply_markup=menu_only_kb())
         return
     if minutes < settings.poll_interval_floor_min or minutes > _MAX_INTERVAL_MIN:
-        await screen.show(
-            f"Введите от {settings.poll_interval_floor_min} до {_MAX_INTERVAL_MIN} минут.",
+        await step(
+            screen,
+            state,
+            f"⚠️ Нужно число от {settings.poll_interval_floor_min} до {_MAX_INTERVAL_MIN} минут.",
             reply_markup=menu_only_kb(),
         )
         return
 
     await state.update_data(poll_interval_min=minutes)
     await state.set_state(AddRoute.notify_mode)
-    await screen.show(
-        "Как присылать уведомления?\n\n"
-        "⚡ <b>Сразу</b> — как только цена упадёт ниже порога.\n"
-        "📬 <b>Раз в день</b> — одно сообщение с лучшей ценой за сутки.",
+    await step(
+        screen,
+        state,
+        "Когда присылать находки?\n\n"
+        "⚡ <b>Сразу</b> — в тот момент, когда цена упала ниже порога.\n"
+        "📬 <b>Раз в день</b> — всё найденное за сутки одним заходом, когда закончатся тихие часы.",
         reply_markup=notify_mode_kb(),
     )
 
@@ -326,11 +339,9 @@ async def _create_route(
         notification_mode=notification_mode,
     )
     await state.clear()
+    # The same card /routes shows, so "what I just saved" and "what I'm watching" can't
+    # end up as two different-looking descriptions of one route.
     await screen.show(
-        f"Готово! Слежу за маршрутом «{route.title}».\n"
-        f"Даты: {describe_selection(selection, date.today())}.\n"
-        f"Порог: {describe_thresholds(route.max_price, route.max_price_currency, route.max_price_by_mode)}. "
-        f"Проверяю каждые {minutes} мин.\n"
-        f"Уведомления: {describe_notification_mode(route.notification_mode)}.",
+        f"✅ Готово, слежу за маршрутом.\n\n{format_route_card(route, date.today())}",
         reply_markup=route_saved_kb(),
     )

@@ -8,6 +8,7 @@ from aiogram.types import Message
 
 from aviapars.config import settings
 from aviapars.db.repo_users import UsersRepo
+from aviapars.telegram.format import screen_text
 from aviapars.telegram.keyboards import main_menu_kb
 from aviapars.telegram.screen import screen_for
 
@@ -23,6 +24,11 @@ async def cmd_start(message: Message, state: FSMContext, db: aiosqlite.Connectio
     is_admin = message.from_user.id == settings.admin_tg_id
     await users_repo.get_or_create(message.from_user.id, is_admin=is_admin)
     await screen.show(
-        "Привет! Я слежу за ценами на авиа- и жд-билеты.\n\nВыберите, что нужно:",
+        screen_text(
+            "👋 Привет",
+            "Я слежу за ценами на авиа- и жд-билеты: заводите маршрут — и я напишу, "
+            "когда цена опустится ниже вашего порога.",
+            "С чего начнём?",
+        ),
         reply_markup=main_menu_kb(),
     )

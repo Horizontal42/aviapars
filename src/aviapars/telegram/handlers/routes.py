@@ -18,14 +18,15 @@ from aviapars.db.repo_routes import RoutesRepo
 from aviapars.db.repo_users import UsersRepo
 from aviapars.notify.notifier import Notifier
 from aviapars.scheduler.worker import process_route
-from aviapars.domain.dates import selection_from_route
-from aviapars.telegram.format import describe_notification_mode, describe_selection, describe_thresholds
+from aviapars.telegram.format import format_route_card, screen_text
 from aviapars.telegram.handlers import search as search_handlers
 from aviapars.telegram.keyboards import RouteAction, menu_only_kb, route_card_kb, routes_list_kb
 from aviapars.telegram.screen import Screen, screen_for
 from aviapars.telegram.states import EditRoute
 
 router = Router(name="routes")
+
+TITLE = "📋 Мои маршруты"
 
 # "🔍 Проверить сейчас" bypasses the scheduler entirely and calls process_route()
 # in-process (unlike a scheduled poll, it never touches routes.last_run_at) — with
@@ -50,27 +51,25 @@ async def cmd_routes(message: Message, state: FSMContext, db: aiosqlite.Connecti
 async def render_routes(screen: Screen, user_id: int, db: aiosqlite.Connection) -> None:
     routes = await RoutesRepo(db).list_for_user(user_id)
     if not routes:
-        await screen.show("Пока нет отслеживаемых маршрутов.", reply_markup=routes_list_kb())
+        await screen.show(
+            screen_text(
+                TITLE,
+                "Пока ни одного. Заведите первый — и я напишу, как только цена упадёт ниже вашего порога.",
+            ),
+            reply_markup=routes_list_kb(),
+        )
         return
-    await screen.show(f"Отслеживаю маршрутов: {len(routes)}. Откройте любой:", reply_markup=routes_list_kb(routes))
-
-
-async def render_card(screen: Screen, route: Route, *, note: str = "") -> None:
-    text = _route_card_text(route, date.today())
     await screen.show(
-        f"{note}\n\n{text}" if note else text,
-        reply_markup=route_card_kb(route.id, active=route.active, notification_mode=route.notification_mode),
+        screen_text(TITLE, "Откройте любой — там пауза, интервал, проверка сейчас и удаление."),
+        reply_markup=routes_list_kb(routes),
     )
 
 
-def _route_card_text(route: Route, today: date) -> str:
-    status = "▶️ активен" if route.active else "⏸ на паузе"
-    return (
-        f"{route.title}\n"
-        f"Даты: {describe_selection(selection_from_route(route), today)}\n"
-        f"Порог: {describe_thresholds(route.max_price, route.max_price_currency, route.max_price_by_mode)} · "
-        f"каждые {route.poll_interval_min} мин · {status}\n"
-        f"Уведомления: {describe_notification_mode(route.notification_mode)}"
+async def render_card(screen: Screen, route: Route, *, note: str = "") -> None:
+    card = format_route_card(route, date.today())
+    await screen.show(
+        f"{note}\n\n{card}" if note else card,
+        reply_markup=route_card_kb(route.id, active=route.active, notification_mode=route.notification_mode),
     )
 
 
@@ -120,7 +119,7 @@ async def on_route_action(
             return
         _last_manual_check[route.id] = now
         await query.answer("Проверяю...")
-        await screen.show("⏳ Проверяю цены по маршруту…")
+        await screen.show(screen_text(route.title, "⏳ Проверяю цены прямо сейчас…"))
         user = await UsersRepo(db).get(route.user_id)
         assert user is not None
         await process_route(
@@ -133,7 +132,10 @@ async def on_route_action(
             notifier=notifier,
         )
         await _rerender(
-            screen, routes_repo, route.id, note="Проверил. Если что-то нашлось ниже порога — уведомление придёт отдельно."
+            screen,
+            routes_repo,
+            route.id,
+            note="✅ Проверил. Если нашлось что-то ниже порога — уведомление придёт отдельным сообщением.",
         )
     elif callback_data.action == "search":
         await query.answer()  # search below outlives Telegram's callback deadline
@@ -143,8 +145,13 @@ async def on_route_action(
         await state.set_state(EditRoute.interval)
         await query.answer()
         await screen.show(
-            f"Сейчас проверяю каждые {route.poll_interval_min} мин. Введите новый интервал в минутах "
-            f"(от {settings.poll_interval_floor_min} до {_MAX_INTERVAL_MIN}).",
+            screen_text(
+                "⏱ Интервал проверки",
+                route.title,
+                f"Сейчас проверяю каждые {route.poll_interval_min} мин.\n"
+                f"Напишите новый интервал в минутах — от {settings.poll_interval_floor_min} "
+                f"до {_MAX_INTERVAL_MIN}.",
+            ),
             reply_markup=menu_only_kb(),
         )
 
@@ -171,11 +178,17 @@ async def on_interval_edit_text(message: Message, state: FSMContext, db: aiosqli
     try:
         minutes = int(message.text.strip())
     except ValueError:
-        await screen.show("Не понял число. Введите интервал в минутах, например 60.", reply_markup=menu_only_kb())
+        await screen.show(
+            screen_text("⏱ Интервал проверки", "⚠️ Нужно целое число минут, например 60."),
+            reply_markup=menu_only_kb(),
+        )
         return
     if not settings.poll_interval_floor_min <= minutes <= _MAX_INTERVAL_MIN:
         await screen.show(
-            f"Введите от {settings.poll_interval_floor_min} до {_MAX_INTERVAL_MIN} минут.",
+            screen_text(
+                "⏱ Интервал проверки",
+                f"⚠️ Нужно число от {settings.poll_interval_floor_min} до {_MAX_INTERVAL_MIN} минут.",
+            ),
             reply_markup=menu_only_kb(),
         )
         return
@@ -185,8 +198,8 @@ async def on_interval_edit_text(message: Message, state: FSMContext, db: aiosqli
     route = await routes_repo.get(route_id)
     if route is None or route.user_id != message.from_user.id:
         await state.clear()
-        await screen.show("Маршрут не найден.")
+        await screen.show(screen_text(TITLE, "⚠️ Маршрут не найден — возможно, он уже удалён."))
         return
     await routes_repo.set_poll_interval(route_id, minutes)
     await state.clear()
-    await _rerender(screen, routes_repo, route_id, note=f"Готово, теперь каждые {minutes} мин.")
+    await _rerender(screen, routes_repo, route_id, note=f"✅ Готово, теперь каждые {minutes} мин.")

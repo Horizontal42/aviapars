@@ -65,6 +65,7 @@ async def test_single_match_skips_the_keyboard(monkeypatch: pytest.MonkeyPatch, 
         Screen(bot, CHAT_ID, state),
         state,
         None,  # type: ignore[arg-type]
+        title="➕ Новый маршрут",
         text="Санкт-Петербург",
         pick_state=AddRoute.origin_pick,
         storage_key="candidates_origin",
@@ -88,6 +89,7 @@ async def test_several_matches_still_ask(monkeypatch: pytest.MonkeyPatch, state:
         Screen(bot, CHAT_ID, state),
         state,
         None,  # type: ignore[arg-type]
+        title="➕ Новый маршрут",
         text="Питер",
         pick_state=AddRoute.origin_pick,
         storage_key="candidates_origin",
@@ -96,7 +98,7 @@ async def test_several_matches_still_ask(monkeypatch: pytest.MonkeyPatch, state:
 
     assert await state.get_state() == AddRoute.origin_pick.state
     assert len((await state.get_data())["candidates_origin"]) == 2
-    assert bot.sent == ["Выберите вариант:"]
+    assert "Питер" in bot.sent[0]
 
 
 async def test_no_match_asks_again(monkeypatch: pytest.MonkeyPatch, state: FSMContext) -> None:
@@ -110,6 +112,7 @@ async def test_no_match_asks_again(monkeypatch: pytest.MonkeyPatch, state: FSMCo
         Screen(bot, CHAT_ID, state),
         state,
         None,  # type: ignore[arg-type]
+        title="➕ Новый маршрут",
         text="Мухосранск",
         pick_state=AddRoute.origin_pick,
         storage_key="candidates_origin",

@@ -43,7 +43,7 @@ class RouteAction(CallbackData, prefix="r"):
 
 
 class SearchTrack(CallbackData, prefix="st"):
-    """§10 "💾 Отслеживать" bridge from /search into /add. `idx` refers to the
+    """§10 "💾 Следить за" bridge from /search into /add. `idx` refers to the
     offer list stashed in FSM state for the current search — no
     search_sessions table yet (Phase E), so this only works within the same
     conversation, not across a bot restart."""
@@ -62,10 +62,10 @@ def _menu_button(builder: InlineKeyboardBuilder) -> None:
 
 def main_menu_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="➕ Добавить маршрут", callback_data=MenuAction(action="add").pack())
+    builder.button(text="➕ Новый маршрут", callback_data=MenuAction(action="add").pack())
     builder.button(text="📋 Мои маршруты", callback_data=MenuAction(action="routes").pack())
     builder.button(text="🔎 Разовый поиск", callback_data=MenuAction(action="search").pack())
-    builder.button(text="📊 Состояние источников", callback_data=MenuAction(action="status").pack())
+    builder.button(text="📊 Источники", callback_data=MenuAction(action="status").pack())
     builder.button(text="❓ Помощь", callback_data=MenuAction(action="help").pack())
     builder.adjust(1)
     return builder.as_markup()
@@ -82,9 +82,9 @@ def menu_only_kb() -> InlineKeyboardMarkup:
 def date_mode_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="📅 Точная дата", callback_data=DatePick(kind="exact").pack())
-    builder.button(text="📅± Дата ±3 дня", callback_data=DatePick(kind="around").pack())
+    builder.button(text="📅 Дата ±3 дня", callback_data=DatePick(kind="around").pack())
     builder.button(text="🗓 Диапазон дат", callback_data=DatePick(kind="range").pack())
-    builder.button(text="🎲 Любая дата (окно N дней)", callback_data=DatePick(kind="any").pack())
+    builder.button(text="🎲 Окно на N дней вперёд", callback_data=DatePick(kind="any").pack())
     _menu_button(builder)
     builder.adjust(1)
     return builder.as_markup()
@@ -96,7 +96,7 @@ NOTIFY_MODE_LABEL = {"instant": "⚡ Сразу", "digest": "📬 Раз в де
 def notify_mode_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="⚡ Сразу, как найдётся", callback_data=NotifyModePick(value="instant").pack())
-    builder.button(text="📬 Раз в день, лучшая цена", callback_data=NotifyModePick(value="digest").pack())
+    builder.button(text="📬 Раз в день, всё разом", callback_data=NotifyModePick(value="digest").pack())
     _menu_button(builder)
     builder.adjust(1)
     return builder.as_markup()
@@ -105,7 +105,7 @@ def notify_mode_kb() -> InlineKeyboardMarkup:
 def route_saved_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="📋 Мои маршруты", callback_data=MenuAction(action="routes").pack())
-    builder.button(text="➕ Ещё маршрут", callback_data=MenuAction(action="add").pack())
+    builder.button(text="➕ Ещё один", callback_data=MenuAction(action="add").pack())
     _menu_button(builder)
     builder.adjust(2, 1)
     return builder.as_markup()
@@ -128,7 +128,7 @@ def routes_list_kb(routes: Sequence[Route] = ()) -> InlineKeyboardMarkup:
             text=f"{state_mark} {route.title}",
             callback_data=RouteAction(action="open", route_id=route.id).pack(),
         )
-    builder.button(text="➕ Добавить маршрут", callback_data=MenuAction(action="add").pack())
+    builder.button(text="➕ Новый маршрут", callback_data=MenuAction(action="add").pack())
     _menu_button(builder)
     builder.adjust(1)
     return builder.as_markup()
@@ -156,14 +156,15 @@ def place_picker_kb(places: list[Place]) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-MODE_LABEL = {"plane": "✈️ Самолёт", "train": "🚂 Поезд", "auto": "🔀 Авто"}
+MODE_LABEL = {"plane": "✈️ Самолёт", "train": "🚂 Поезд", "auto": "🔀 Самолёт или поезд"}
 
 
 def mode_picker_kb() -> InlineKeyboardMarkup:
+    """Labels come from MODE_LABEL so the button, the draft line and the
+    per-mode threshold prompt can't drift into three names for one thing."""
     builder = InlineKeyboardBuilder()
-    builder.button(text="✈️ Самолёт", callback_data=ModePick(value="plane").pack())
-    builder.button(text="🚂 Поезд", callback_data=ModePick(value="train").pack())
-    builder.button(text="🔀 Авто (оба)", callback_data=ModePick(value="auto").pack())
+    for value in ("plane", "train", "auto"):
+        builder.button(text=MODE_LABEL[value], callback_data=ModePick(value=value).pack())
     _menu_button(builder)
     builder.adjust(1)
     return builder.as_markup()
@@ -174,7 +175,7 @@ def threshold_scope_kb() -> InlineKeyboardMarkup:
     a single-mode route has nothing to split and never sees this step."""
     builder = InlineKeyboardBuilder()
     builder.button(text="💰 Один порог на всё", callback_data=ThresholdScopePick(value="shared").pack())
-    builder.button(text="✈️/🚂 Отдельно по видам", callback_data=ThresholdScopePick(value="per_mode").pack())
+    builder.button(text="✈️ 🚂 Отдельно по видам", callback_data=ThresholdScopePick(value="per_mode").pack())
     _menu_button(builder)
     builder.adjust(1)
     return builder.as_markup()
@@ -183,7 +184,7 @@ def threshold_scope_kb() -> InlineKeyboardMarkup:
 def search_results_kb(n: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for i in range(n):
-        builder.button(text=f"💾 Отслеживать №{i + 1}", callback_data=SearchTrack(idx=i).pack())
+        builder.button(text=f"💾 Следить за №{i + 1}", callback_data=SearchTrack(idx=i).pack())
     builder.button(text="🔎 Новый поиск", callback_data=MenuAction(action="search").pack())
     _menu_button(builder)
     builder.adjust(1)
@@ -204,7 +205,7 @@ def route_card_kb(route_id: int, *, active: bool, notification_mode: str = "inst
         text=f"🔔 Уведомлять: {NOTIFY_MODE_LABEL[target]}",
         callback_data=RouteAction(action="notify", route_id=route_id).pack(),
     )
-    builder.button(text="⏱ Интервал проверки", callback_data=RouteAction(action="interval", route_id=route_id).pack())
+    builder.button(text="⏱ Интервал", callback_data=RouteAction(action="interval", route_id=route_id).pack())
     builder.button(text="🔎 Варианты", callback_data=RouteAction(action="search", route_id=route_id).pack())
     builder.button(text="🗑 Удалить", callback_data=RouteAction(action="delete", route_id=route_id).pack())
     builder.button(text="⬅️ К списку", callback_data=MenuAction(action="routes").pack())
