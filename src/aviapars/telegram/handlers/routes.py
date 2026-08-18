@@ -11,7 +11,6 @@ from aiogram.types import CallbackQuery, Message
 
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.db.models import Route
-from aviapars.db.repo_digests import DigestsRepo
 from aviapars.db.repo_observations import ObservationsRepo
 from aviapars.db.repo_places import PlacesRepo
 from aviapars.db.repo_routes import RoutesRepo
@@ -97,10 +96,6 @@ async def on_route_action(
     elif callback_data.action == "notify":
         new_mode = "digest" if route.notification_mode == "instant" else "instant"
         await routes_repo.set_notification_mode(route.id, new_mode)
-        if new_mode == "instant":
-            # Whatever was staged belongs to a digest window that will now never be
-            # delivered — leaving it would surface a stale price if the user switches back.
-            await DigestsRepo(db).clear(route.id)
         await query.answer("⚡ Буду присылать сразу." if new_mode == "instant" else "📬 Буду присылать раз в день.")
         if isinstance(query.message, Message):
             updated = await routes_repo.get(route.id)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import aiosqlite
@@ -11,7 +12,6 @@ from aviapars.adapters.registry import AdapterRegistry
 from aviapars.adapters.travelpayouts import TravelpayoutsAdapter
 from aviapars.config import settings
 from aviapars.db.models import User
-from aviapars.db.repo_digests import DigestsRepo
 from aviapars.db.repo_jobs import JobsRepo
 from aviapars.db.repo_notifications import NotificationsRepo
 from aviapars.db.repo_observations import ObservationsRepo
@@ -106,7 +106,6 @@ async def test_cheap_direct_flight_triggers_notification(db: aiosqlite.Connectio
         NotificationsRepo(db),
         JobsRepo(db),
         DedupeGate(NotificationsRepo(db)),
-        DigestsRepo(db),
         cooldown_h=12,
         daily_cap=3,
     )
@@ -132,12 +131,12 @@ async def test_cheap_direct_flight_triggers_notification(db: aiosqlite.Connectio
     assert row[0] >= 1
 
 
-async def test_digest_route_stages_instead_of_messaging(
+async def test_digest_route_defers_instead_of_messaging_immediately(
     db: aiosqlite.Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Same qualifying price as the test above, same threshold check — only the
-    delivery differs. crosses_threshold() stays mode-agnostic; process_route
-    branches."""
+    delivery timing differs. crosses_threshold() stays mode-agnostic;
+    notifier.send_deal() defers instead of sending immediately."""
     origin_id, dest_id = await _seed_places(db)
     users_repo = UsersRepo(db)
     user = await users_repo.get_or_create(557, is_admin=True)
@@ -175,7 +174,6 @@ async def test_digest_route_stages_instead_of_messaging(
         NotificationsRepo(db),
         JobsRepo(db),
         DedupeGate(NotificationsRepo(db)),
-        DigestsRepo(db),
         cooldown_h=12,
         daily_cap=3,
     )
@@ -191,10 +189,13 @@ async def test_digest_route_stages_instead_of_messaging(
     )
 
     assert bot.sent == []
-    pending = await DigestsRepo(db).pending()
-    assert len(pending) == 1
-    assert pending[0].route_id == route.id
-    assert "Екатеринбург → Сочи" in pending[0].card_text
+    # far-future "now" so the exact next_quiet_hours_end computation doesn't matter here —
+    # this test only cares that a notify job for this route was queued, not exactly when.
+    far_future = datetime.now(timezone.utc) + timedelta(days=2)
+    pending = await JobsRepo(db).due(now=far_future, limit=10)
+    route_jobs = [j for j in pending if j.route_id == route.id and j.kind == "notify"]
+    assert len(route_jobs) == 1
+    assert "Екатеринбург → Сочи" in route_jobs[0].payload["text"]
 
 
 async def test_price_above_threshold_does_not_notify(db: aiosqlite.Connection, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -235,7 +236,6 @@ async def test_price_above_threshold_does_not_notify(db: aiosqlite.Connection, m
         NotificationsRepo(db),
         JobsRepo(db),
         DedupeGate(NotificationsRepo(db)),
-        DigestsRepo(db),
         cooldown_h=12,
         daily_cap=3,
     )
@@ -301,7 +301,6 @@ async def test_flexible_window_finds_a_date_the_user_never_named(
         NotificationsRepo(db),
         JobsRepo(db),
         DedupeGate(NotificationsRepo(db)),
-        DigestsRepo(db),
         cooldown_h=12,
         daily_cap=3,
     )

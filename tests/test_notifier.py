@@ -8,7 +8,6 @@ import pytest
 
 from aviapars.adapters.base import Leg, Mode, Offer, PlaceRef, Tier
 from aviapars.db.models import Route, User
-from aviapars.db.repo_digests import DigestsRepo
 from aviapars.db.repo_jobs import JobsRepo
 from aviapars.db.repo_notifications import NotificationsRepo
 from aviapars.domain.combiner import Itinerary
@@ -102,11 +101,6 @@ CREATE TABLE notifications_sent (
     depart_date TEXT NOT NULL,
     tier_at_send TEXT NOT NULL,
     sent_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE TABLE route_digests (
-    route_id INTEGER PRIMARY KEY, pending_day TEXT, price_minor INTEGER, currency TEXT,
-    itinerary_hash TEXT, mode TEXT, depart_date TEXT, tier_at_send TEXT, card_text TEXT,
-    staged_at TEXT, last_sent_day TEXT
 );
 """
 
@@ -277,7 +271,7 @@ async def test_quiet_hours_defer_records_immediately_so_dedupe_sees_it(db: aiosq
     jobs = JobsRepo(db)
     gate = DedupeGate(repo)
     bot = _FakeBot()
-    notifier = Notifier(bot, repo, jobs, gate, DigestsRepo(db), cooldown_h=12, daily_cap=3)
+    notifier = Notifier(bot, repo, jobs, gate, cooldown_h=12, daily_cap=3)
 
     user = _user(start="00:00", end="23:59")
     route = _route()
@@ -305,7 +299,7 @@ async def test_deliver_pending_does_not_double_record(db: aiosqlite.Connection) 
     jobs = JobsRepo(db)
     gate = DedupeGate(repo)
     bot = _FakeBot()
-    notifier = Notifier(bot, repo, jobs, gate, DigestsRepo(db), cooldown_h=12, daily_cap=3)
+    notifier = Notifier(bot, repo, jobs, gate, cooldown_h=12, daily_cap=3)
 
     user = _user(start="00:00", end="23:59")
     route = _route()
@@ -319,3 +313,56 @@ async def test_deliver_pending_does_not_double_record(db: aiosqlite.Connection) 
     await notifier.deliver_pending(pending[0])  # must not raise
 
     assert bot.sent == [(user.tg_user_id, bot.sent[0][1])]
+
+
+async def test_digest_mode_defers_every_qualifying_deal_not_just_the_cheapest(db: aiosqlite.Connection) -> None:
+    # A digest route must behave like instant mode in every way except delivery timing: two
+    # distinct qualifying prices found the same day are two notifications, not one collapsed
+    # "best of the day" — this is *not* delivered outside quiet hours by design.
+    repo = NotificationsRepo(db)
+    jobs = JobsRepo(db)
+    gate = DedupeGate(repo)
+    bot = _FakeBot()
+    notifier = Notifier(bot, repo, jobs, gate, cooldown_h=12, daily_cap=3)
+
+    user = _user(start="23:00", end="08:00")
+    route = _route(notification_mode="digest")
+    now = datetime(2026, 9, 18, 9, 0, tzinfo=timezone.utc)  # 12:00 Moscow — well outside quiet hours
+
+    first = await notifier.send_deal(
+        user=user, route=route, itinerary=_itinerary(price_minor=550000, itinerary_hash="h1"), confirmed=True, now=now
+    )
+    second = await notifier.send_deal(
+        user=user, route=route, itinerary=_itinerary(price_minor=400000, itinerary_hash="h2"), confirmed=True, now=now
+    )
+    assert (first, second) == (False, False)  # neither sent immediately, despite not being quiet hours
+    assert bot.sent == []
+
+    due_at = next_quiet_hours_end(user, now) + timedelta(minutes=1)
+    pending = await jobs.due(now=due_at, limit=10)
+    assert len(pending) == 2  # both deals queued, neither dropped in favour of the cheaper one
+
+    for job in pending:
+        await notifier.deliver_pending(job)
+    assert len(bot.sent) == 2
+    delivered_text = "\n".join(text for _, text in bot.sent)
+    assert "5 500 ₽" in delivered_text
+    assert "4 000 ₽" in delivered_text
+
+
+async def test_instant_mode_still_sends_immediately_outside_quiet_hours(db: aiosqlite.Connection) -> None:
+    # regression guard for the fix above: making digest mode defer unconditionally must not
+    # accidentally make instant mode defer too.
+    repo = NotificationsRepo(db)
+    jobs = JobsRepo(db)
+    gate = DedupeGate(repo)
+    bot = _FakeBot()
+    notifier = Notifier(bot, repo, jobs, gate, cooldown_h=12, daily_cap=3)
+
+    user = _user(start="23:00", end="08:00")
+    route = _route(notification_mode="instant")
+    now = datetime(2026, 9, 18, 9, 0, tzinfo=timezone.utc)  # 12:00 Moscow
+
+    sent = await notifier.send_deal(user=user, route=route, itinerary=_itinerary(), confirmed=True, now=now)
+    assert sent is True
+    assert len(bot.sent) == 1

@@ -75,7 +75,6 @@ def format_deal_card(
     threshold_minor: int,
     confirmed: bool,
     source_names: dict[str, str] | None = None,
-    digest_found_at_local: datetime | None = None,
 ) -> str:
     """Deal notification card (§9/§10). Degrades gracefully when leg detail is
     missing (date_only/no-carrier discovery offers) rather than fabricating
@@ -89,12 +88,10 @@ def format_deal_card(
     not the raw "pobeda_direct" slug; falls back to the slug if the map
     wasn't passed (keeps this function usable standalone/in tests).
 
-    `digest_found_at_local` switches the card to digest framing (§9
-    notification_mode). It matters that this is explicit rather than cosmetic:
-    a digest is read hours after the price was found, so the instant card's
-    "🔥 … только что" would be actively wrong about both why the message
-    arrived and how fresh the price is. Passing the local moment it was found
-    lets the card say so instead of implying "now"."""
+    Used unchanged for both `instant` and `digest` notification modes (§9) —
+    a digest message is the same card as an instant one, just delivered
+    later alongside the day's other qualifying deals; see notify/notifier.py.
+    """
     source_names = source_names or {}
     price = format_money(itinerary.price_minor, itinerary.currency)
     threshold = format_money(threshold_minor, itinerary.currency)
@@ -104,10 +101,7 @@ def format_deal_card(
     # day early off depart_utc.date() — the user needs the date they'd see on a ticket.
     depart_date = all_legs[0].depart_local.date()
 
-    if digest_found_at_local is not None:
-        headline = f"📬 {route_title} — лучшая цена за сутки   {price}  (порог: {threshold})"
-    else:
-        headline = f"🔥 {route_title}   {price}  (порог: {threshold})"
+    headline = f"🔥 {route_title}   {price}  (порог: {threshold})"
     lines = [headline, f"   {depart_date.strftime('%d.%m')} · {mode_label}"]
     multi_leg = len(itinerary.offers) > 1
     for offer in itinerary.offers:
@@ -126,8 +120,7 @@ def format_deal_card(
 
     source_str = ", ".join(sorted({source_names.get(o.source_id, o.source_id) for o in itinerary.offers}))
     if confirmed:
-        when = f"найдено в {digest_found_at_local:%H:%M}" if digest_found_at_local is not None else "только что"
-        lines.append(f"   ✅ Подтверждено · {when} · {source_str}")
+        lines.append(f"   ✅ Подтверждено · только что · {source_str}")
     else:
         cached_ats = [o.source_cached_at for o in itinerary.offers if o.source_cached_at is not None]
         age_h = _age_hours(min(cached_ats)) if cached_ats else None

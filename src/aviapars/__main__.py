@@ -16,7 +16,6 @@ from aviapars.adapters.yandex_rasp import YandexRaspAdapter
 from aviapars.config import settings
 from aviapars.db.engine import connect
 from aviapars.db.migrate import migrate
-from aviapars.db.repo_digests import DigestsRepo
 from aviapars.db.repo_jobs import JobsRepo
 from aviapars.db.repo_notifications import NotificationsRepo
 from aviapars.db.repo_sessions import SessionsRepo
@@ -85,7 +84,6 @@ async def main() -> None:
             notifications_repo,
             jobs_repo,
             dedupe,
-            DigestsRepo(db),
             cooldown_h=settings.notification_dedupe_cooldown_h,
             daily_cap=settings.notifications_per_route_per_day,
             source_names={a.id: a.display_name for a in registry.all()},

@@ -2,19 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 import aiosqlite
 
 from aviapars.adapters.cache import ResponseCache
 from aviapars.adapters.registry import AdapterRegistry
-from aviapars.db.repo_digests import DigestsRepo
 from aviapars.db.repo_jobs import JobsRepo
 from aviapars.db.repo_observations import ObservationsRepo
 from aviapars.db.repo_places import PlacesRepo
 from aviapars.db.repo_routes import RoutesRepo
 from aviapars.db.repo_users import UsersRepo
-from aviapars.notify.notifier import Notifier, digest_day, is_quiet_hours
+from aviapars.notify.notifier import Notifier
 from aviapars.scheduler.worker import process_route
 
 log = logging.getLogger(__name__)
@@ -41,16 +40,16 @@ async def run_scheduler_loop(
     that indirection buys nothing yet. Revisit once route/adapter count
     makes sequential processing too slow for the tick interval (§13 notes
     this scheduler/worker split is meant to grow into the job-queue design
-    as the roster grows, not before). `notify` jobs (quiet-hours deferral,
-    §9) DO already go through the jobs table since that's the only
-    mechanism that exists for deferred delivery.
+    as the roster grows, not before). `notify` jobs (quiet-hours and
+    `notification_mode='digest'` deferral alike, §9) DO already go through
+    the jobs table since that's the only mechanism that exists for deferred
+    delivery.
     """
     routes_repo = RoutesRepo(db)
     users_repo = UsersRepo(db)
     places_repo = PlacesRepo(db)
     observations_repo = ObservationsRepo(db)
     jobs_repo = JobsRepo(db)
-    digests_repo = DigestsRepo(db)
     cache = ResponseCache(db)
     last_prune = 0.0
 
@@ -68,10 +67,6 @@ async def run_scheduler_loop(
             await _run_due_notify_jobs(now, jobs_repo, notifier)
         except Exception:
             log.exception("scheduler tick: notify job processing failed")
-        try:
-            await _run_due_digests(now, routes_repo, users_repo, digests_repo, notifier)
-        except Exception:
-            log.exception("scheduler tick: digest delivery failed")
 
         loop_time = asyncio.get_event_loop().time()
         if loop_time - last_prune >= _PRUNE_EVERY_S:
@@ -115,41 +110,6 @@ async def _run_due_routes(
             log.exception("route %s poll failed", route.id)
         finally:
             await routes_repo.mark_run(route.id, next_run_at=next_run, ran_at=now)
-
-
-async def _run_due_digests(
-    now: datetime,
-    routes_repo: RoutesRepo,
-    users_repo: UsersRepo,
-    digests_repo: DigestsRepo,
-    notifier: Notifier,
-) -> None:
-    """Ships the once-a-day message for routes on `notification_mode = 'digest'`
-    (§9). Deliberately driven off the staged rows rather than the `jobs` table:
-    a digest's content keeps changing right up until its window closes (a
-    cheaper price can land at any point during the day), and a queued job with
-    a frozen payload would have to be found and rewritten on every poll cycle.
-    """
-    for pending in await digests_repo.pending():
-        try:
-            route = await routes_repo.get(pending.route_id)
-            if route is None or route.notification_mode != "digest":
-                continue
-            user = await users_repo.get(route.user_id)
-            if user is None:
-                continue
-            if digest_day(user, now) <= date.fromisoformat(pending.day):
-                continue  # window still open — a cheaper price may still turn up today
-            if is_quiet_hours(user, now):
-                # Only reachable when the bot was down past the send time: a window closes
-                # exactly at quiet_hours_end, so a digest normally can't be due during them.
-                # Leaving it staged makes it go out when they end, still as that day's digest.
-                continue
-            if not await digests_repo.claim(pending.route_id, pending.day):
-                continue  # another tick already took this window
-            await notifier.send_digest(user=user, route=route, pending=pending, now=now)
-        except Exception:
-            log.exception("digest delivery for route %s failed", pending.route_id)
 
 
 async def _run_due_notify_jobs(now: datetime, jobs_repo: JobsRepo, notifier: Notifier) -> None:
