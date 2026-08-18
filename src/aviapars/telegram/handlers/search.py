@@ -18,11 +18,14 @@ from aviapars.domain.dates import DateSelection, resolve_date_plan, selection_fr
 from aviapars.domain.places import modes_for_pref
 from aviapars.telegram import date_picker
 from aviapars.telegram.format import (
+    MODE_GROUP_TITLE,
     describe_checked_dates,
     describe_selection,
     format_date,
     format_mode_label,
     format_money,
+    mode_group,
+    select_top_itineraries,
 )
 from aviapars.telegram.keyboards import (
     MODE_LABEL,
@@ -40,6 +43,8 @@ from aviapars.telegram.place_picker import ask_place_pick
 from aviapars.telegram.states import AddRoute, SearchFlow
 
 router = Router(name="search")
+
+_RESULTS_SHOWN = 5
 
 
 async def start_wizard(message: Message, state: FSMContext) -> None:
@@ -222,10 +227,18 @@ async def _run_search(
         await state.clear()
         return
 
-    top = outcome.itineraries[:5]
+    top = select_top_itineraries(outcome.itineraries, limit=_RESULTS_SHOWN)
     lines = [f"🔎 {data['origin_title']} → {data['dest_title']} · {describe_selection(selection, today)}"]
     lines.append(f"Найдено {len(outcome.itineraries)} вариант(ов), показываю {len(top)}")
+    # Headers only when there is actually something to separate — a plane-only search
+    # gets the same flat list it always had, not a lone «✈️ Авиабилеты» banner.
+    grouped = len({mode_group(it) for it in top}) > 1
+    current_group: str | None = None
     for i, itinerary in enumerate(top, start=1):
+        group = mode_group(itinerary)
+        if grouped and group != current_group:
+            current_group = group
+            lines.append(f"\n{MODE_GROUP_TITLE.get(group, group)}")
         lines.append(f"{i}️⃣ {_render_itinerary_line(itinerary)}")
     lines.append(f"\n{checked}")
 

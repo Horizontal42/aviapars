@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 from aviapars.adapters.base import Mode
-from aviapars.domain.combiner import Itinerary
+from aviapars.domain.combiner import Itinerary, itinerary_modes
 from aviapars.domain.dates import DatePlan, DateSelection, window
 
 MODE_EMOJI: dict[Mode, str] = {
@@ -16,6 +16,69 @@ def format_mode_label(modes: list[Mode]) -> str:
     """«✈️+🚂 через Москву» style label. Works for any number/order of modes,
     including a future third mode — see plans/squishy-scribbling-dawn.md §5."""
     return "+".join(MODE_EMOJI[m] for m in modes)
+
+
+MIXED_GROUP = "mixed"
+# Order results are presented in — same order as the mode picker's buttons.
+MODE_GROUP_ORDER = (Mode.PLANE.value, Mode.TRAIN.value, MIXED_GROUP)
+MODE_GROUP_TITLE = {
+    Mode.PLANE.value: "✈️ Авиабилеты",
+    Mode.TRAIN.value: "🚂 ЖД-билеты",
+    MIXED_GROUP: "🔀 Смешанные (через хаб)",
+}
+
+
+def mode_group(itinerary: Itinerary) -> str:
+    """Which results section an itinerary belongs to.
+
+    A hub itinerary that mixes a plane leg with a train leg belongs to neither
+    single-mode group — it is not "a plane price" or "a train price", it is its
+    own combined thing — so it gets its own section rather than being filed
+    under whichever leg happens to come first.
+    """
+    distinct = {m.value for m in itinerary_modes(itinerary)}
+    return distinct.pop() if len(distinct) == 1 else MIXED_GROUP
+
+
+def _group_rank(group: str) -> int:
+    return MODE_GROUP_ORDER.index(group) if group in MODE_GROUP_ORDER else len(MODE_GROUP_ORDER)
+
+
+def select_top_itineraries(itineraries: list[Itinerary], *, limit: int) -> list[Itinerary]:
+    """Pick what the results screen shows, grouped by transport (§10).
+
+    Straight "cheapest N overall" hid whole modes: a route where trains
+    undercut planes filled all five slots with trains, and the plane price the
+    user asked about was simply absent. So every group present gets its cheapest
+    option first, and only the remaining slots go to the global price order.
+
+    Returns a flat list, deliberately: `SearchTrack` callback data indexes into
+    it by position (see `handlers/search.on_search_track`), and rendering it
+    under per-group headers must not change that contract. Sorted by group, then
+    price, so the groups come out contiguous and the rendered numbering is
+    still ascending down the screen.
+    """
+    groups: dict[str, list[Itinerary]] = {}
+    for itinerary in sorted(itineraries, key=lambda it: it.price_minor):
+        groups.setdefault(mode_group(itinerary), []).append(itinerary)
+
+    picked: list[Itinerary] = []
+    seen: set[int] = set()
+    for group in sorted(groups, key=_group_rank):
+        if len(picked) >= limit:
+            break
+        cheapest = groups[group][0]
+        picked.append(cheapest)
+        seen.add(id(cheapest))
+    for itinerary in sorted(itineraries, key=lambda it: it.price_minor):
+        if len(picked) >= limit:
+            break
+        if id(itinerary) not in seen:
+            picked.append(itinerary)
+            seen.add(id(itinerary))
+
+    picked.sort(key=lambda it: (_group_rank(mode_group(it)), it.price_minor))
+    return picked
 
 
 def format_date(day: date) -> str:

@@ -4,16 +4,23 @@ from datetime import datetime, timezone
 
 from aviapars.adapters.base import Leg, Mode, Offer, PlaceRef, Tier
 from aviapars.domain.combiner import Itinerary
-from aviapars.telegram.format import format_deal_card
+from aviapars.telegram.format import MIXED_GROUP, format_deal_card, mode_group, select_top_itineraries
 
 _ORIGIN = PlaceRef(place_id=1, iata="LED", yandex_code=None, rzd_code=None, city_id=None)
 _DEST = PlaceRef(place_id=2, iata="MOW", yandex_code=None, rzd_code=None, city_id=None)
 
 
-def _offer(*, source_id: str, deep_link: str | None, confidence: float = 1.0) -> Offer:
+def _offer(
+    *,
+    source_id: str,
+    deep_link: str | None,
+    confidence: float = 1.0,
+    mode: Mode = Mode.PLANE,
+    price_minor: int = 500000,
+) -> Offer:
     now = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
     leg = Leg(
-        mode=Mode.PLANE,
+        mode=mode,
         from_place=_ORIGIN,
         to_place=_DEST,
         depart_utc=now,
@@ -25,7 +32,7 @@ def _offer(*, source_id: str, deep_link: str | None, confidence: float = 1.0) ->
     )
     return Offer(
         legs=(leg,),
-        price_minor=500000,
+        price_minor=price_minor,
         currency="RUB",
         deep_link=deep_link,
         source_id=source_id,
@@ -117,6 +124,51 @@ def test_departure_date_uses_local_not_utc() -> None:
 
     assert "10.09" in card
     assert "09.09" not in card
+
+
+def _itinerary(*modes: Mode, price_minor: int) -> Itinerary:
+    offers = tuple(
+        _offer(source_id="src", deep_link=None, mode=m, price_minor=price_minor // len(modes)) for m in modes
+    )
+    return Itinerary(offers=offers, price_minor=price_minor, currency="RUB")
+
+
+def test_mode_group_files_a_mixed_hub_itinerary_separately() -> None:
+    assert mode_group(_itinerary(Mode.PLANE, price_minor=100)) == "plane"
+    assert mode_group(_itinerary(Mode.TRAIN, Mode.TRAIN, price_minor=100)) == "train"
+    assert mode_group(_itinerary(Mode.PLANE, Mode.TRAIN, price_minor=100)) == MIXED_GROUP
+
+
+def test_select_top_shows_every_mode_even_when_one_undercuts_the_other() -> None:
+    # regression: the results screen was just the five cheapest overall, so a route where
+    # trains undercut planes filled every slot with trains and the plane price the user
+    # asked about never appeared at all.
+    trains = [_itinerary(Mode.TRAIN, price_minor=p) for p in (100, 200, 300, 400, 500)]
+    plane = _itinerary(Mode.PLANE, price_minor=9000)
+
+    top = select_top_itineraries(trains + [plane], limit=5)
+
+    assert plane in top
+    assert len(top) == 5
+
+
+def test_select_top_orders_by_group_then_price() -> None:
+    plane_cheap = _itinerary(Mode.PLANE, price_minor=8000)
+    plane_dear = _itinerary(Mode.PLANE, price_minor=9000)
+    train = _itinerary(Mode.TRAIN, price_minor=100)
+    mixed = _itinerary(Mode.PLANE, Mode.TRAIN, price_minor=50)
+
+    top = select_top_itineraries([train, mixed, plane_dear, plane_cheap], limit=4)
+
+    # planes first (mode-picker order), trains, then mixed last — price only orders
+    # *within* a group, so the globally cheapest option is not necessarily line 1.
+    assert top == [plane_cheap, plane_dear, train, mixed]
+
+
+def test_select_top_keeps_a_single_group_in_pure_price_order() -> None:
+    planes = [_itinerary(Mode.PLANE, price_minor=p) for p in (300, 100, 200)]
+
+    assert [it.price_minor for it in select_top_itineraries(planes, limit=5)] == [100, 200, 300]
 
 
 def test_unconfirmed_card_shows_source_and_age() -> None:

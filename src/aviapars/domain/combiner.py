@@ -52,6 +52,14 @@ class Itinerary:
     duration_minutes: int | None = None
 
 
+def itinerary_modes(itinerary: Itinerary) -> list[Mode]:
+    """Every leg's mode, in travel order — one entry for a direct trip, two for
+    a hub-composed one (§8). Duplicates are kept: «✈️+✈️ через Москву» is a
+    truthful label for a same-mode hub itinerary. Callers wanting the distinct
+    set (threshold selection, result grouping) collapse it themselves."""
+    return [leg.mode for offer in itinerary.offers for leg in offer.legs]
+
+
 @dataclass(slots=True)
 class SearchOutcome:
     itineraries: list[Itinerary]
