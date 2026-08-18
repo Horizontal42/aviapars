@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import aiosqlite
 
+from aviapars.adapters.cache import ResponseCache
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.db.repo_jobs import JobsRepo
 from aviapars.db.repo_observations import ObservationsRepo
@@ -16,6 +17,13 @@ from aviapars.notify.notifier import Notifier
 from aviapars.scheduler.worker import process_route
 
 log = logging.getLogger(__name__)
+
+# Both tables only ever grow (source_cache via the registry's cache writes, keyed partly
+# on the rotating date-window cursor so the same key rarely recurs; price_observations one
+# row per itinerary per offer per cycle) — nothing else in the codebase ever deletes from
+# either. Pruned once per hour, not every tick: both are simple indexed DELETEs, cheap at
+# this project's scale, but there's no reason to hit them 60x more often than needed.
+_PRUNE_EVERY_S = 3600.0
 
 
 async def run_scheduler_loop(
@@ -41,6 +49,8 @@ async def run_scheduler_loop(
     places_repo = PlacesRepo(db)
     observations_repo = ObservationsRepo(db)
     jobs_repo = JobsRepo(db)
+    cache = ResponseCache(db)
+    last_prune = 0.0
 
     while True:
         now = datetime.now(timezone.utc)
@@ -52,6 +62,18 @@ async def run_scheduler_loop(
             await _run_due_notify_jobs(now, jobs_repo, notifier)
         except Exception:
             log.exception("scheduler tick: notify job processing failed")
+
+        loop_time = asyncio.get_event_loop().time()
+        if loop_time - last_prune >= _PRUNE_EVERY_S:
+            last_prune = loop_time
+            try:
+                pruned_cache = await cache.prune_expired()
+                pruned_obs = await observations_repo.prune_older_than()
+                if pruned_cache or pruned_obs:
+                    log.info("pruned %d expired cache rows, %d old observations", pruned_cache, pruned_obs)
+            except Exception:
+                log.exception("scheduler tick: prune failed")
+
         await asyncio.sleep(tick_interval_s)
 
 

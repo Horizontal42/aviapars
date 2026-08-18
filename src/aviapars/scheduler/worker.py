@@ -70,8 +70,15 @@ async def process_route(
         modes=allowed_modes(route),
         opts=opts,
     )
+    # The same offer (same itinerary_hash) commonly appears in several composed itineraries
+    # at once — a leg shared across hub combinations — so recording every occurrence would
+    # insert the identical row once per combination it happens to be part of.
+    recorded_hashes: set[str] = set()
     for itinerary in outcome.itineraries:
         for offer in itinerary.offers:
+            if offer.itinerary_hash in recorded_hashes:
+                continue
+            recorded_hashes.add(offer.itinerary_hash)
             await observations_repo.record(route.id, offer)
 
     if not outcome.itineraries:
