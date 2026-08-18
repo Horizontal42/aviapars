@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import asyncio
 import json
-import sys
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from typing import Any, Awaitable, Callable, TypeVar
@@ -42,12 +42,20 @@ def admin_only(handler: F) -> F:
 
 @router.message(Command("stop"))
 @admin_only
-async def cmd_stop(message: Message) -> None:
-    """Clean exit(0) — the systemd unit uses Restart=on-failure (not
-    'always'), so this stays stopped until the admin runs `systemctl start`
-    over Tailscale/SSH. See deploy/INSTALL.md."""
+async def cmd_stop(message: Message, shutdown_event: asyncio.Event) -> None:
+    """Signals __main__.main() to exit cleanly (0) — the systemd unit uses
+    Restart=on-failure (not 'always'), so this stays stopped until the admin
+    runs `systemctl start` over Tailscale/SSH. See deploy/INSTALL.md.
+
+    Setting an Event rather than calling sys.exit() directly matters: exit()
+    from inside a handler coroutine raises SystemExit inside whatever asyncio
+    task aiogram is running it on, not in main()'s own task — it unwinds
+    through the event loop instead of through main()'s try/finally, so
+    bot.session.close() and the scheduler/watchdog task cancellation only ran
+    incidentally, by accident of how the interpreter happened to unwind.
+    """
     await message.answer("Останавливаюсь. Чтобы вернуть в строй: `systemctl start aviapars` на VDS.")
-    sys.exit(0)
+    shutdown_event.set()
 
 
 @router.message(Command("pause_all"))

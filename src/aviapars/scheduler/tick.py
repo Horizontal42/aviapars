@@ -52,6 +52,10 @@ async def run_scheduler_loop(
     cache = ResponseCache(db)
     last_prune = 0.0
 
+    reset = await jobs_repo.reset_stuck_running()
+    if reset:
+        log.warning("recovered %d job(s) stuck in 'running' from a previous crash/restart", reset)
+
     while True:
         now = datetime.now(timezone.utc)
         try:

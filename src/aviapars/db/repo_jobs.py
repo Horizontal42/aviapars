@@ -97,3 +97,15 @@ class JobsRepo:
             (datetime.now(timezone.utc).isoformat(), job_id),
         )
         await self._db.commit()
+
+    async def reset_stuck_running(self) -> int:
+        """Call once at startup. `due()` only ever selects state='queued', so a job that was
+        `mark_running`'d and then never reached `mark_done`/`mark_failed` — the process was
+        killed or crashed mid-delivery — sits in 'running' forever and is never picked up
+        again. This is the one thing that can still fire before a route/notify job actually
+        starts, so recovering it as "queued, try again" (not "failed") is the honest choice:
+        a deferred deal notification is exactly the kind of message this project's whole
+        quiet-hours mechanism exists to not lose."""
+        cursor = await self._db.execute("UPDATE jobs SET state = 'queued' WHERE state = 'running'")
+        await self._db.commit()
+        return cursor.rowcount
