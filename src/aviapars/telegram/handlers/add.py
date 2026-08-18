@@ -9,6 +9,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from aviapars.config import settings
+from aviapars.db.models import Place
 from aviapars.db.repo_routes import RoutesRepo
 from aviapars.domain.dates import DateSelection, to_route_fields
 from aviapars.telegram import date_picker
@@ -52,16 +53,30 @@ async def cmd_add(message: Message, state: FSMContext) -> None:
     await start_wizard(await screen_for(message, state), state)
 
 
+async def _origin_picked(screen: Screen, state: FSMContext, place: Place) -> None:
+    await state.update_data(origin_place_id=place.id, origin_title=place.name_ru)
+    await state.set_state(AddRoute.destination)
+    await screen.show(f"Откуда: {place.name_ru}. Теперь куда?", reply_markup=menu_only_kb())
+
+
+async def _destination_picked(screen: Screen, state: FSMContext, place: Place) -> None:
+    await state.update_data(dest_place_id=place.id, dest_title=place.name_ru)
+    await state.set_state(AddRoute.mode)
+    await screen.show(f"Куда: {place.name_ru}. Какой транспорт?", reply_markup=mode_picker_kb())
+
+
 @router.message(AddRoute.origin)
 async def on_origin_text(message: Message, state: FSMContext, db: aiosqlite.Connection) -> None:
     assert message.text is not None
+    screen = await screen_for(message, state)
     await ask_place_pick(
-        await screen_for(message, state),
+        screen,
         state,
         db,
         text=message.text,
         pick_state=AddRoute.origin_pick,
         storage_key="candidates_origin",
+        on_picked=lambda place: _origin_picked(screen, state, place),
     )
 
 
@@ -72,23 +87,22 @@ async def on_origin_pick(query: CallbackQuery, callback_data: PlacePick, state: 
     if place is None:
         await query.answer("Список устарел, начните заново: /add", show_alert=True)
         return
-    await state.update_data(origin_place_id=place.id, origin_title=place.name_ru)
-    await state.set_state(AddRoute.destination)
-    screen = await screen_for(query, state)
-    await screen.show(f"Откуда: {place.name_ru}. Теперь куда?", reply_markup=menu_only_kb())
+    await _origin_picked(await screen_for(query, state), state, place)
     await query.answer()
 
 
 @router.message(AddRoute.destination)
 async def on_destination_text(message: Message, state: FSMContext, db: aiosqlite.Connection) -> None:
     assert message.text is not None
+    screen = await screen_for(message, state)
     await ask_place_pick(
-        await screen_for(message, state),
+        screen,
         state,
         db,
         text=message.text,
         pick_state=AddRoute.destination_pick,
         storage_key="candidates_dest",
+        on_picked=lambda place: _destination_picked(screen, state, place),
     )
 
 
@@ -99,10 +113,7 @@ async def on_destination_pick(query: CallbackQuery, callback_data: PlacePick, st
     if place is None:
         await query.answer("Список устарел, начните заново: /add", show_alert=True)
         return
-    await state.update_data(dest_place_id=place.id, dest_title=place.name_ru)
-    await state.set_state(AddRoute.mode)
-    screen = await screen_for(query, state)
-    await screen.show(f"Куда: {place.name_ru}. Какой транспорт?", reply_markup=mode_picker_kb())
+    await _destination_picked(await screen_for(query, state), state, place)
     await query.answer()
 
 

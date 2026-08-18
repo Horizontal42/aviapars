@@ -12,7 +12,7 @@ from aviapars.adapters.base import Tier
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.config import settings
 from aviapars.db.repo_places import PlacesRepo
-from aviapars.db.models import Route
+from aviapars.db.models import Place, Route
 from aviapars.domain.combiner import Itinerary, SearchOpts, search_itineraries
 from aviapars.domain.dates import DateSelection, resolve_date_plan, selection_from_route
 from aviapars.domain.places import modes_for_pref
@@ -81,16 +81,30 @@ async def start_from_route(
     await _run_search(screen, state, db, registry, selection_from_route(route))
 
 
+async def _origin_picked(screen: Screen, state: FSMContext, place: Place) -> None:
+    await state.update_data(origin_place_id=place.id, origin_title=place.name_ru)
+    await state.set_state(SearchFlow.destination)
+    await screen.show(f"Откуда: {place.name_ru}. Теперь куда?", reply_markup=menu_only_kb())
+
+
+async def _destination_picked(screen: Screen, state: FSMContext, place: Place) -> None:
+    await state.update_data(dest_place_id=place.id, dest_title=place.name_ru)
+    await state.set_state(SearchFlow.mode)
+    await screen.show(f"Куда: {place.name_ru}. Какой транспорт?", reply_markup=mode_picker_kb())
+
+
 @router.message(SearchFlow.origin)
 async def on_search_origin_text(message: Message, state: FSMContext, db: aiosqlite.Connection) -> None:
     assert message.text is not None
+    screen = await screen_for(message, state)
     await ask_place_pick(
-        await screen_for(message, state),
+        screen,
         state,
         db,
         text=message.text,
         pick_state=SearchFlow.origin_pick,
         storage_key="candidates_origin",
+        on_picked=lambda place: _origin_picked(screen, state, place),
     )
 
 
@@ -101,23 +115,22 @@ async def on_search_origin_pick(query: CallbackQuery, callback_data: PlacePick, 
     if place is None:
         await query.answer("Список устарел, начните заново: /search", show_alert=True)
         return
-    await state.update_data(origin_place_id=place.id, origin_title=place.name_ru)
-    await state.set_state(SearchFlow.destination)
-    screen = await screen_for(query, state)
-    await screen.show(f"Откуда: {place.name_ru}. Теперь куда?", reply_markup=menu_only_kb())
+    await _origin_picked(await screen_for(query, state), state, place)
     await query.answer()
 
 
 @router.message(SearchFlow.destination)
 async def on_search_destination_text(message: Message, state: FSMContext, db: aiosqlite.Connection) -> None:
     assert message.text is not None
+    screen = await screen_for(message, state)
     await ask_place_pick(
-        await screen_for(message, state),
+        screen,
         state,
         db,
         text=message.text,
         pick_state=SearchFlow.destination_pick,
         storage_key="candidates_dest",
+        on_picked=lambda place: _destination_picked(screen, state, place),
     )
 
 
@@ -128,10 +141,7 @@ async def on_search_destination_pick(query: CallbackQuery, callback_data: PlaceP
     if place is None:
         await query.answer("Список устарел, начните заново: /search", show_alert=True)
         return
-    await state.update_data(dest_place_id=place.id, dest_title=place.name_ru)
-    await state.set_state(SearchFlow.mode)
-    screen = await screen_for(query, state)
-    await screen.show(f"Куда: {place.name_ru}. Какой транспорт?", reply_markup=mode_picker_kb())
+    await _destination_picked(await screen_for(query, state), state, place)
     await query.answer()
 
 
