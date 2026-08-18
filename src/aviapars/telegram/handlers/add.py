@@ -12,18 +12,20 @@ from aviapars.config import settings
 from aviapars.db.repo_routes import RoutesRepo
 from aviapars.domain.dates import DateSelection, to_route_fields
 from aviapars.telegram import date_picker
-from aviapars.telegram.format import describe_notification_mode, describe_selection, format_money
+from aviapars.telegram.format import describe_notification_mode, describe_selection, describe_thresholds
 from aviapars.telegram.keyboards import (
     MODE_LABEL,
     DatePick,
     ModePick,
     NotifyModePick,
     PlacePick,
+    ThresholdScopePick,
     date_mode_kb,
     menu_only_kb,
     mode_picker_kb,
     notify_mode_kb,
     route_saved_kb,
+    threshold_scope_kb,
 )
 from aviapars.telegram.place_picker import ask_place_pick
 from aviapars.telegram.states import AddRoute
@@ -130,29 +132,103 @@ async def on_date_value_text(message: Message, state: FSMContext) -> None:
     await _ask_threshold(message, state, parsed)
 
 
+_SHARED_THRESHOLD_PROMPT = (
+    "При какой цене прислать уведомление? Введите сумму в рублях, например 8000.\n"
+    "Уведомление придёт только когда найдётся цена не выше этой."
+)
+
+
 async def _ask_threshold(message: Message, state: FSMContext, selection: DateSelection) -> None:
     await state.update_data(date_selection=selection)
-    await state.set_state(AddRoute.threshold)
+    data = await state.get_data()
+    dates_line = f"Даты: {describe_selection(selection, date.today())}.\n\n"
+    # A single-mode route has nothing to split, so it goes straight to the one prompt it
+    # always had — the extra question only exists for a route watching both.
+    if data["mode_pref"] != "auto":
+        await state.set_state(AddRoute.threshold)
+        await message.answer(dates_line + _SHARED_THRESHOLD_PROMPT, reply_markup=menu_only_kb())
+        return
+    await state.set_state(AddRoute.threshold_scope)
     await message.answer(
-        f"Даты: {describe_selection(selection, date.today())}.\n\n"
-        "При какой цене прислать уведомление? Введите сумму в рублях, например 8000.\n"
-        "Уведомление придёт только когда найдётся цена не выше этой.",
-        reply_markup=menu_only_kb(),
+        dates_line + "Маршрут следит и за самолётами, и за поездами.\n"
+        "Один порог цены на всё или отдельный на каждый вид транспорта?",
+        reply_markup=threshold_scope_kb(),
     )
+
+
+@router.callback_query(AddRoute.threshold_scope, ThresholdScopePick.filter())
+async def on_threshold_scope_pick(query: CallbackQuery, callback_data: ThresholdScopePick, state: FSMContext) -> None:
+    if not isinstance(query.message, Message):
+        await query.answer()
+        return
+    if callback_data.value == "shared":
+        await state.set_state(AddRoute.threshold)
+        await query.message.answer(_SHARED_THRESHOLD_PROMPT, reply_markup=menu_only_kb())
+    else:
+        await state.set_state(AddRoute.threshold_plane)
+        await query.message.answer(_per_mode_prompt("plane"), reply_markup=menu_only_kb())
+    await query.answer()
+
+
+def _per_mode_prompt(mode: str) -> str:
+    return f"Порог для «{MODE_LABEL[mode]}» — сумма в рублях, например 8000."
+
+
+def _parse_price_minor(text: str) -> int | str:
+    """Minor units, or the error message to show the user."""
+    try:
+        rub = int(text.strip().replace(" ", ""))
+    except ValueError:
+        return "Введите число, например 8000."
+    if rub <= 0 or rub > _MAX_PRICE_RUB:
+        return f"Введите цену от 1 до {_MAX_PRICE_RUB:,} ₽.".replace(",", " ")
+    return rub * 100
 
 
 @router.message(AddRoute.threshold)
 async def on_threshold_text(message: Message, state: FSMContext) -> None:
     assert message.text is not None
-    try:
-        rub = int(message.text.strip().replace(" ", ""))
-    except ValueError:
-        await message.answer("Введите число, например 8000.", reply_markup=menu_only_kb())
+    parsed = _parse_price_minor(message.text)
+    if isinstance(parsed, str):
+        await message.answer(parsed, reply_markup=menu_only_kb())
         return
-    if rub <= 0 or rub > _MAX_PRICE_RUB:
-        await message.answer(f"Введите цену от 1 до {_MAX_PRICE_RUB:,} ₽.".replace(",", " "), reply_markup=menu_only_kb())
+    await state.update_data(max_price_minor=parsed)
+    await _ask_interval(message, state)
+
+
+@router.message(AddRoute.threshold_plane)
+async def on_threshold_plane_text(message: Message, state: FSMContext) -> None:
+    assert message.text is not None
+    parsed = _parse_price_minor(message.text)
+    if isinstance(parsed, str):
+        await message.answer(parsed, reply_markup=menu_only_kb())
         return
-    await state.update_data(max_price_minor=rub * 100)
+    await state.update_data(max_price_plane_minor=parsed)
+    await state.set_state(AddRoute.threshold_train)
+    await message.answer(_per_mode_prompt("train"), reply_markup=menu_only_kb())
+
+
+@router.message(AddRoute.threshold_train)
+async def on_threshold_train_text(message: Message, state: FSMContext) -> None:
+    assert message.text is not None
+    parsed = _parse_price_minor(message.text)
+    if isinstance(parsed, str):
+        await message.answer(parsed, reply_markup=menu_only_kb())
+        return
+    data = await state.get_data()
+    by_mode = {"plane": data["max_price_plane_minor"], "train": parsed}
+    await state.update_data(
+        max_price_by_mode=by_mode,
+        # max_price stays NOT NULL and keeps a real meaning: it is what a mixed plane+train
+        # hub itinerary gets compared against, since neither per-mode ceiling describes a
+        # combined price. The larger of the two is the most the user said they'd pay for
+        # this trip by any single means — see domain/dealer.threshold_for.
+        max_price_minor=max(by_mode.values()),
+    )
+    await _ask_interval(message, state)
+
+
+async def _ask_interval(message: Message, state: FSMContext) -> None:
     await state.set_state(AddRoute.interval)
     await message.answer(
         f"Как часто проверять цену? Введите число минут (минимум {settings.poll_interval_floor_min}), "
@@ -220,6 +296,7 @@ async def _create_route(
         window_length_days=dates.window_length_days,
         max_price=data["max_price_minor"],
         max_price_currency="RUB",
+        max_price_by_mode=data.get("max_price_by_mode"),
         poll_interval_min=minutes,
         notification_mode=notification_mode,
     )
@@ -227,7 +304,7 @@ async def _create_route(
     await message.answer(
         f"Готово! Слежу за маршрутом «{route.title}».\n"
         f"Даты: {describe_selection(selection, date.today())}.\n"
-        f"Порог: {format_money(route.max_price, route.max_price_currency)}. "
+        f"Порог: {describe_thresholds(route.max_price, route.max_price_currency, route.max_price_by_mode)}. "
         f"Проверяю каждые {minutes} мин.\n"
         f"Уведомления: {describe_notification_mode(route.notification_mode)}.",
         reply_markup=route_saved_kb(),

@@ -18,7 +18,7 @@ from aviapars.db.repo_users import UsersRepo
 from aviapars.notify.notifier import Notifier
 from aviapars.scheduler.worker import process_route
 from aviapars.domain.dates import selection_from_route
-from aviapars.telegram.format import describe_notification_mode, describe_selection, format_money
+from aviapars.telegram.format import describe_notification_mode, describe_selection, describe_thresholds
 from aviapars.telegram.handlers import search as search_handlers
 from aviapars.telegram.keyboards import RouteAction, route_card_kb, routes_list_kb
 
@@ -57,7 +57,7 @@ def _route_card_text(route: Route, today: date) -> str:
     return (
         f"{route.title}\n"
         f"Даты: {describe_selection(selection_from_route(route), today)}\n"
-        f"Порог: {format_money(route.max_price, route.max_price_currency)} · "
+        f"Порог: {describe_thresholds(route.max_price, route.max_price_currency, route.max_price_by_mode)} · "
         f"каждые {route.poll_interval_min} мин · {status}\n"
         f"Уведомления: {describe_notification_mode(route.notification_mode)}"
     )

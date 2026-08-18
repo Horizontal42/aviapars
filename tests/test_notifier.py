@@ -46,6 +46,7 @@ def _route(*, route_id: int = 1, notification_mode: str = "instant") -> Route:
         date_cursor=0,
         max_price=600000,
         max_price_currency="RUB",
+        max_price_by_mode=None,
         pax=1,
         allow_hub_routing=False,
         hub_place_ids=None,

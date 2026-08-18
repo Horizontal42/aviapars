@@ -10,7 +10,7 @@ from aviapars.db.models import Route
 _COLUMNS = (
     "id, user_id, title, origin_place_id, dest_place_id, mode_pref, date_mode, fixed_dates, "
     "window_start_date, window_start_offset_days, window_length_days, date_cursor, "
-    "max_price, max_price_currency, pax, "
+    "max_price, max_price_currency, max_price_by_mode, pax, "
     "allow_hub_routing, hub_place_ids, max_hops, max_transfer_min, max_total_hours, "
     "poll_interval_min, notification_mode, active, next_run_at, last_run_at, created_at"
 )
@@ -34,18 +34,19 @@ def _row_to_route(row: aiosqlite.Row) -> Route:
         date_cursor=row[11],
         max_price=row[12],
         max_price_currency=row[13],
-        pax=row[14],
-        allow_hub_routing=bool(row[15]),
-        hub_place_ids=json.loads(row[16]) if row[16] else None,
-        max_hops=row[17],
-        max_transfer_min=row[18],
-        max_total_hours=row[19],
-        poll_interval_min=row[20],
-        notification_mode=row[21],
-        active=bool(row[22]),
-        next_run_at=row[23],
-        last_run_at=row[24],
-        created_at=row[25],
+        max_price_by_mode=json.loads(row[14]) if row[14] else None,
+        pax=row[15],
+        allow_hub_routing=bool(row[16]),
+        hub_place_ids=json.loads(row[17]) if row[17] else None,
+        max_hops=row[18],
+        max_transfer_min=row[19],
+        max_total_hours=row[20],
+        poll_interval_min=row[21],
+        notification_mode=row[22],
+        active=bool(row[23]),
+        next_run_at=row[24],
+        last_run_at=row[25],
+        created_at=row[26],
     )
 
 
@@ -68,6 +69,7 @@ class RoutesRepo:
         window_length_days: int | None = None,
         max_price: int,
         max_price_currency: str,
+        max_price_by_mode: dict[str, int] | None = None,
         pax: int = 1,
         allow_hub_routing: bool = True,
         hub_place_ids: list[int] | None = None,
@@ -83,10 +85,10 @@ class RoutesRepo:
             INSERT INTO routes (
                 user_id, title, origin_place_id, dest_place_id, mode_pref, date_mode, fixed_dates,
                 window_start_date, window_start_offset_days, window_length_days,
-                max_price, max_price_currency, pax,
+                max_price, max_price_currency, max_price_by_mode, pax,
                 allow_hub_routing, hub_place_ids, max_hops, max_transfer_min, max_total_hours,
                 poll_interval_min, notification_mode, active, next_run_at, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
             """,
             (
                 user_id,
@@ -101,6 +103,7 @@ class RoutesRepo:
                 window_length_days,
                 max_price,
                 max_price_currency,
+                json.dumps(max_price_by_mode) if max_price_by_mode else None,
                 pax,
                 int(allow_hub_routing),
                 json.dumps(hub_place_ids) if hub_place_ids else None,

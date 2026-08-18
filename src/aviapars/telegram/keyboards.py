@@ -31,6 +31,10 @@ class NotifyModePick(CallbackData, prefix="nm"):
     value: str  # instant|digest
 
 
+class ThresholdScopePick(CallbackData, prefix="ts"):
+    value: str  # shared|per_mode
+
+
 class RouteAction(CallbackData, prefix="r"):
     action: str  # pause|resume|check|search|delete|notify
     route_id: int
@@ -143,6 +147,17 @@ def mode_picker_kb() -> InlineKeyboardMarkup:
     builder.button(text="✈️ Самолёт", callback_data=ModePick(value="plane").pack())
     builder.button(text="🚂 Поезд", callback_data=ModePick(value="train").pack())
     builder.button(text="🔀 Авто (оба)", callback_data=ModePick(value="auto").pack())
+    _menu_button(builder)
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def threshold_scope_kb() -> InlineKeyboardMarkup:
+    """Only shown for a route watching more than one kind of transport (§9) —
+    a single-mode route has nothing to split and never sees this step."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="💰 Один порог на всё", callback_data=ThresholdScopePick(value="shared").pack())
+    builder.button(text="✈️/🚂 Отдельно по видам", callback_data=ThresholdScopePick(value="per_mode").pack())
     _menu_button(builder)
     builder.adjust(1)
     return builder.as_markup()

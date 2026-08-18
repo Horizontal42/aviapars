@@ -131,6 +131,17 @@ def format_money(price_minor: int, currency: str) -> str:
     return f"{major:,}".replace(",", " ") + f" {suffix}"
 
 
+def describe_thresholds(max_price: int, currency: str, by_mode: dict[str, int] | None) -> str:
+    """«8 000 ₽» for one shared ceiling, «✈️ 8 000 ₽ · 🚂 4 000 ₽» when the route
+    carries separate ones — route cards and the /add confirmation both have to
+    show what's actually in effect, not just the `max_price` column."""
+    if not by_mode:
+        return format_money(max_price, currency)
+    # Mode declaration order, which is also the order the wizard asks in.
+    parts = [f"{MODE_EMOJI[m]} {format_money(by_mode[m.value], currency)}" for m in Mode if m.value in by_mode]
+    return " · ".join(parts) if parts else format_money(max_price, currency)
+
+
 def format_deal_card(
     route_title: str,
     itinerary: Itinerary,

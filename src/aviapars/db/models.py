@@ -49,6 +49,9 @@ class Route:
     date_cursor: int
     max_price: int
     max_price_currency: str
+    # NULL = one shared ceiling (max_price above). Populated = per-mode ceilings in minor units,
+    # keyed by Mode.value, for a multi-mode route whose owner wanted them split (§9).
+    max_price_by_mode: dict[str, int] | None
     pax: int
     allow_hub_routing: bool
     hub_place_ids: list[int] | None

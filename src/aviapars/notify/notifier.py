@@ -8,7 +8,8 @@ from zoneinfo import ZoneInfo
 from aviapars.db.models import Route, User
 from aviapars.db.repo_jobs import Job, JobsRepo
 from aviapars.db.repo_notifications import NotificationsRepo
-from aviapars.domain.combiner import Itinerary
+from aviapars.domain.combiner import Itinerary, itinerary_modes
+from aviapars.domain.dealer import threshold_for
 from aviapars.notify.dedupe import DedupeGate
 from aviapars.telegram.format import format_deal_card
 
@@ -86,7 +87,9 @@ class Notifier:
         text = format_deal_card(
             route.title,
             itinerary,
-            threshold_minor=route.max_price,
+            # the ceiling this itinerary was actually judged against, not necessarily
+            # route.max_price — see domain/dealer.threshold_for
+            threshold_minor=threshold_for(route, itinerary_modes(itinerary)),
             confirmed=confirmed,
             source_names=self._source_names,
         )

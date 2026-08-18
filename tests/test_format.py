@@ -4,7 +4,13 @@ from datetime import datetime, timezone
 
 from aviapars.adapters.base import Leg, Mode, Offer, PlaceRef, Tier
 from aviapars.domain.combiner import Itinerary
-from aviapars.telegram.format import MIXED_GROUP, format_deal_card, mode_group, select_top_itineraries
+from aviapars.telegram.format import (
+    MIXED_GROUP,
+    describe_thresholds,
+    format_deal_card,
+    mode_group,
+    select_top_itineraries,
+)
 
 _ORIGIN = PlaceRef(place_id=1, iata="LED", yandex_code=None, rzd_code=None, city_id=None)
 _DEST = PlaceRef(place_id=2, iata="MOW", yandex_code=None, rzd_code=None, city_id=None)
@@ -131,6 +137,13 @@ def _itinerary(*modes: Mode, price_minor: int) -> Itinerary:
         _offer(source_id="src", deep_link=None, mode=m, price_minor=price_minor // len(modes)) for m in modes
     )
     return Itinerary(offers=offers, price_minor=price_minor, currency="RUB")
+
+
+def test_describe_thresholds_shows_what_is_actually_in_effect() -> None:
+    assert describe_thresholds(800000, "RUB", None) == "8 000 ₽"
+    assert describe_thresholds(800000, "RUB", {"plane": 800000, "train": 400000}) == "✈️ 8 000 ₽ · 🚂 4 000 ₽"
+    # declaration order, not dict order — the wizard asks plane first
+    assert describe_thresholds(800000, "RUB", {"train": 400000, "plane": 800000}) == "✈️ 8 000 ₽ · 🚂 4 000 ₽"
 
 
 def test_mode_group_files_a_mixed_hub_itinerary_separately() -> None:
