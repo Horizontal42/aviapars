@@ -223,7 +223,8 @@ def _render_itinerary_line(itinerary: Itinerary) -> str:
     modes = [leg.mode for leg in all_legs]
     mode_label = format_mode_label(modes)
     price = format_money(itinerary.price_minor, itinerary.currency)
-    depart = format_date(min(leg.depart_utc for leg in all_legs).date())
+    # local, not UTC — see telegram/format.py's format_deal_card for why.
+    depart = format_date(all_legs[0].depart_local.date())
     dur = ""
     if itinerary.duration_minutes is not None:
         h, m = divmod(itinerary.duration_minutes, 60)

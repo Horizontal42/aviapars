@@ -47,6 +47,32 @@ def test_second_leg_before_first_never_composes() -> None:
     assert not _dates_composable(_offer(date(2026, 9, 11)), _offer(date(2026, 9, 10)))
 
 
+def test_same_local_day_composes_despite_utc_date_shift() -> None:
+    # regression: _dates_composable used to compare depart_utc.date() — a Moscow (UTC+3)
+    # 00:35 departure is 21:35 the *previous* day in UTC, which could shift a legitimately
+    # same-local-day pairing enough to fail the composability window and get dropped.
+    def offer_at(dep_local: datetime, dep_utc: datetime) -> Offer:
+        leg = Leg(mode=Mode.PLANE, from_place=_A, to_place=_B, depart_utc=dep_utc, depart_local=dep_local)
+        return Offer(
+            legs=(leg,),
+            price_minor=100000,
+            currency="RUB",
+            deep_link=None,
+            source_id="test",
+            tier=Tier.DISCOVERY,
+            observed_at=dep_utc,
+            source_cached_at=dep_utc,
+            expires_at=None,
+            confidence=0.5,
+            itinerary_hash="h",
+        )
+
+    leg_a = offer_at(datetime(2026, 9, 10, 0, 35), datetime(2026, 9, 9, 21, 35, tzinfo=timezone.utc))
+    leg_b = offer_at(datetime(2026, 9, 10, 14, 0), datetime(2026, 9, 10, 11, 0, tzinfo=timezone.utc))
+
+    assert _dates_composable(leg_a, leg_b)
+
+
 def test_legs_days_apart_never_compose() -> None:
     """The failure a flexible window makes reachable: both leg pools span the
     whole window, so without this rule a flight on the 10th would be glued to

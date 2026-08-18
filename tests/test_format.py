@@ -82,6 +82,43 @@ def test_no_deep_link_line_when_offer_has_none() -> None:
     assert "🔗" not in card
 
 
+def test_departure_date_uses_local_not_utc() -> None:
+    # regression: a Moscow (UTC+3) departure at 00:35 local is 21:35 the *previous* day in
+    # UTC — depart_utc.date() used to be shown as the departure date, one day early.
+    now = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
+    dep_local = datetime(2026, 9, 10, 0, 35)
+    dep_utc = datetime(2026, 9, 9, 21, 35, tzinfo=timezone.utc)
+    leg = Leg(
+        mode=Mode.PLANE,
+        from_place=_ORIGIN,
+        to_place=_DEST,
+        depart_utc=dep_utc,
+        depart_local=dep_local,
+        carrier="Победа",
+        number="515",
+        time_precision="exact",
+    )
+    offer = Offer(
+        legs=(leg,),
+        price_minor=500000,
+        currency="RUB",
+        deep_link=None,
+        source_id="pobeda_direct",
+        tier=Tier.CONFIRMATION,
+        observed_at=now,
+        source_cached_at=now,
+        expires_at=None,
+        confidence=1.0,
+        itinerary_hash="abc123",
+    )
+    itinerary = Itinerary(offers=(offer,), price_minor=500000, currency="RUB")
+
+    card = format_deal_card("LED → MOW", itinerary, threshold_minor=600000, confirmed=True)
+
+    assert "10.09" in card
+    assert "09.09" not in card
+
+
 def test_unconfirmed_card_shows_source_and_age() -> None:
     offer = _offer(source_id="tutu_avia_direct", deep_link=None)
     itinerary = Itinerary(offers=(offer,), price_minor=500000, currency="RUB")

@@ -205,8 +205,11 @@ def _dates_composable(leg_a: Offer, leg_b: Offer) -> bool:
     a flight on the 5th with a train on the 20th would be nonsense that the
     transfer check can't catch on its own — `date_only` discovery offers have
     no real timestamp to compare (see `_compose`)."""
-    a = leg_a.legs[0].depart_utc.date()
-    b = leg_b.legs[0].depart_utc.date()
+    # local, not UTC: an overnight Moscow departure or a Far-East morning one both read
+    # back a day early off depart_utc.date(), which could shift a legitimately same-day
+    # pairing far enough to fail this window and get dropped.
+    a = leg_a.legs[0].depart_local.date()
+    b = leg_b.legs[0].depart_local.date()
     return 0 <= (b - a).days <= 1
 
 

@@ -82,7 +82,9 @@ def format_deal_card(
     threshold = format_money(threshold_minor, itinerary.currency)
     all_legs = [leg for offer in itinerary.offers for leg in offer.legs]
     mode_label = format_mode_label([leg.mode for leg in all_legs])
-    depart_date = min(leg.depart_utc for leg in all_legs).date()
+    # local, not UTC: a 00:35 Moscow departure or a 09:00 Vladivostok one both read back a
+    # day early off depart_utc.date() — the user needs the date they'd see on a ticket.
+    depart_date = all_legs[0].depart_local.date()
 
     lines = [
         f"🔥 {route_title}   {price}  (порог: {threshold})",

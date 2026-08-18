@@ -53,7 +53,8 @@ class Notifier:
         whole itinerary, not a single offer."""
         now = datetime.now(timezone.utc)
         all_legs = [leg for offer in itinerary.offers for leg in offer.legs]
-        depart_date = min(leg.depart_utc for leg in all_legs).date().isoformat()
+        # local, not UTC — see telegram/format.py's format_deal_card for why.
+        depart_date = all_legs[0].depart_local.date().isoformat()
         mode = "+".join(dict.fromkeys(leg.mode.value for leg in all_legs))
         itinerary_hash = _combined_hash(itinerary)
         dedupe_key = f"{route.id}:{itinerary_hash}:{now.date().isoformat()}"

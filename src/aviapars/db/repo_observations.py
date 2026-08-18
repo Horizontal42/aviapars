@@ -14,7 +14,8 @@ class ObservationsRepo:
         self._db = db
 
     async def record(self, route_id: int, offer: Offer) -> None:
-        depart_date = min(leg.depart_utc for leg in offer.legs).date().isoformat()
+        # local, not UTC — see telegram/format.py's format_deal_card for why.
+        depart_date = offer.legs[0].depart_local.date().isoformat()
         return_date = None
         legs_json = json.dumps(
             [
