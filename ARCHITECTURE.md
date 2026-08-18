@@ -237,8 +237,15 @@ Telegram) — это второй вход для тех, кто предпоч�
 
 `routes.date_mode` наконец используется по назначению. Мастер `/add` и `/search` предлагают
 четыре варианта: точная дата, «±3 дня» вокруг опорной, произвольный диапазон и «любая дата»
-(30 дней). Всё это сводится к `domain/dates.py::DateSelection` — той же форме, в какой окно
-лежит в БД.
+(окно от 7 до `MAX_WINDOW_DAYS` дней, по умолчанию 30 — пользователь теперь вводит число сам,
+раньше было жёстко зашито). Всё это сводится к `domain/dates.py::DateSelection` — той же форме,
+в какой окно лежит в БД.
+
+**Интервал опроса редактируется и после создания маршрута** — не только в мастере `/add`.
+Кнопка «⏱ Интервал проверки» на карточке маршрута (`telegram/handlers/routes.py`) переводит в
+`EditRoute.interval` (отдельная state-группа, не переиспользует `AddRoute.interval` — та означает
+«последний шаг создания», эта — «правка существующего»), тем же диапазоном floor/ceiling, что и
+при создании, и сохраняет через `RoutesRepo.set_poll_interval()`.
 
 - **Два якоря окна, оба нужны.** Явный диапазон пользователя («с 10.09 по 20.09») хранится
   абсолютно, в новой колонке `routes.window_start_date`, и не должен уезжать; «любая дата»
@@ -577,7 +584,7 @@ Red Wings, Smartavia, Ural Airlines, Utair не построены: Utair бан
 
 ## Тесты
 
-164 теста (`mypy --strict src` + `pytest`, оба чистые):
+170 тестов (`mypy --strict src` + `pytest`, оба чистые):
 - `tests/adapters/test_travelpayouts.py`, `tests/adapters/test_yandex_rasp.py`,
   `tests/adapters/test_rzd_direct.py`, `tests/adapters/test_s7_direct.py`,
   `tests/adapters/test_aeroflot_direct.py`, `tests/adapters/test_azimuth_direct.py`,
@@ -623,8 +630,12 @@ Red Wings, Smartavia, Ural Airlines, Utair не построены: Utair бан
   проверялась только голова списка) и одно уведомление на группу транспорта при раздельных
   порогах против ровно одного при общем.
 - `tests/test_repo_routes.py` — round-trip `max_price_by_mode` через JSON-колонку (она встала между
-  `max_price_currency` и `pax`, сдвинув все позиционные индексы в `_row_to_route`) и что общий
-  порог пишется как NULL, а не пустым объектом.
+  `max_price_currency` и `pax`, сдвинув все позиционные индексы в `_row_to_route`), что общий
+  порог пишется как NULL, а не пустым объектом, и что `set_poll_interval` трогает только свой
+  маршрут.
+- `tests/test_date_picker.py` — «любая дата» больше не разрешается мгновенно в жёсткие 30 дней:
+  `selection_for("any")` теперь всегда просит числовой ввод, `parse_selection` принимает только
+  диапазон 7..`MAX_WINDOW_DAYS`, включая обе границы, и отклоняет нечисловой/выходящий за рамки ввод.
 - `tests/test_dates.py` — разбор ввода дат, абсолютное окно против едущего, обрезка прошедших
   дней, прокрутка курсора по окну с заворотом.
 - `tests/test_combiner_dates.py` — регрессия на склейку плеч с разных дат (см. выше).

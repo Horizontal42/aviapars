@@ -175,8 +175,16 @@ def format_deal_card(
     # day early off depart_utc.date() — the user needs the date they'd see on a ticket.
     depart_date = all_legs[0].depart_local.date()
 
-    headline = f"🔥 {route_title}   {price}  (порог: {threshold})"
-    lines = [headline, f"   {depart_date.strftime('%d.%m')} · {mode_label}"]
+    # One blank-line-separated block per field instead of one cramped line — a route with a
+    # long title plus a carrier name plus a price used to wrap unpredictably mid-word in the
+    # Telegram client. Each leg gets its own two-line block (route, then carrier/time/price)
+    # for the same reason: three facts crammed onto one line read as a wall of text.
+    lines = [
+        f"🔥 {route_title}",
+        f"Цена: {price} (порог: {threshold})",
+        f"Дата: {depart_date.strftime('%d.%m.%Y')} · {mode_label}",
+        "",
+    ]
     multi_leg = len(itinerary.offers) > 1
     for offer in itinerary.offers:
         for leg in offer.legs:
@@ -184,29 +192,38 @@ def format_deal_card(
             dest = leg.to_place.iata or str(leg.to_place.place_id)
             carrier_bits = " ".join(b for b in (leg.carrier, leg.number) if b)
             time_str = leg.depart_local.strftime("%H:%M") if leg.time_precision == "exact" else "время неизвестно"
-            carrier_str = f"{carrier_bits}  " if carrier_bits else ""
-            price_str = f"  {format_money(offer.price_minor, offer.currency)}" if multi_leg else ""
-            lines.append(f"   {MODE_EMOJI[leg.mode]} {origin} → {dest}  {carrier_str}{time_str}{price_str}")
+            detail_bits = [b for b in (carrier_bits or None, time_str) if b]
+            if multi_leg:
+                detail_bits.append(format_money(offer.price_minor, offer.currency))
+            lines.append(f"{MODE_EMOJI[leg.mode]} {origin} → {dest}")
+            lines.append(" · ".join(detail_bits))
+    lines.append("")
 
+    # Always shown, even as "неизвестно" — a silently omitted line here previously read as
+    # "no duration data" and "adapter forgot to fill duration_minutes" identically; now the
+    # card says outright when a source (typically a date_only discovery offer) doesn't know.
     if itinerary.duration_minutes is not None:
         h, m = divmod(itinerary.duration_minutes, 60)
-        lines.append(f"   В пути: {h}ч {m}м" if m else f"   В пути: {h}ч")
+        duration_str = f"{h}ч {m}м" if m else f"{h}ч"
+    else:
+        duration_str = "неизвестно"
+    lines.append(f"⏱ В пути: {duration_str}")
 
     source_str = ", ".join(sorted({source_names.get(o.source_id, o.source_id) for o in itinerary.offers}))
     if confirmed:
-        lines.append(f"   ✅ Подтверждено · только что · {source_str}")
+        lines.append(f"✅ Подтверждено · только что · {source_str}")
     else:
         cached_ats = [o.source_cached_at for o in itinerary.offers if o.source_cached_at is not None]
         age_h = _age_hours(min(cached_ats)) if cached_ats else None
         age_str = f"{age_h} ч назад" if age_h is not None else "возраст неизвестен"
-        lines.append(f"   ⚠️ Не подтверждено · данные {source_str}, {age_str}")
+        lines.append(f"⚠️ Не подтверждено · данные {source_str}, {age_str}")
 
     seen_links: set[str] = set()
     for offer in itinerary.offers:
         if offer.deep_link and offer.deep_link not in seen_links:
             seen_links.add(offer.deep_link)
             name = source_names.get(offer.source_id, offer.source_id)
-            lines.append(f"   🔗 Купить у {name}: {offer.deep_link}")
+            lines.append(f"🔗 Купить у {name}: {offer.deep_link}")
 
     return "\n".join(lines)
 
