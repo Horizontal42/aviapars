@@ -21,6 +21,7 @@ from aviapars.adapters.base import (
     SearchResult,
     Tier,
     probe_dates_total_timeout_s,
+    with_dns_retry,
 )
 
 SUGGEST_URL = "https://suggester-avia.tutu.ru/api/location_suggest/v2"
@@ -152,7 +153,9 @@ class TutuAviaDirectAdapter:
             "isNewSearch": True,
         }
         try:
-            resp = await session.post(OFFERS_URL, headers=_OFFERS_HEADERS, data=json.dumps(body))
+            resp = await with_dns_retry(
+                lambda: session.post(OFFERS_URL, headers=_OFFERS_HEADERS, data=json.dumps(body))
+            )
         except Exception:
             return [], "error"
 
@@ -175,7 +178,9 @@ class TutuAviaDirectAdapter:
         if cached is not None:
             return cached
         try:
-            resp = await session.get(SUGGEST_URL, headers=_SUGGEST_HEADERS, params={"name": iata})
+            resp = await with_dns_retry(
+                lambda: session.get(SUGGEST_URL, headers=_SUGGEST_HEADERS, params={"name": iata})
+            )
         except Exception:
             return None
         if resp.status_code != 200:

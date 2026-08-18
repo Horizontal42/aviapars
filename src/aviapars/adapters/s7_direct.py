@@ -22,6 +22,7 @@ from aviapars.adapters.base import (
     SearchResult,
     Tier,
     probe_dates_total_timeout_s,
+    with_dns_retry,
 )
 from aviapars.solver.client import BrowserSolverClient
 
@@ -225,7 +226,7 @@ class S7DirectAdapter:
             # already verified to open a real prefilled search on ibe.s7.ru.
             deep_link = f"{AIR_URL}?{urlencode(params)}"
             try:
-                resp = await session.get(AIR_URL, params=params)
+                resp = await with_dns_retry(lambda: session.get(AIR_URL, params=params))
             except Exception:
                 return [], False
             text = resp.text
@@ -245,10 +246,12 @@ class S7DirectAdapter:
                 "ibe_conversation": conversation,
             }
             try:
-                resp2 = await session.post(
-                    AIR_URL,
-                    params={"execution": execution, "ibe_conversation": conversation},
-                    data=form_data,
+                resp2 = await with_dns_retry(
+                    lambda: session.post(
+                        AIR_URL,
+                        params={"execution": execution, "ibe_conversation": conversation},
+                        data=form_data,
+                    )
                 )
             except Exception:
                 return [], False

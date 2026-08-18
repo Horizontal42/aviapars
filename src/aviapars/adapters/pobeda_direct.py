@@ -22,6 +22,7 @@ from aviapars.adapters.base import (
     SearchResult,
     Tier,
     probe_dates_total_timeout_s,
+    with_dns_retry,
 )
 
 SEARCH_URL = "https://ticket.flypobeda.ru/websky/json/search-variants-mono-brand-cartesian"
@@ -167,7 +168,7 @@ class PobedaDirectAdapter:
             "infantsWithoutSeatCount": "0",
         }
         try:
-            resp = await session.post(SEARCH_URL, headers=_HEADERS, data=body)
+            resp = await with_dns_retry(lambda: session.post(SEARCH_URL, headers=_HEADERS, data=body))
         except Exception:
             return [], "error"
 

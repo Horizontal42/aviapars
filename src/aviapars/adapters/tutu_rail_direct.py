@@ -20,6 +20,7 @@ from aviapars.adapters.base import (
     SearchResult,
     Tier,
     probe_dates_total_timeout_s,
+    with_dns_retry,
 )
 
 OFFERS_URL = "https://offers-api.tutu.ru/railway/offers"
@@ -148,7 +149,7 @@ class TutuRailDirectAdapter:
         }
 
         try:
-            resp = await session.post(OFFERS_URL, headers=_HEADERS, json=body)
+            resp = await with_dns_retry(lambda: session.post(OFFERS_URL, headers=_HEADERS, json=body))
         except Exception:
             return [], "error"
 

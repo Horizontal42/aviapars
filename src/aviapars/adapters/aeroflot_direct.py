@@ -20,6 +20,7 @@ from aviapars.adapters.base import (
     SearchResult,
     Tier,
     probe_dates_total_timeout_s,
+    with_dns_retry,
 )
 
 SEARCH_URL = "https://www.aeroflot.ru/sbe/flight-search/api/web/v1/flight/search"
@@ -146,7 +147,7 @@ class AeroflotDirectAdapter:
         }
 
         try:
-            resp = await session.post(SEARCH_URL, headers=_HEADERS, json=body)
+            resp = await with_dns_retry(lambda: session.post(SEARCH_URL, headers=_HEADERS, json=body))
         except Exception:
             return [], "error"
 

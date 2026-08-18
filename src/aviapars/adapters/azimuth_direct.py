@@ -19,6 +19,7 @@ from aviapars.adapters.base import (
     SearchResult,
     Tier,
     probe_dates_total_timeout_s,
+    with_dns_retry,
 )
 
 RPC_URL = "https://booking.azimuth.ru/rpc/tsh"
@@ -72,7 +73,9 @@ class AzimuthDirectAdapter:
 
         try:
             async with AsyncSession(impersonate="chrome", timeout=self.request_timeout_s) as session:
-                init_resp = await session.post(RPC_URL, headers=_HEADERS, json=[["init", _INIT_PARAMS]])
+                init_resp = await with_dns_retry(
+                    lambda: session.post(RPC_URL, headers=_HEADERS, json=[["init", _INIT_PARAMS]])
+                )
                 token = init_resp.headers.get("Authorization")
                 if init_resp.status_code != 200 or not token:
                     return SearchResult(status=ResultStatus.BLOCKED, offers=[], partial=False, error="init failed")
@@ -133,7 +136,7 @@ class AzimuthDirectAdapter:
             ]
         ]
         try:
-            resp = await session.post(RPC_URL, headers=avail_headers, json=avail_body)
+            resp = await with_dns_retry(lambda: session.post(RPC_URL, headers=avail_headers, json=avail_body))
         except Exception:
             return [], "error"
         if resp.status_code != 200:

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
-from typing import Protocol
+from typing import Awaitable, Callable, Protocol, TypeVar
 
 
 class Tier(Enum):
@@ -134,6 +134,33 @@ def probe_dates_total_timeout_s(per_date_s: float, *, setup_s: float = 0.0) -> i
     from aviapars.config import settings  # local: keeps the adapter contract itself config-free
 
     return int(per_date_s * settings.flex_probe_dates_per_cycle + setup_s)
+
+
+_T = TypeVar("_T")
+
+
+async def with_dns_retry(call: Callable[[], Awaitable[_T]], *, retries: int = 1) -> _T:
+    """One immediate retry around a single curl_cffi request.
+
+    Live-verified on the production VDS (2026-08-19): repeating the exact same
+    request to an already-succeeding host through curl_cffi's own async DNS
+    resolver failed roughly half the time with "Resolving timed out" / "Could
+    not resolve host", while the OS resolver (`getent hosts`) succeeded every
+    single time in the same window — this is curl_cffi's resolver being flaky
+    on this host, not a real outage or a blocked domain. It was silently
+    eating every curl_cffi-based confirmation adapter's success rate (matches
+    the "26 errors in a row" pattern reported for tutu_avia_direct). A retry
+    close to a real ~50% per-attempt failure rate recovers the large majority
+    of these; the registry's own circuit breaker still trips normally if both
+    attempts fail, so a genuine outage isn't masked, just not double-counted
+    off a transient resolver hiccup.
+    """
+    try:
+        return await call()
+    except Exception:
+        if retries <= 0:
+            raise
+        return await call()
 
 
 class SourceAdapter(Protocol):
