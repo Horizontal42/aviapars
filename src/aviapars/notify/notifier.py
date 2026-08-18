@@ -68,6 +68,7 @@ class Notifier:
             now=now,
             cooldown_h=self._cooldown_h,
             daily_cap=self._daily_cap,
+            day_start_utc=_local_day_start_utc(user, now),
         )
         if not allowed:
             return False
@@ -133,6 +134,16 @@ def _combined_hash(itinerary: Itinerary) -> str:
     two-leg combination always produces the same key."""
     joined = "|".join(o.itinerary_hash for o in itinerary.offers)
     return hashlib.sha256(joined.encode()).hexdigest()[:16]
+
+
+def _local_day_start_utc(user: User, now_utc: datetime) -> datetime:
+    """The daily notification cap (§9) is meant as "N per calendar day for
+    this user", not "N per UTC day" — without this, a user east of Moscow
+    sees their cap reset mid-afternoon local time (or west of it, midway
+    through the previous evening), not at their own midnight."""
+    local = now_utc.astimezone(ZoneInfo(user.tz))
+    start_of_day = datetime.combine(local.date(), time.min, tzinfo=local.tzinfo)
+    return start_of_day.astimezone(timezone.utc)
 
 
 def is_quiet_hours(user: User, now_utc: datetime) -> bool:

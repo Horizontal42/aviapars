@@ -17,11 +17,10 @@ class NotificationsRepo:
             row = await cursor.fetchone()
         return datetime.fromisoformat(row[0]) if row and row[0] else None
 
-    async def count_today_for_route(self, route_id: int) -> int:
-        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    async def count_today_for_route(self, route_id: int, *, since: datetime) -> int:
         async with self._db.execute(
             "SELECT COUNT(*) FROM notifications_sent WHERE route_id = ? AND sent_at >= ?",
-            (route_id, today_start.isoformat()),
+            (route_id, since.isoformat()),
         ) as cursor:
             row = await cursor.fetchone()
         return row[0] if row else 0

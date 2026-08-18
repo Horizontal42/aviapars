@@ -12,7 +12,7 @@ from aviapars.db.repo_jobs import JobsRepo
 from aviapars.db.repo_notifications import NotificationsRepo
 from aviapars.domain.combiner import Itinerary
 from aviapars.notify.dedupe import DedupeGate
-from aviapars.notify.notifier import Notifier, is_quiet_hours, next_quiet_hours_end
+from aviapars.notify.notifier import Notifier, _local_day_start_utc, is_quiet_hours, next_quiet_hours_end
 
 JOBS_TABLE = """
 CREATE TABLE jobs (
@@ -153,12 +153,27 @@ async def db(tmp_path) -> aiosqlite.Connection:
     await conn.close()
 
 
+def test_local_day_start_utc_crosses_utc_date_boundary() -> None:
+    user = _user(tz="Asia/Novosibirsk")  # UTC+7
+    # 2026-09-18 23:30 UTC is already 2026-09-19 local — the local day started at
+    # 2026-09-18 17:00 UTC (00:00 Novosibirsk), not at 2026-09-18 00:00 UTC.
+    now_utc = datetime(2026, 9, 18, 23, 30, tzinfo=timezone.utc)
+    start = _local_day_start_utc(user, now_utc)
+    assert start == datetime(2026, 9, 18, 17, 0, tzinfo=timezone.utc)
+
+
 async def test_dedupe_gate_blocks_within_cooldown(db: aiosqlite.Connection) -> None:
     repo = NotificationsRepo(db)
     gate = DedupeGate(repo)
     now = datetime.now(timezone.utc)
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    assert await gate.can_send(route_id=1, itinerary_hash="abc", now=now, cooldown_h=12, daily_cap=3) is True
+    assert (
+        await gate.can_send(
+            route_id=1, itinerary_hash="abc", now=now, cooldown_h=12, daily_cap=3, day_start_utc=day_start
+        )
+        is True
+    )
 
     await repo.record(
         route_id=1,
@@ -170,13 +185,19 @@ async def test_dedupe_gate_blocks_within_cooldown(db: aiosqlite.Connection) -> N
         tier_at_send="discovery",
     )
 
-    assert await gate.can_send(route_id=1, itinerary_hash="abc", now=now, cooldown_h=12, daily_cap=3) is False
+    assert (
+        await gate.can_send(
+            route_id=1, itinerary_hash="abc", now=now, cooldown_h=12, daily_cap=3, day_start_utc=day_start
+        )
+        is False
+    )
 
 
 async def test_dedupe_gate_enforces_daily_cap(db: aiosqlite.Connection) -> None:
     repo = NotificationsRepo(db)
     gate = DedupeGate(repo)
     now = datetime.now(timezone.utc)
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     for i in range(3):
         await repo.record(
@@ -189,7 +210,50 @@ async def test_dedupe_gate_enforces_daily_cap(db: aiosqlite.Connection) -> None:
             tier_at_send="discovery",
         )
 
-    assert await gate.can_send(route_id=2, itinerary_hash="brand-new", now=now, cooldown_h=12, daily_cap=3) is False
+    assert (
+        await gate.can_send(
+            route_id=2, itinerary_hash="brand-new", now=now, cooldown_h=12, daily_cap=3, day_start_utc=day_start
+        )
+        is False
+    )
+
+
+async def test_dedupe_gate_daily_cap_uses_user_local_day_not_utc(db: aiosqlite.Connection) -> None:
+    # regression: count_today_for_route used to hardcode a UTC midnight boundary, so a
+    # user east of Moscow saw their daily cap reset mid-afternoon local time instead of
+    # at their own midnight (and a user west of it, mid-evening the day before).
+    repo = NotificationsRepo(db)
+    gate = DedupeGate(repo)
+
+    # 2026-09-18 23:30 UTC == 2026-09-19 06:30 Novosibirsk (UTC+7) — local midnight for
+    # that day fell at 2026-09-18 17:00 UTC. A notification sent at 10:00 UTC the same
+    # UTC calendar day is still 2026-09-18 local (17:00 Novosibirsk) — yesterday, from
+    # this user's perspective — so it must not count toward *this* local day's cap.
+    earlier_utc = datetime(2026, 9, 18, 10, 0, tzinfo=timezone.utc)
+    await repo.record(
+        route_id=3,
+        dedupe_key="k-early",
+        itinerary_hash="hash-early",
+        price_minor=100000,
+        mode="plane",
+        depart_date="2026-09-18",
+        tier_at_send="discovery",
+    )
+    # repo.record() stamps sent_at from the real wall clock, so patch it to the intended
+    # UTC instant rather than asserting against whatever "now" happened to be.
+    await db.execute("UPDATE notifications_sent SET sent_at = ? WHERE dedupe_key = 'k-early'", (earlier_utc.isoformat(),))
+    await db.commit()
+
+    now_utc = datetime(2026, 9, 18, 23, 30, tzinfo=timezone.utc)
+    local = now_utc.astimezone(ZoneInfo("Asia/Novosibirsk"))
+    day_start_utc = datetime.combine(local.date(), datetime.min.time(), tzinfo=local.tzinfo).astimezone(timezone.utc)
+
+    assert (
+        await gate.can_send(
+            route_id=3, itinerary_hash="new-one", now=now_utc, cooldown_h=12, daily_cap=1, day_start_utc=day_start_utc
+        )
+        is True
+    )  # yesterday's (local) notification must not count against today's cap
 
 
 async def test_quiet_hours_defer_records_immediately_so_dedupe_sees_it(db: aiosqlite.Connection) -> None:
