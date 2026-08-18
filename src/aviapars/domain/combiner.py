@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 import itertools
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from aviapars.adapters.base import Mode, Offer, PlaceRef, SearchQuery, Tier
+from aviapars.adapters.base import Mode, Offer, PlaceRef, SearchQuery, SourceAdapter, Tier
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.db.models import Place
 from aviapars.db.repo_places import PlacesRepo
 from aviapars.domain.dates import DatePlan
 from aviapars.domain.transfers import transfer_policy
 from aviapars.domain.validator import freshness_gate
+
+log = logging.getLogger(__name__)
 
 MAX_COMBO_CANDIDATES_DEFAULT = 24
 MAX_HUBS_DEFAULT = 2
@@ -175,13 +179,42 @@ async def _search_leg(
     adapters = [a for a in registry.for_query(mode, origin.country, dest.country) if a.tier in opts.tiers]
 
     meta = _LegMeta(sources_used=[], sources_skipped=[], oldest=None, partial=False)
-    kept: list[Offer] = []
+    planned: list[tuple[SourceAdapter, SearchQuery]] = []
     for adapter in adapters:
         wanted = dates.batch_dates if adapter.supports_batch_dates else dates.probe_dates
         if not wanted:
             continue
-        query = SearchQuery(origin=origin_ref, dest=dest_ref, dates=wanted, pax=pax, mode=mode)
-        result = await registry.search(adapter, query, allow_network=opts.allow_network, deadline_s=opts.deadline_s)
+        planned.append((adapter, SearchQuery(origin=origin_ref, dest=dest_ref, dates=wanted, pax=pax, mode=mode)))
+
+    # Every adapter for this leg is asked at once, not one after another. What actually bounds
+    # concurrent network activity is the registry's own machinery — http_concurrency_global /
+    # http_concurrency_per_source semaphores, the per-source rate limiter, the circuit breaker —
+    # and all of it is keyed by `adapter.id` (separate Semaphore/Lock/bucket per entry), so
+    # concurrent calls to *different* adapters never touch shared state. Serializing here bought
+    # nothing except a leg that cost the sum of every adapter's timeout instead of the max.
+    #
+    # return_exceptions=True is a real backstop, not defensiveness about an impossible case:
+    # registry.search() is contractually non-raising (§5 rule 1, and it wraps the adapter in its
+    # own try/except), but a bare gather() cancels every other in-flight adapter the instant one
+    # task raises — concurrency is what turns a single adapter's bug into a whole-leg blackout,
+    # and the old sequential loop simply could not lose already-collected offers that way.
+    results = await asyncio.gather(
+        *(
+            registry.search(adapter, query, allow_network=opts.allow_network, deadline_s=opts.deadline_s)
+            for adapter, query in planned
+        ),
+        return_exceptions=True,
+    )
+
+    kept: list[Offer] = []
+    # gather() returns results in input order, so bookkeeping below runs in adapter order no
+    # matter which request finished first — sources_used/sources_skipped stay reproducible.
+    for (adapter, _query), result in zip(planned, results):
+        if isinstance(result, BaseException):
+            log.error("adapter %s raised out of registry.search()", adapter.id, exc_info=result)
+            meta.sources_skipped.append((adapter.id, "upstream_error"))
+            meta.partial = True
+            continue
         if result.partial:
             meta.partial = True
         if result.status.value != "ok":
