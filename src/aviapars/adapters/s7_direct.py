@@ -5,6 +5,7 @@ import re
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlencode
 
 import aiohttp
 from curl_cffi.requests import AsyncSession
@@ -195,6 +196,10 @@ class S7DirectAdapter:
                 "DLI1": origin_id,
                 "ALI1": dest_id,
             }
+            # id=deeplink is S7's own external-referrer link mechanism — this exact URL
+            # (no live session needed) is what we GET below to bootstrap a search, so it's
+            # already verified to open a real prefilled search on ibe.s7.ru.
+            deep_link = f"{AIR_URL}?{urlencode(params)}"
             try:
                 resp = await session.get(AIR_URL, params=params)
             except Exception:
@@ -230,9 +235,11 @@ class S7DirectAdapter:
             except ValueError:
                 return [], False
 
-            return self._parse_offers(payload, q, depart_date), True
+            return self._parse_offers(payload, q, depart_date, deep_link), True
 
-    def _parse_offers(self, payload: dict[str, Any], q: SearchQuery, depart_date: date) -> list[Offer]:
+    def _parse_offers(
+        self, payload: dict[str, Any], q: SearchQuery, depart_date: date, deep_link: str | None = None
+    ) -> list[Offer]:
         offers: list[Offer] = []
         now = datetime.now(timezone.utc)
 
@@ -284,7 +291,7 @@ class S7DirectAdapter:
                         legs=tuple(legs),
                         price_minor=round(price["amount"] * 100),
                         currency=price.get("currency", q.currency).upper(),
-                        deep_link=None,
+                        deep_link=deep_link,
                         source_id=self.id,
                         tier=Tier.CONFIRMATION,
                         observed_at=now,

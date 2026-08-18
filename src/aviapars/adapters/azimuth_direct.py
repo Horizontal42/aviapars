@@ -167,7 +167,11 @@ class AzimuthDirectAdapter:
                         legs=tuple(legs),
                         price_minor=round(price * 100),
                         currency="RUB",
-                        deep_link=None,
+                        # not prefilled: no route-query-param format was ever captured in the
+                        # HAR session (booking.azimuth.ru/new/ is an SPA with no visible route
+                        # state in the URL) — the base search page is honest, a fabricated
+                        # query string risking a broken link is not.
+                        deep_link="https://booking.azimuth.ru/new/",
                         source_id=self.id,
                         tier=Tier.CONFIRMATION,
                         observed_at=now,

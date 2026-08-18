@@ -5,6 +5,7 @@ import json
 import uuid
 from datetime import date, datetime, timezone
 from typing import Any
+from urllib.parse import urlencode
 
 from curl_cffi.requests import AsyncSession
 
@@ -30,6 +31,15 @@ _OFFERS_HEADERS = {
     "Origin": "https://avia.tutu.ru",
     "Referer": "https://avia.tutu.ru/",
 }
+
+
+def _deep_link(q: SearchQuery, origin_id: str, dest_id: str, depart_date: date) -> str:
+    """`route[0]=<cityId>-<DDMMYYYY>-<cityId>` is the real query shape captured from a
+    live browser session (avia.tutu.ru.har's page URL); city name path slugs
+    (e.g. /f/Moskva/Sankt-peterburg/) turned out to be cosmetic — the bare `/f/` path
+    plus this query still returns 200 and the SPA reads the route from the query."""
+    params = {"class": "Y", "travelers": q.pax, "route[0]": f"{origin_id}-{depart_date.strftime('%d%m%Y')}-{dest_id}"}
+    return f"https://avia.tutu.ru/f/?{urlencode(params)}"
 
 
 class TutuAviaDirectAdapter:
@@ -154,7 +164,8 @@ class TutuAviaDirectAdapter:
         if not isinstance(payload, list) or not payload:
             return [], "ok"  # legitimate "nothing found" — not a failure
 
-        return self._parse_offers(payload, q, depart_date), "ok"
+        deep_link = _deep_link(q, origin_id, dest_id, depart_date)
+        return self._parse_offers(payload, q, depart_date, deep_link), "ok"
 
     async def _resolve_city_id(self, session: Any, iata: str) -> str | None:
         cached = self._city_id_cache.get(iata)
@@ -191,7 +202,9 @@ class TutuAviaDirectAdapter:
             merged_offers.update((chunk.get("offers") or {}).get("actual") or {})
         return merged_offers, {"routes": routes, "segments": segments, "carriers": carriers}
 
-    def _parse_offers(self, payload: list[dict[str, Any]], q: SearchQuery, depart_date: date) -> list[Offer]:
+    def _parse_offers(
+        self, payload: list[dict[str, Any]], q: SearchQuery, depart_date: date, deep_link: str | None = None
+    ) -> list[Offer]:
         offers_dict, lookups = self._merge_chunks(payload)
         routes, segments, carriers = lookups["routes"], lookups["segments"], lookups["carriers"]
         now = datetime.now(timezone.utc)
@@ -262,7 +275,7 @@ class TutuAviaDirectAdapter:
                     legs=tuple(legs),
                     price_minor=round(price["amount"] / price.get("fraction", 100) * 100),
                     currency=price.get("currencyCode", "RUB"),
-                    deep_link=None,
+                    deep_link=deep_link,
                     source_id=self.id,
                     tier=tier,
                     observed_at=now,

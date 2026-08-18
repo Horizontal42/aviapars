@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from aviapars.adapters.base import Mode, PlaceRef, ResultStatus, SearchQuery, Tier
-from aviapars.adapters.tutu_avia_direct import TutuAviaDirectAdapter
+from aviapars.adapters.tutu_avia_direct import TutuAviaDirectAdapter, _deep_link
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "tutu_avia_direct" / "search_mow_svx.json"
 APPROXIMATE_FIXTURE = (
@@ -66,6 +66,13 @@ def test_approximate_price_used_with_reduced_confidence_when_no_exact_variant() 
     assert len(exact) == 2
     assert all(o.confidence == 1.0 for o in exact)
     assert all(o.tier == Tier.CONFIRMATION for o in exact)
+
+
+def test_deep_link_matches_verified_query_shape() -> None:
+    # route[0]=<cityId>-<DDMMYYYY>-<cityId> captured from a live browser session
+    # (avia.tutu.ru.har's page URL) — must not drift from that verified format.
+    link = _deep_link(_query(), origin_id="491", dest_id="29", depart_date=date(2026, 9, 20))
+    assert link == "https://avia.tutu.ru/f/?class=Y&travelers=1&route%5B0%5D=491-20092026-29"
 
 
 async def test_non_plane_mode_returns_empty() -> None:

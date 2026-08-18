@@ -4,6 +4,7 @@ import hashlib
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
+from urllib.parse import urlencode
 
 from curl_cffi.requests import AsyncSession
 
@@ -65,6 +66,20 @@ class AeroflotDirectAdapter:
     def __init__(self, *, rate_limit: RateLimitPolicy | None = None, cache_ttl_s: int = 1800) -> None:
         self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=15.0)
         self.default_cache_ttl_s = cache_ttl_s
+
+    def _deep_link(self, q: SearchQuery, depart_date: date) -> str:
+        """Same query shape as a real user's search — captured verbatim from
+        the site's own page URL in a live browser session (www.aeroflot.ru.har)."""
+        params = {
+            "adults": q.pax,
+            "infants": 0,
+            "children": 0,
+            "childrenfrgn": 0,
+            "childrenaward": 0,
+            "cabin": "economy",
+            "routes": f"{q.origin.iata}.{depart_date.strftime('%Y%m%d')}.{q.dest.iata}",
+        }
+        return f"https://www.aeroflot.ru/ru-ru/sb/search?{urlencode(params)}"
 
     async def search(self, q: SearchQuery) -> SearchResult:
         if q.mode != Mode.PLANE:
@@ -143,7 +158,7 @@ class AeroflotDirectAdapter:
                     legs=tuple(legs),
                     price_minor=round(price * 100),
                     currency=cheapest.get("currency_code", q.currency).upper(),
-                    deep_link=None,
+                    deep_link=self._deep_link(q, depart_date),
                     source_id=self.id,
                     tier=Tier.CONFIRMATION,
                     observed_at=now,

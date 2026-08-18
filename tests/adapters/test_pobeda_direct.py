@@ -41,6 +41,12 @@ def test_parse_offers_from_real_response() -> None:
     # same offset, so naively treating local time as UTC would be wrong in both directions.
     assert leg.depart_utc == datetime(2026, 9, 10, 20, 35, tzinfo=timezone.utc)
     assert leg.arrive_utc == datetime(2026, 9, 10, 23, 25, tzinfo=timezone.utc)
+    assert direct.deep_link == (
+        "https://ticket.flypobeda.ru/websky/?origin-city-code%5B0%5D=LED"
+        "&destination-city-code%5B0%5D=SVX&date%5B0%5D=10.09.2026&segmentsCount=1"
+        "&adultsCount=1&youngAdultsCount=0&childrenCount=0&infantsWithSeatCount=0"
+        "&infantsWithoutSeatCount=0&lang=ru"
+    )
 
     connections = [o for o in offers if len(o.legs) == 2]
     assert len(connections) == 2

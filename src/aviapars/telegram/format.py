@@ -58,13 +58,26 @@ def format_money(price_minor: int, currency: str) -> str:
     return f"{major:,}".replace(",", " ") + f" {suffix}"
 
 
-def format_deal_card(route_title: str, itinerary: Itinerary, *, threshold_minor: int, confirmed: bool) -> str:
+def format_deal_card(
+    route_title: str,
+    itinerary: Itinerary,
+    *,
+    threshold_minor: int,
+    confirmed: bool,
+    source_names: dict[str, str] | None = None,
+) -> str:
     """Deal notification card (§9/§10). Degrades gracefully when leg detail is
     missing (date_only/no-carrier discovery offers) rather than fabricating
     a time or airline — see base.py Leg docstring. `itinerary.offers` has one
     entry for a direct trip, two for a hub-composed one (§8) — each offer can
     come from a different source with its own tier/confidence, so per-leg
-    price is shown whenever there's more than one."""
+    price is shown whenever there's more than one.
+
+    `source_names` maps adapter `id` -> `display_name` (built once from the
+    live registry, see notify/notifier.py) so the card can say "Победа",
+    not the raw "pobeda_direct" slug; falls back to the slug if the map
+    wasn't passed (keeps this function usable standalone/in tests)."""
+    source_names = source_names or {}
     price = format_money(itinerary.price_minor, itinerary.currency)
     threshold = format_money(threshold_minor, itinerary.currency)
     all_legs = [leg for offer in itinerary.offers for leg in offer.legs]
@@ -90,14 +103,21 @@ def format_deal_card(route_title: str, itinerary: Itinerary, *, threshold_minor:
         h, m = divmod(itinerary.duration_minutes, 60)
         lines.append(f"   В пути: {h}ч {m}м" if m else f"   В пути: {h}ч")
 
+    source_str = ", ".join(sorted({source_names.get(o.source_id, o.source_id) for o in itinerary.offers}))
     if confirmed:
-        lines.append("   ✅ Подтверждено · только что")
+        lines.append(f"   ✅ Подтверждено · только что · {source_str}")
     else:
         cached_ats = [o.source_cached_at for o in itinerary.offers if o.source_cached_at is not None]
         age_h = _age_hours(min(cached_ats)) if cached_ats else None
-        sources = ", ".join(sorted({o.source_id for o in itinerary.offers}))
         age_str = f"{age_h} ч назад" if age_h is not None else "возраст неизвестен"
-        lines.append(f"   ⚠️ Не подтверждено · данные {sources}, {age_str}")
+        lines.append(f"   ⚠️ Не подтверждено · данные {source_str}, {age_str}")
+
+    seen_links: set[str] = set()
+    for offer in itinerary.offers:
+        if offer.deep_link and offer.deep_link not in seen_links:
+            seen_links.add(offer.deep_link)
+            name = source_names.get(offer.source_id, offer.source_id)
+            lines.append(f"   🔗 Купить у {name}: {offer.deep_link}")
 
     return "\n".join(lines)
 

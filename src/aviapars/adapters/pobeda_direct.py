@@ -4,6 +4,7 @@ import hashlib
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
+from urllib.parse import urlencode
 
 from zoneinfo import ZoneInfo
 
@@ -54,6 +55,24 @@ _DEFAULT_TZ = "Europe/Moscow"
 
 def _airport_tz(code: str | None) -> ZoneInfo:
     return ZoneInfo(_AIRPORT_TZ.get(code or "", _DEFAULT_TZ))
+
+
+def _deep_link(q: SearchQuery, depart_date: date) -> str:
+    """Same query shape as a real user's search — captured verbatim from the
+    site's own page URL in a live browser session (ticket.flypobeda.ru.har)."""
+    params = [
+        ("origin-city-code[0]", q.origin.iata),
+        ("destination-city-code[0]", q.dest.iata),
+        ("date[0]", depart_date.strftime("%d.%m.%Y")),
+        ("segmentsCount", "1"),
+        ("adultsCount", str(q.pax)),
+        ("youngAdultsCount", "0"),
+        ("childrenCount", "0"),
+        ("infantsWithSeatCount", "0"),
+        ("infantsWithoutSeatCount", "0"),
+        ("lang", "ru"),
+    ]
+    return f"https://ticket.flypobeda.ru/websky/?{urlencode(params)}"
 
 
 class PobedaDirectAdapter:
@@ -194,7 +213,7 @@ class PobedaDirectAdapter:
                     legs=tuple(legs),
                     price_minor=round(price * 100),
                     currency=cheapest.get("currency", q.currency).upper(),
-                    deep_link=None,
+                    deep_link=_deep_link(q, depart_date),
                     source_id=self.id,
                     tier=Tier.CONFIRMATION,
                     observed_at=now,

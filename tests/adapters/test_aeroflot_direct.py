@@ -39,6 +39,10 @@ def test_parse_offers_from_real_response() -> None:
     assert leg.number == "6565"
     assert leg.time_precision == "exact"
     assert leg.tz == "+03:00"
+    assert direct.deep_link == (
+        "https://www.aeroflot.ru/ru-ru/sb/search?adults=1&infants=0&children=0"
+        "&childrenfrgn=0&childrenaward=0&cabin=economy&routes=LED.20260910.AER"
+    )
 
     via_moscow = offers[1]
     assert via_moscow.price_minor == 3551200  # cheapest fare, 35512.00 RUB

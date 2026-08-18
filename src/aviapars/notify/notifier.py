@@ -35,6 +35,7 @@ class Notifier:
         *,
         cooldown_h: int,
         daily_cap: int,
+        source_names: dict[str, str] | None = None,
     ) -> None:
         self._bot = bot
         self._repo = notifications_repo
@@ -42,6 +43,7 @@ class Notifier:
         self._dedupe = dedupe
         self._cooldown_h = cooldown_h
         self._daily_cap = daily_cap
+        self._source_names = source_names or {}
 
     async def send_deal(self, *, user: User, route: Route, itinerary: Itinerary, confirmed: bool) -> bool:
         """Returns True if delivered now, False if suppressed or deferred to
@@ -66,7 +68,13 @@ class Notifier:
         if not allowed:
             return False
 
-        text = format_deal_card(route.title, itinerary, threshold_minor=route.max_price, confirmed=confirmed)
+        text = format_deal_card(
+            route.title,
+            itinerary,
+            threshold_minor=route.max_price,
+            confirmed=confirmed,
+            source_names=self._source_names,
+        )
         tier = "confirmation" if confirmed else "discovery"
 
         if is_quiet_hours(user, now):

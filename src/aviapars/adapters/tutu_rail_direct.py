@@ -255,7 +255,11 @@ class TutuRailDirectAdapter:
                     legs=tuple(legs),
                     price_minor=round(price["amount"] / price.get("fraction", 100) * 100),
                     currency=price.get("currencyCode", "RUB"),
-                    deep_link=None,
+                    # not prefilled: the real page URL uses a city-name slug in the path
+                    # (www.tutu.ru.har: /poezda/Moskva/Sankt-Peterburg/?date=...), and this
+                    # adapter only has rzd_code, no slug lookup — fabricating one risks a
+                    # broken link, so this points at the plain search page instead.
+                    deep_link="https://www.tutu.ru/poezda/",
                     source_id=self.id,
                     tier=tier,
                     observed_at=now,

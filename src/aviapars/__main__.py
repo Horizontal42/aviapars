@@ -86,6 +86,7 @@ async def main() -> None:
             dedupe,
             cooldown_h=settings.notification_dedupe_cooldown_h,
             daily_cap=settings.notifications_per_route_per_day,
+            source_names={a.id: a.display_name for a in registry.all()},
         )
 
         scheduler_task = asyncio.create_task(run_scheduler_loop(db, registry, notifier))
