@@ -135,6 +135,9 @@ def place_picker_kb(places: list[Place]) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+MODE_LABEL = {"plane": "✈️ Самолёт", "train": "🚂 Поезд", "auto": "🔀 Авто"}
+
+
 def mode_picker_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="✈️ Самолёт", callback_data=ModePick(value="plane").pack())

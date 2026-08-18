@@ -8,13 +8,14 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from aviapars.adapters.base import Mode, Tier
+from aviapars.adapters.base import Tier
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.config import settings
 from aviapars.db.repo_places import PlacesRepo
 from aviapars.db.models import Route
 from aviapars.domain.combiner import Itinerary, SearchOpts, search_itineraries
 from aviapars.domain.dates import DateSelection, resolve_date_plan, selection_from_route
+from aviapars.domain.places import modes_for_pref
 from aviapars.telegram import date_picker
 from aviapars.telegram.format import (
     describe_checked_dates,
@@ -24,11 +25,14 @@ from aviapars.telegram.format import (
     format_money,
 )
 from aviapars.telegram.keyboards import (
+    MODE_LABEL,
     DatePick,
+    ModePick,
     PlacePick,
     SearchTrack,
     date_mode_kb,
     menu_only_kb,
+    mode_picker_kb,
     search_again_kb,
     search_results_kb,
 )
@@ -36,11 +40,6 @@ from aviapars.telegram.place_picker import ask_place_pick
 from aviapars.telegram.states import AddRoute, SearchFlow
 
 router = Router(name="search")
-
-# Every mode with a registered adapter is tried; a mode with nothing
-# registered for it (or no coverage for these places) just contributes zero
-# offers — search_itineraries degrades to whatever sources actually answered.
-_SEARCH_MODES = frozenset({Mode.PLANE, Mode.TRAIN})
 
 
 async def start_wizard(message: Message, state: FSMContext) -> None:
@@ -71,6 +70,9 @@ async def start_from_route(
         origin_title=origin.name_ru,
         dest_place_id=dest.id,
         dest_title=dest.name_ru,
+        # Not asked again: the user already chose the transport when creating the route,
+        # and this button means "show me what's out there for *this* route".
+        mode_pref=route.mode_pref,
     )
     await _run_search(message, state, db, registry, selection_from_route(route))
 
@@ -109,9 +111,18 @@ async def on_search_destination_pick(query: CallbackQuery, callback_data: PlaceP
         return
     place = candidates[callback_data.idx]
     await state.update_data(dest_place_id=place.id, dest_title=place.name_ru)
+    await state.set_state(SearchFlow.mode)
+    assert query.message is not None
+    await query.message.answer(f"Куда: {place.name_ru}. Какой транспорт?", reply_markup=mode_picker_kb())
+    await query.answer()
+
+
+@router.callback_query(SearchFlow.mode, ModePick.filter())
+async def on_search_mode_pick(query: CallbackQuery, callback_data: ModePick, state: FSMContext) -> None:
+    await state.update_data(mode_pref=callback_data.value)
     await state.set_state(SearchFlow.date_mode)
     assert query.message is not None
-    await query.message.answer(f"Куда: {place.name_ru}. Когда?", reply_markup=date_mode_kb())
+    await query.message.answer(f"{MODE_LABEL[callback_data.value]}. Когда?", reply_markup=date_mode_kb())
     await query.answer()
 
 
@@ -176,7 +187,11 @@ async def _run_search(
     dest = await places_repo.get(data["dest_place_id"])
     assert origin is not None and dest is not None
 
-    await message.answer("🔎 Ищу варианты, включая через хаб (например, через Москву)…")
+    await message.answer("🔎 Ищу варианты, включая через хаб…")
+    # A mode with no registered adapter (or no coverage for these places) just contributes
+    # zero offers — search_itineraries degrades to whatever sources actually answered.
+    # `.get` with a default covers the one entry point that skips the picker on purpose
+    # (start_from_route, which takes the route's own mode_pref) plus any stale FSM state.
     outcome = await search_itineraries(
         registry,
         places_repo,
@@ -184,7 +199,7 @@ async def _run_search(
         dest=dest,
         dates=plan,
         pax=1,
-        modes=_SEARCH_MODES,
+        modes=modes_for_pref(data.get("mode_pref", "auto")),
         opts=SearchOpts(
             tiers=frozenset({Tier.DISCOVERY, Tier.CONFIRMATION}),
             allow_network=True,

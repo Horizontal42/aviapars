@@ -24,15 +24,16 @@ class AddRoute(StatesGroup):
 
 class SearchFlow(StatesGroup):
     """§10 /search — one-shot interactive search, no route saved unless the
-    user taps "Отслеживать". Current scope (one adapter, direct offers only):
-    single synchronous pass, no L0/L1 cache-then-live split, no hub/mixed
-    results, no manual leg picker — those need more than one leg-capable
-    source to mean anything (§8/§13 Phase D/E)."""
+    user taps "Отслеживать". Same step order as AddRoute up to the dates
+    (origin, destination, mode), then straight to results — no threshold,
+    interval or notification mode, since nothing is being tracked. No L0/L1
+    cache-then-live split and no manual leg picker yet (§8/§13 Phase D/E)."""
 
     origin = State()
     origin_pick = State()
     destination = State()
     destination_pick = State()
+    mode = State()
     date_mode = State()
     date_value = State()
     results = State()

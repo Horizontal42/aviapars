@@ -14,6 +14,7 @@ from aviapars.domain.dates import DateSelection, to_route_fields
 from aviapars.telegram import date_picker
 from aviapars.telegram.format import describe_notification_mode, describe_selection, format_money
 from aviapars.telegram.keyboards import (
+    MODE_LABEL,
     DatePick,
     ModePick,
     NotifyModePick,
@@ -29,7 +30,6 @@ from aviapars.telegram.states import AddRoute
 
 router = Router(name="add")
 
-_MODE_LABEL = {"plane": "✈️ Самолёт", "train": "🚂 Поезд", "auto": "🔀 Авто"}
 # Sanity ceilings, not real limits — no real ticket costs this much, no route needs polling
 # this rarely. Without them an absurd digit string (e.g. 19 digits) overflows timedelta()
 # or SQLite's bind for max_price and takes down the whole scheduler tick, not just this route.
@@ -95,7 +95,7 @@ async def on_mode_pick(query: CallbackQuery, callback_data: ModePick, state: FSM
     await state.set_state(AddRoute.date_mode)
     assert query.message is not None
     await query.message.answer(
-        f"{_MODE_LABEL[callback_data.value]}. Насколько важна конкретная дата?",
+        f"{MODE_LABEL[callback_data.value]}. Насколько важна конкретная дата?",
         reply_markup=date_mode_kb(),
     )
     await query.answer()
