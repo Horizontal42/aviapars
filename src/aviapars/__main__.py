@@ -10,6 +10,7 @@ from aviapars.adapters.registry import AdapterRegistry
 from aviapars.adapters.rzd_direct import RzdDirectAdapter
 from aviapars.adapters.s7_direct import S7DirectAdapter
 from aviapars.adapters.travelpayouts import TravelpayoutsAdapter
+from aviapars.adapters.tutu_rail_direct import TutuRailDirectAdapter
 from aviapars.adapters.yandex_rasp import YandexRaspAdapter
 from aviapars.config import settings
 from aviapars.db.engine import connect
@@ -54,6 +55,7 @@ async def main() -> None:
             )
         )
         registry.register(RzdDirectAdapter(cache_ttl_s=settings.cache_ttl_s.rzd_direct))
+        registry.register(TutuRailDirectAdapter(cache_ttl_s=settings.cache_ttl_s.rzd_direct))
         registry.register(AeroflotDirectAdapter(cache_ttl_s=settings.cache_ttl_s.airline_direct))
         registry.register(AzimuthDirectAdapter(cache_ttl_s=settings.cache_ttl_s.airline_direct))
         registry.register(

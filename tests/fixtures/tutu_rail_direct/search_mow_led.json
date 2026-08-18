@@ -1,0 +1,3179 @@
+[
+ {
+  "dictionary": {
+   "avia": {
+    "conditions": null,
+    "feedback": null,
+    "points": null,
+    "vehicles": null,
+    "voyages": null
+   },
+   "bus": {
+    "conditions": null,
+    "feedback": null,
+    "points": null,
+    "voyages": {}
+   },
+   "car": {
+    "conditions": null,
+    "points": null,
+    "vehicles": null,
+    "voyages": null
+   },
+   "common": {
+    "bookingUpsales": {},
+    "carriers": {
+     "dcecb0cc5254edac4db4922db2114390": {
+      "displaySettings": {
+       "logo": {
+        "mobile": ""
+       }
+      },
+      "name": "ФПК"
+     },
+     "1a903bc6030cba498e84982254358811": {
+      "displaySettings": {
+       "logo": {
+        "mobile": ""
+       }
+      },
+      "name": "ДОСС"
+     }
+    },
+    "cities": {},
+    "countries": {},
+    "currency": {},
+    "fareApplications": {},
+    "routes": {
+     "b4b4ec47ac119d3a2ea4962c9a947e90": {
+      "id": "b4b4ec47ac119d3a2ea4962c9a947e90",
+      "segmentIds": [
+       "f76c51b73bd4643a8fe97589e9e31e01"
+      ],
+      "transferIds": null
+     },
+     "7046aeb01376ecff706df618b81998aa": {
+      "id": "7046aeb01376ecff706df618b81998aa",
+      "segmentIds": [
+       "907deab7ac110fbbd3b0aa127595fa13"
+      ],
+      "transferIds": null
+     },
+     "97a676a23e6e7e170f9228d8317df8f8": {
+      "id": "97a676a23e6e7e170f9228d8317df8f8",
+      "segmentIds": [
+       "84b15f2f3fe8810fc067d97e581e95f6"
+      ],
+      "transferIds": null
+     }
+    },
+    "segments": {
+     "f76c51b73bd4643a8fe97589e9e31e01": {
+      "arrivalDateTime": "2026-09-21T08:30:00+03:00",
+      "arrivalGeoPointId": 2958266,
+      "arrivalTerminal": "",
+      "bookingGroupId": 0,
+      "carriers": [
+       {
+        "id": "dcecb0cc5254edac4db4922db2114390",
+        "type": "operating"
+       }
+      ],
+      "departureDateTime": "2026-09-20T23:30:00+03:00",
+      "departureGeoPointId": 2958868,
+      "departureTerminal": "",
+      "duration": 540,
+      "id": "f76c51b73bd4643a8fe97589e9e31e01",
+      "type": "train",
+      "vehicleId": "c61cad4a1750b084a733b35abcc12360",
+      "voyageNumber": "79c0bf51b0aadc966e352eb64d8113c2"
+     },
+     "907deab7ac110fbbd3b0aa127595fa13": {
+      "arrivalDateTime": "2026-09-21T07:55:00+03:00",
+      "arrivalGeoPointId": 2958266,
+      "arrivalTerminal": "",
+      "bookingGroupId": 0,
+      "carriers": [
+       {
+        "id": "dcecb0cc5254edac4db4922db2114390",
+        "type": "operating"
+       }
+      ],
+      "departureDateTime": "2026-09-20T23:55:00+03:00",
+      "departureGeoPointId": 2958868,
+      "departureTerminal": "",
+      "duration": 480,
+      "id": "907deab7ac110fbbd3b0aa127595fa13",
+      "type": "train",
+      "vehicleId": "312888a6c9b3e400fd4bb40503669cee",
+      "voyageNumber": "82aa897e6fd3b114794c461ffd802a37"
+     },
+     "84b15f2f3fe8810fc067d97e581e95f6": {
+      "arrivalDateTime": "2026-09-20T23:49:00+03:00",
+      "arrivalGeoPointId": 2958266,
+      "arrivalTerminal": "",
+      "bookingGroupId": 0,
+      "carriers": [
+       {
+        "id": "1a903bc6030cba498e84982254358811",
+        "type": "operating"
+       }
+      ],
+      "departureDateTime": "2026-09-20T19:30:00+03:00",
+      "departureGeoPointId": 2958868,
+      "departureTerminal": "",
+      "duration": 259,
+      "id": "84b15f2f3fe8810fc067d97e581e95f6",
+      "type": "train",
+      "vehicleId": "2ceac3880e2c190e16119f795286032a",
+      "voyageNumber": "f79c15db84ef7726f399af73c05e44fe"
+     }
+    },
+    "transfers": {}
+   },
+   "etrain": {},
+   "train": {
+    "conditions": {},
+    "feedback": {},
+    "payLaterTerms": [],
+    "points": {},
+    "vehicles": {},
+    "voyages": {
+     "79c0bf51b0aadc966e352eb64d8113c2": {
+      "finalArrivalGeoPointId": 2958266,
+      "initialDepartureGeoPointId": 2958868,
+      "number": "004А",
+      "numberForPassengers": "004А",
+      "onlineRegistrationStatus": "opened",
+      "openSalesDatetime": "2026-05-24T08:00:00+03:00"
+     },
+     "82aa897e6fd3b114794c461ffd802a37": {
+      "finalArrivalGeoPointId": 2958266,
+      "initialDepartureGeoPointId": 2958868,
+      "number": "002А",
+      "numberForPassengers": "002А",
+      "onlineRegistrationStatus": "opened",
+      "openSalesDatetime": "2026-05-24T08:00:00+03:00"
+     },
+     "f79c15db84ef7726f399af73c05e44fe": {
+      "finalArrivalGeoPointId": 2958266,
+      "initialDepartureGeoPointId": 2958868,
+      "number": "780А",
+      "numberForPassengers": "780А",
+      "onlineRegistrationStatus": "opened",
+      "openSalesDatetime": "2026-06-23T08:00:00+03:00"
+     }
+    }
+   }
+  },
+  "offers": {
+   "actual": {
+    "045c00a2bb5aff8211c0a7c89ab89eea": {
+     "id": "045c00a2bb5aff8211c0a7c89ab89eea",
+     "offerSetId": "f13bdaf0485dadb7cb14cb0b686138f2",
+     "offerVariants": [
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 51429,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "64c76f9322cf462e11b66f34af7fa022"
+        ]
+       },
+       "id": "1fe6812505afaccd200970a4da521a44",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 1714308,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "2b4fc742-89d6-5d0d-a47e-87effce92bf5"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 41071,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "2c407d9534a080d0802fd6bcd09b5126"
+        ]
+       },
+       "id": "02d915ffe623c9754746ab1882c3395d",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 1369038,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "8faaa2e0-6104-528b-9a06-9751b8ff4d72"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 43372,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "c4414dfcd84c8b9b45f23d5d5b9d610c"
+        ]
+       },
+       "id": "701e1c9da0ffb30d9efc232f59d5d584",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 1445758,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "78b3e97e-eadb-5fd5-b138-bbde9b51334b"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 43372,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "13fceb16606fe3b81a2982335624ea4e"
+        ]
+       },
+       "id": "6ef66da64e57bbb9ae8b44ee36b8b815",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 1445758,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "6c157d6b-0e5f-542f-8681-1f075995f1d9"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 41071,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "93f056bb27c192dcf1d6b0edd8c6651f"
+        ]
+       },
+       "id": "29e5fdb1d5415d1f9a39769fa0aa8fb6",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 1369038,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "598cf32f-2a48-555a-9cfd-d2f2888c3bd2"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 43372,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "fe49544dd40279491f84fc243c467d7a"
+        ]
+       },
+       "id": "8746a23e9131a105282172a058740489",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 1445758,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "97f4b99e-fd97-56e9-ab32-7b97f8516d16"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 43372,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "97b376455f7c9e75020dd2ae9ba7920e"
+        ]
+       },
+       "id": "c466fa57da459eb0f69563fccd2dc84b",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 1445758,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "ebcf7ac1-93d1-5ae3-8eb8-6b67842d7f52"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 19372,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "a5733ea7bb3bc0c9cccdb587c59711ad"
+        ]
+       },
+       "id": "431465f37afaa693f984aed188c4fed9",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 645750,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "421c2559-0238-5054-85e5-d04fb8832b75"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 22141,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "150b3a173dad56f7413c1f927eeeba8f"
+        ]
+       },
+       "id": "4c3c18456887685f79d223a069a552a3",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 738050,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "f1cb774d-e91c-50cc-bc3e-660d365befa5"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 22141,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "d5fa541bda886d366d27e9b2857c29c5"
+        ]
+       },
+       "id": "1235da0d0cf1e9da3da79ac7cedd886e",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 738050,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "440a694d-b487-58fe-bc01-9da0f6a04117"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 25602,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "574507993d25d48a0b57fd50b384ec8a"
+        ]
+       },
+       "id": "b07febde8fef2894dbf6e238edfafbbd",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 853430,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "66804c77-3f19-5f42-8859-4e3b4059b8f9"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 19372,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "714f62bca9f415ddf231c057ea975a57"
+        ]
+       },
+       "id": "eba93c1e1d74d552acd6738eb29af3c6",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 645750,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "75b6fd78-e35e-5137-9f14-e0522bf9f866"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 22141,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "72a42f7ce5a5781f2d86661b7883dc18"
+        ]
+       },
+       "id": "16df96690d3d428d20485b42e5cce516",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 738050,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "6a9acb1d-9e5e-5286-9bce-4449561db323"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 22141,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "a3e596c73cfbf32dcc61c57b040a3dc4"
+        ]
+       },
+       "id": "a151bfc115d4adda2113461533dd8cd4",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 738050,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "d4fe4d29-80fa-547f-89b3-5a82533b7650"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 25602,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "2d79f15053ff919bdcd24aad6d09ba9c"
+        ]
+       },
+       "id": "57d79fcc6c37bbd56b15808b71c82bf2",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 853430,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "8fe10f49-ef66-573c-a5b2-ef16c50b5af5"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 22141,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "488b46045e0d0f138cb29618dbb28d13"
+        ]
+       },
+       "id": "11b4391ce92d123dc94c2d792daa071e",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 738050,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "7e6e92ad-0d99-5872-b726-737dbdc37e6d"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 25602,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "3313703a455ec5a92487b3d252987840"
+        ]
+       },
+       "id": "cc1f7c443aa3905213c39ffb2f5bda6a",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 853430,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "6db046c0-9ef3-5b11-9518-52ba15614691"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 22141,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "f0f4c5f008ae6c289ed9f458d5f23d8d"
+        ]
+       },
+       "id": "c4eb5dca7dcb71b1ae40c3121c961277",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 738050,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "b979fe16-6e0d-5ba2-9389-e88b9253b96f"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 25602,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "f096a9d55331a7814fdb8232475efb80"
+        ]
+       },
+       "id": "7053b7a42aebda56307364d1b98f9843",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 853430,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "4a1650ea-bd60-5a9c-bfaf-65022cb35709"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 19372,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "f10479afd3075941d94b6ac058a1595c"
+        ]
+       },
+       "id": "7382162d73ffbacf5c5fe561bfe1be5d",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 645750,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "d0bcf344-3109-5627-9a7b-a6ced7fef435"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 22141,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "1260cbf20645065f43a00e40d01886c6"
+        ]
+       },
+       "id": "aaf1b114364cddf09c21009e4c750dd8",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 738050,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "fdec91a2-6461-59ae-9ab8-93e4b225d09d"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 22141,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "757acc515f02082fe297c77953d4548c"
+        ]
+       },
+       "id": "2ff837025741b1535689307716894dfb",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 738050,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "c4327075-837a-5a8c-a9c0-f63227cb6c91"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 25602,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "6b0da664df96165cab273df8677b9f56"
+        ]
+       },
+       "id": "5bc765bc626a7390658728326061d2c2",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 853430,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "e13565ea-776c-5fd4-99e5-aa360da9d3db"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 19372,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "b3e668728530772bd7741968fd643f73"
+        ]
+       },
+       "id": "378c0a54e51dd292c81193b7f3ee1873",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 645750,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "503dd082-0df5-587e-82a4-05d57ed1a6c7"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 22141,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "11012b89941010ede1be8a0de23b5ded"
+        ]
+       },
+       "id": "a2a3f8b3e54a6a05cac53f9d828cc297",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 738050,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "5dac149f-c41b-5601-92ac-bd60d5a9a9d4"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 22141,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "ccc6d7eaab69689f8a2e063f970880cf"
+        ]
+       },
+       "id": "c67404f1e3c59998b61648fa270722ff",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 738050,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "7121b217-1e9e-5ff7-ae74-5457eeec2235"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 25602,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "b727acf4460c6fa8b328fa1de17d1c60"
+        ]
+       },
+       "id": "e3aaaf8e585fc1e140118dd306e2bc88",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 853430,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "02a29c76-0c3f-57f9-9f4a-96d7b1036d2b"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 22141,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "a664162f67cb8b6897a6370f0d556858"
+        ]
+       },
+       "id": "f4dc8bab9d3dc0481134acb04e2cb178",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 738050,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "a4a7a1f9-d22b-54a8-a3c7-cb13aec88245"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 25602,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "d0c9cad5d2c88a2905c7ec2fe9cfc636"
+        ]
+       },
+       "id": "cf8bd33f0968b3ddf3b406b0260f89a6",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 853430,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "6d672442-d90b-5163-ab89-02f6aa947450"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 22141,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "1a4dd00f9cf8f9a14f8baa00353394eb"
+        ]
+       },
+       "id": "0a0058b1f9ab51b151c8ea700e2d26f9",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 738050,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "13b540b5-60cd-58b6-b00f-263ef3e41798"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 25602,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "c7ac8b38ceef05342c4f070ad5390567"
+        ]
+       },
+       "id": "5f91ab0b2ddb6dac8a416ada25ce8d6c",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 853430,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "0dfa6208-c8ac-57a8-ba88-1997e04fb510"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 22141,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "8044226589279d8bf606fe393b4faed7"
+        ]
+       },
+       "id": "f8ceae7847acc89c96207676a08429ff",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 738050,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "505a97be-67e1-5326-9d34-5c762d2b4b17"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 25602,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "5bd12c4936382106eaa3da3e1abf039e"
+        ]
+       },
+       "id": "1d2a74bcab6d2e5dfb8073ee742f002d",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 853430,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "87fd5df6-00e2-561f-80bb-8a5875a40963"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 22141,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "96a06a5b15b0e133723f1cf9a21dea88"
+        ]
+       },
+       "id": "94c9b60f96bb8ee0d94f2cb6db965e20",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 738050,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "bf75cf8d-e8c7-52ba-bc87-48661b0b2c25"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 25602,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "e943e5eb187ecfaa11ff75b44ecba318"
+        ]
+       },
+       "id": "2c7e770a946b931a612b9e640e15b75c",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 853430,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "2a4b7ccc-c09e-5ad9-9aff-7e437fb57d27"
+      }
+     ],
+     "routeIds": [
+      "b4b4ec47ac119d3a2ea4962c9a947e90"
+     ],
+     "warnings": []
+    },
+    "04c4ab241f5ee8fe97f5edd771c51f9f": {
+     "id": "04c4ab241f5ee8fe97f5edd771c51f9f",
+     "offerSetId": "fd1ace06f98448d9c4c0cc53c8378102",
+     "offerVariants": [
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 33886,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "5197632e4d4612ed000696c5973339f5"
+        ]
+       },
+       "id": "38de4bfc51e8a7a24f188bdd362d7f38",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 1129544,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "07f2c23e-3fa9-5c98-9a62-50112a638384"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 33886,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "528eb8459b0e565108cfa992229737ff"
+        ]
+       },
+       "id": "26f4de925cdc7408dc59226970667082",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 1129544,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "8ca65778-abcb-5ec2-8938-ccb13020fb88"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 33886,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "96f5aaeaebbe4c6885fdcdaab967301e"
+        ]
+       },
+       "id": "ba79bfc9031f85c4f0adfc8fea27791d",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 1129544,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "5feb51e8-348d-5141-b7fb-54a77fae34eb"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 15423,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "71ff6ec999e0ee6c1e6cb4ea2c7d3905"
+        ]
+       },
+       "id": "395b3d2e691df024e8eb17cefabb41e1",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 514106,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "23f8a8d2-dde9-59f6-9085-916f6ea4007c"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 20304,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "15efce159b64ee11b0dcb019dd6f5e09"
+        ]
+       },
+       "id": "c79a3baf11ce86201ea4aa32328cb006",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 676810,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "14914a5d-8b2f-508f-a8c3-589083e0668e"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 20304,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "0b61a3c8933fee38c92d9c6fd67d77fe"
+        ]
+       },
+       "id": "a36ef23ad3ff723f12530ac1b92ef037",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 676810,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "fbe374cb-2a38-5109-84d8-264b85e6119c"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 23835,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "48af7a80f80f33013ddce0fd8cbc666b"
+        ]
+       },
+       "id": "8b7abb7178479ee4202514d40685bbf3",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 794500,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "ff1f6e78-6623-5be5-b9ba-8a16fb9734f4"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 15423,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "3d2f11b830ec81c30e8ab9c85cf3e0c1"
+        ]
+       },
+       "id": "6d9a068c6592d064763efcdf1727ff1a",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 514106,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "efe2896a-8750-53ba-ab84-ae204517f3dd"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 20304,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "3bfd1b095c9d8fa04f5ad67705b1ec0b"
+        ]
+       },
+       "id": "e9ba04c22a4e228d172fb36f3a828bbe",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 676810,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "f7c82c7b-74ce-5982-874c-6b74a83eb3d3"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 20304,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "dde87c6241f053f4eb3df88cf1398a84"
+        ]
+       },
+       "id": "03000a5298c5953c466c327a42a1178f",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 676810,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "552cb197-f4ed-5ecb-9ef3-65e72d8316fc"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 23835,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "46fd856e694915c9ff7a303b1bbe411a"
+        ]
+       },
+       "id": "86a43b6265f3fcaa0ebbd21241906818",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 794500,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "866b50ce-8671-564c-bf98-d8e433eec60e"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 20304,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "8384f0761ebac7a55ad92396e5fcde23"
+        ]
+       },
+       "id": "6290519067739f58a14003854fa3718f",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 676810,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "6ec666e7-cbc5-577f-9dac-fcb2f55a3c17"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 23835,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "2ef926a8d1c752aec053ae6b50dada3d"
+        ]
+       },
+       "id": "f45092eba371f179f3630544d0fbd667",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 794500,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "024a380f-3c70-5b56-8928-851f21f01510"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 20304,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "eb7433e1ef2ef796175472a80056b4b6"
+        ]
+       },
+       "id": "cb72607130c07b48279cd9548eca3596",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 676810,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "722ff368-d5bb-5ceb-8124-06bf462ac6aa"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 23835,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "d723a442a4f2ec37bd446718eb83116e"
+        ]
+       },
+       "id": "23253a52e4ec2707e6e801a20c7d2eaf",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 794500,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "8160f276-0f44-5c17-be5e-177021d077c1"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 15423,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "0348b5b4fff1866707e03627a7f89d8a"
+        ]
+       },
+       "id": "9d1b19e2a8fcfbf807d5dc19839d8b91",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 514106,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "548be006-95db-585b-9786-c5947d16e60d"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 20304,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "4e6ea49a0a668b9cee7b9223fb0e772e"
+        ]
+       },
+       "id": "56e7c41246ee1ca2dd77a719697c5167",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 676810,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "de1c1695-f2e2-5d05-b2f5-e19c521018c1"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 20304,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "9b3760a20da2153420cc32acf6139e9a"
+        ]
+       },
+       "id": "2e172b6ab21b1be7a6588f470d38c6f2",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 676810,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "5a58ce23-a6f7-5fba-9b41-54d951bbb1d8"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 23835,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "c4ab6092ade92d7da95dabd3b9d0d208"
+        ]
+       },
+       "id": "4a127704c99c78faa10bbc74c9bc629e",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 794500,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "42962d87-8cd4-529b-89ff-5b2501f1d76f"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 20304,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "2589c7c4c42a58ed850115e4594887ff"
+        ]
+       },
+       "id": "0c09282af43fbabb38be01a4a81d4112",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 676810,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "00b56aea-dab8-5021-a23d-d73e88fd5d5b"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 23835,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "953958e00017d8a20724455def43badd"
+        ]
+       },
+       "id": "bb0cbfe7ecf1f6203ba6ee8a109ac862",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 794500,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "330cd12f-52a0-5bc5-b2c0-e951e2444069"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 20304,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "448af433d78b59453ba0902e9cea462b"
+        ]
+       },
+       "id": "429626cc55a61f5dd9203a71dec43152",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 676810,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "572ff196-3fc9-5dc8-a8d2-f894a43fbc72"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 23835,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "d48573c1ed0a3ef2a6ec560a72bd704f"
+        ]
+       },
+       "id": "a552122b2682d657c27093199edc027a",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 794500,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "af98acf7-f8f3-562c-b1a5-b56242a411e2"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 20304,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "648486bc711b0d1ade8027dbcaa1f65a"
+        ]
+       },
+       "id": "f8d9d9b437a2414bbe9143d624b7f46f",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 676810,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "c3949b2d-264d-52ba-a7f4-4dfd83913ad8"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 23835,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "907deab7ac110fbbd3b0aa127595fa13": [
+         "67e29c8c05d469d65f71337e91c06160"
+        ]
+       },
+       "id": "879544a13063eddf4f6a9f3fd9639a2c",
+       "offerHash": "04c4ab241f5ee8fe97f5edd771c51f9f",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 794500,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "afb2a292-0a55-5d45-b71f-243394d3940a"
+      }
+     ],
+     "routeIds": [
+      "7046aeb01376ecff706df618b81998aa"
+     ],
+     "warnings": []
+    },
+    "0637766ae2cf1815bf0e845eef6dc274": {
+     "id": "0637766ae2cf1815bf0e845eef6dc274",
+     "offerSetId": "b6eae2acb3dd883b0803d99f36cefffc",
+     "offerVariants": [
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 37003,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "84b15f2f3fe8810fc067d97e581e95f6": [
+         "861d7a269060794c6220d259dd2d32c7"
+        ]
+       },
+       "id": "e24d5409c2271b6eceb9cc723578de00",
+       "offerHash": "0637766ae2cf1815bf0e845eef6dc274",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 1233438,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "b7959c47-342f-54af-b8d7-9194025ddc3c"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 88719,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "84b15f2f3fe8810fc067d97e581e95f6": [
+         "b4bfdd7db15a5304695dcac4e6caf181"
+        ]
+       },
+       "id": "0168ebc7b2ecad9ad6bfc0578f567c78",
+       "offerHash": "0637766ae2cf1815bf0e845eef6dc274",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 2957328,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "6e4c2619-4b08-55e6-8796-f4a04e931c1a"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 19408,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "84b15f2f3fe8810fc067d97e581e95f6": [
+         "b5e1648e292813cccd935a90a867232a"
+        ]
+       },
+       "id": "4590348eaa7872f93d6b04751626d04e",
+       "offerHash": "0637766ae2cf1815bf0e845eef6dc274",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 646965,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "55fe3afc-b35b-5f1d-8819-2452e9859f43"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 26867,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "84b15f2f3fe8810fc067d97e581e95f6": [
+         "ae6c5ce625844ca25868fbeb9c062c0f"
+        ]
+       },
+       "id": "e3f1efdd062b2b1fb10b39ed33b8c709",
+       "offerHash": "0637766ae2cf1815bf0e845eef6dc274",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 895588,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "c7934f7e-7ee8-5c86-805e-49710252d378"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 28533,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "84b15f2f3fe8810fc067d97e581e95f6": [
+         "4b32fd5b79f8920301cb90985774328b"
+        ]
+       },
+       "id": "5b3d8ad5cdfe0c5dbde4ef7f943dde08",
+       "offerHash": "0637766ae2cf1815bf0e845eef6dc274",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 951128,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "278f8c94-845c-5372-9413-e5026ed67c09"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 17430,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "84b15f2f3fe8810fc067d97e581e95f6": [
+         "6284e867826ef7a9e46f39d6fed81fe1"
+        ]
+       },
+       "id": "72b105ee4e3d4c94629798438bec91f8",
+       "offerHash": "0637766ae2cf1815bf0e845eef6dc274",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 581025,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "dcaa166d-0214-5ba5-a472-e8a0acc3fdca"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 17430,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "84b15f2f3fe8810fc067d97e581e95f6": [
+         "e6e9defdc54a1fdab8442a8145ce70f4"
+        ]
+       },
+       "id": "ae490da1a37615593458768977cf46c3",
+       "offerHash": "0637766ae2cf1815bf0e845eef6dc274",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 581025,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "cd01795c-6614-5944-ae78-5611394016f3"
+      },
+      {
+       "actions": [
+        {
+         "type": "DETAIL"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 18630,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "84b15f2f3fe8810fc067d97e581e95f6": [
+         "a4a0e4153e5ed285a528381ad7c393c1"
+        ]
+       },
+       "id": "95f387e9eef30a31d4280c8c8ea7dd20",
+       "offerHash": "0637766ae2cf1815bf0e845eef6dc274",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 621025,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "c318fced-15fa-5524-a53d-4e962284c29f"
+      }
+     ],
+     "routeIds": [
+      "97a676a23e6e7e170f9228d8317df8f8"
+     ],
+     "warnings": []
+    }
+   },
+   "future": {},
+   "past": {}
+  },
+  "requestDateTime": "2026-08-18T03:07:41+03:00",
+  "warnings": []
+ },
+ {
+  "dictionary": {
+   "avia": {
+    "conditions": null,
+    "feedback": null,
+    "points": null,
+    "vehicles": null,
+    "voyages": null
+   },
+   "bus": {
+    "conditions": null,
+    "feedback": null,
+    "points": null,
+    "voyages": {}
+   },
+   "car": {
+    "conditions": null,
+    "points": null,
+    "vehicles": null,
+    "voyages": null
+   },
+   "common": {
+    "bookingUpsales": {},
+    "carriers": {
+     "dcecb0cc5254edac4db4922db2114390": {
+      "displaySettings": {
+       "logo": {
+        "mobile": ""
+       }
+      },
+      "name": "ФПК"
+     },
+     "1a903bc6030cba498e84982254358811": {
+      "displaySettings": {
+       "logo": {
+        "mobile": ""
+       }
+      },
+      "name": "ДОСС"
+     }
+    },
+    "cities": {},
+    "countries": {},
+    "currency": {},
+    "fareApplications": {},
+    "routes": {
+     "e0166b999e43d47444332eb96f0fb512": {
+      "id": "e0166b999e43d47444332eb96f0fb512",
+      "segmentIds": [
+       "f76c51b73bd4643a8fe97589e9e31e01"
+      ],
+      "transferIds": null
+     },
+     "ccfdb9492442c18471d78171692fe8a1": {
+      "id": "ccfdb9492442c18471d78171692fe8a1",
+      "segmentIds": [
+       "3a9b24884691e1edcabe48324e517d3d"
+      ],
+      "transferIds": null
+     }
+    },
+    "segments": {
+     "f76c51b73bd4643a8fe97589e9e31e01": {
+      "arrivalDateTime": "2026-09-21T08:30:00+03:00",
+      "arrivalGeoPointId": 2958266,
+      "arrivalTerminal": "",
+      "bookingGroupId": 0,
+      "carriers": [
+       {
+        "id": "dcecb0cc5254edac4db4922db2114390",
+        "type": "operating"
+       }
+      ],
+      "departureDateTime": "2026-09-20T23:30:00+03:00",
+      "departureGeoPointId": 2958868,
+      "departureTerminal": "",
+      "duration": 540,
+      "id": "f76c51b73bd4643a8fe97589e9e31e01",
+      "type": "train",
+      "vehicleId": "36ae223a26b3b47ab67b440318e4d9cd",
+      "voyageNumber": "c0bdd6527f8df6eac1d373e920d30669"
+     },
+     "3a9b24884691e1edcabe48324e517d3d": {
+      "arrivalDateTime": "2026-09-20T13:35:00+03:00",
+      "arrivalGeoPointId": 2958266,
+      "arrivalTerminal": "",
+      "bookingGroupId": 0,
+      "carriers": [
+       {
+        "id": "1a903bc6030cba498e84982254358811",
+        "type": "operating"
+       }
+      ],
+      "departureDateTime": "2026-09-20T09:30:00+03:00",
+      "departureGeoPointId": 2958868,
+      "departureTerminal": "",
+      "duration": 245,
+      "id": "3a9b24884691e1edcabe48324e517d3d",
+      "type": "train",
+      "vehicleId": "2ceac3880e2c190e16119f795286032a",
+      "voyageNumber": "bf78c572abf17a6df4c9e2a552eb71b0"
+     }
+    },
+    "transfers": {}
+   },
+   "etrain": {},
+   "train": {
+    "conditions": {},
+    "feedback": {},
+    "payLaterTerms": [],
+    "points": {},
+    "vehicles": {},
+    "voyages": {
+     "c0bdd6527f8df6eac1d373e920d30669": {
+      "finalArrivalGeoPointId": 2958266,
+      "initialDepartureGeoPointId": 2958868,
+      "number": "004А",
+      "numberForPassengers": "004А",
+      "onlineRegistrationStatus": "opened",
+      "openSalesDatetime": "2026-05-24T08:00:00+03:00"
+     },
+     "bf78c572abf17a6df4c9e2a552eb71b0": {
+      "finalArrivalGeoPointId": 2958266,
+      "initialDepartureGeoPointId": 2958868,
+      "number": "760А",
+      "numberForPassengers": "760А",
+      "onlineRegistrationStatus": "opened",
+      "openSalesDatetime": "2026-06-23T08:00:00+03:00"
+     }
+    }
+   }
+  },
+  "offers": {
+   "actual": {
+    "045c00a2bb5aff8211c0a7c89ab89eea": {
+     "id": "045c00a2bb5aff8211c0a7c89ab89eea",
+     "offerSetId": "f13bdaf0485dadb7cb14cb0b686138f2",
+     "offerVariants": [
+      {
+       "actions": [
+        {
+         "type": "PRE_ORDER"
+        },
+        {
+         "type": "NOTIFICATION"
+        }
+       ],
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "496b4bc8c910db7680f111ee16d712c4"
+        ]
+       },
+       "id": "f83a0168e63d43e46dd3dfeb335dcca4",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "absent",
+        "value": {
+         "amount": 0,
+         "currencyCode": "",
+         "fraction": 1
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "5fffef26-cb2c-5655-a1b5-321cd1de90b4"
+      },
+      {
+       "actions": [
+        {
+         "type": "NOTIFICATION"
+        }
+       ],
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "46fc48deb49d48a149afc7a1b9bf0e0a"
+        ]
+       },
+       "id": "06ea5daff959e58319d7c4a61107f25f",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "absent",
+        "value": {
+         "amount": 0,
+         "currencyCode": "",
+         "fraction": 1
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "9ea0cb80-652a-54b3-acb5-1dffc879c36d"
+      },
+      {
+       "actions": [
+        {
+         "type": "NOTIFICATION"
+        }
+       ],
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "a2385cfafc58ef8aec7e28a743b8eed0"
+        ]
+       },
+       "id": "5ade89ff9b3a424200e24951a755f068",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "absent",
+        "value": {
+         "amount": 0,
+         "currencyCode": "",
+         "fraction": 1
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "20fe5339-96fc-597b-ab73-1be775bc76c5"
+      },
+      {
+       "actions": [
+        {
+         "type": "NOTIFICATION"
+        }
+       ],
+       "bonuses": [
+        {
+         "promoActionCodes": [],
+         "target": "tutu",
+         "total": {
+          "amount": 25393,
+          "currencyCode": "RUB",
+          "fraction": 100
+         }
+        }
+       ],
+       "debugInfo": "",
+       "fareApplications": {
+        "f76c51b73bd4643a8fe97589e9e31e01": [
+         "785c296eff63b2d3f9d7684e6ab66c25"
+        ]
+       },
+       "id": "dedd410e1117bc9f82091e83112f744c",
+       "offerHash": "045c00a2bb5aff8211c0a7c89ab89eea",
+       "price": {
+        "type": "approximate",
+        "value": {
+         "amount": 846464,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "ccb908b2-c350-547c-b7e8-bf053119ef57"
+      }
+     ],
+     "routeIds": [
+      "e0166b999e43d47444332eb96f0fb512"
+     ],
+     "warnings": []
+    },
+    "06825f46b6c13c099d88856a270778eb": {
+     "id": "06825f46b6c13c099d88856a270778eb",
+     "offerSetId": "8ce6d3ccea8f55dc537b2c0f785d4df0",
+     "offerVariants": [
+      {
+       "actions": [
+        {
+         "type": "NOTIFICATION"
+        }
+       ],
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "3a9b24884691e1edcabe48324e517d3d": [
+         "ea3bcc8b83d7052c8aa4a908e1de7b31"
+        ]
+       },
+       "id": "00964c2f123efea69a931d145dc3cf35",
+       "offerHash": "06825f46b6c13c099d88856a270778eb",
+       "price": {
+        "type": "absent",
+        "value": {
+         "amount": 0,
+         "currencyCode": "",
+         "fraction": 1
+        }
+       },
+       "score": 0,
+       "status": {
+        "saleStatus": "ALLOWED"
+       },
+       "uuid": "b454f95f-a8a1-5b55-817e-c8ee3f32907f"
+      }
+     ],
+     "routeIds": [
+      "ccfdb9492442c18471d78171692fe8a1"
+     ],
+     "warnings": []
+    }
+   },
+   "future": {},
+   "past": {}
+  },
+  "requestDateTime": "2026-08-18T03:07:41+03:00",
+  "warnings": []
+ }
+]
