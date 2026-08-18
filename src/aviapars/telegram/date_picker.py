@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from aviapars.domain.dates import (
+    ANY_WINDOW_DAYS,
     AROUND_DAYS,
+    MAX_WINDOW_DAYS,
     DateSelection,
     any_date,
     around_date,
@@ -17,16 +19,23 @@ from aviapars.domain.dates import (
 # same date-entry steps as the /add wizard", differing only in what the terminal
 # step does with the resulting selection.
 
+_ANY_WINDOW_FLOOR = 7
+
 _PROMPTS = {
     "exact": "Введите дату: ДД.ММ.ГГГГ, например 18.09.2026",
     "around": f"Введите опорную дату: ДД.ММ.ГГГГ. Проверю ±{AROUND_DAYS} дня вокруг неё.",
     "range": "Введите начало и конец диапазона: ДД.ММ.ГГГГ ДД.ММ.ГГГГ, например 10.09.2026 20.09.2026",
+    "any": (
+        f"На сколько дней вперёд смотреть? Число от {_ANY_WINDOW_FLOOR} до {MAX_WINDOW_DAYS}, "
+        f"например {ANY_WINDOW_DAYS}."
+    ),
 }
 
 _ERRORS = {
     "exact": "Не понял дату. Формат: ДД.ММ.ГГГГ, например 18.09.2026",
     "around": "Не понял дату. Формат: ДД.ММ.ГГГГ, например 18.09.2026",
     "range": "Не понял диапазон. Две даты через пробел: 10.09.2026 20.09.2026",
+    "any": f"Введите число дней от {_ANY_WINDOW_FLOOR} до {MAX_WINDOW_DAYS}, например {ANY_WINDOW_DAYS}.",
 }
 
 _PAST = "Эта дата уже в прошлом. Введите дату в будущем."
@@ -38,7 +47,8 @@ def prompt_for(kind: str) -> str | None:
 
 
 def selection_for(kind: str) -> DateSelection | None:
-    return any_date() if kind == "any" else None
+    """None means this kind needs a follow-up text prompt (see prompt_for)."""
+    return None
 
 
 def parse_selection(kind: str, text: str, today: date) -> DateSelection | str:
@@ -51,6 +61,15 @@ def parse_selection(kind: str, text: str, today: date) -> DateSelection | str:
         if end < today:
             return _PAST
         return date_range(max(start, today), end)
+
+    if kind == "any":
+        try:
+            length_days = int(text.strip())
+        except ValueError:
+            return _ERRORS["any"]
+        if not _ANY_WINDOW_FLOOR <= length_days <= MAX_WINDOW_DAYS:
+            return _ERRORS["any"]
+        return any_date(length_days=length_days)
 
     day = parse_date(text)
     if day is None:
