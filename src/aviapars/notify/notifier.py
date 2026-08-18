@@ -45,13 +45,16 @@ class Notifier:
         self._daily_cap = daily_cap
         self._source_names = source_names or {}
 
-    async def send_deal(self, *, user: User, route: Route, itinerary: Itinerary, confirmed: bool) -> bool:
+    async def send_deal(
+        self, *, user: User, route: Route, itinerary: Itinerary, confirmed: bool, now: datetime | None = None
+    ) -> bool:
         """Returns True if delivered now, False if suppressed or deferred to
         quiet hours (§9 anti-noise, still applies alongside the threshold gate
         in domain/dealer.py). `itinerary` may be a direct offer (one leg) or
         a hub-composed one (two, §8) — dedupe/records key off a hash of the
-        whole itinerary, not a single offer."""
-        now = datetime.now(timezone.utc)
+        whole itinerary, not a single offer. `now` is injectable for tests;
+        real callers never pass it."""
+        now = now or datetime.now(timezone.utc)
         all_legs = [leg for offer in itinerary.offers for leg in offer.legs]
         # local, not UTC — see telegram/format.py's format_deal_card for why.
         depart_date = all_legs[0].depart_local.date().isoformat()
@@ -79,6 +82,19 @@ class Notifier:
         tier = "confirmation" if confirmed else "discovery"
 
         if is_quiet_hours(user, now):
+            # Record now, not at delivery — can_send() above reads notifications_sent, and
+            # without this the dedupe gate can't see a deferred deal at all: the same price
+            # would be re-enqueued on every poll cycle for the rest of the night instead of
+            # being suppressed by the cooldown it's supposed to respect.
+            await self._repo.record(
+                route_id=route.id,
+                dedupe_key=dedupe_key,
+                itinerary_hash=itinerary_hash,
+                price_minor=itinerary.price_minor,
+                mode=mode,
+                depart_date=depart_date,
+                tier_at_send=tier,
+            )
             await self._jobs.enqueue(
                 "notify",
                 route_id=route.id,
@@ -86,12 +102,6 @@ class Notifier:
                 payload={
                     "chat_id": user.tg_user_id,
                     "text": text,
-                    "dedupe_key": dedupe_key,
-                    "itinerary_hash": itinerary_hash,
-                    "price_minor": itinerary.price_minor,
-                    "mode": mode,
-                    "depart_date": depart_date,
-                    "tier": tier,
                 },
             )
             return False
@@ -110,18 +120,11 @@ class Notifier:
 
     async def deliver_pending(self, job: Job) -> None:
         """Called by the scheduler for due kind='notify' jobs — the delivery
-        half of a quiet-hours deferral from send_deal above."""
+        half of a quiet-hours deferral from send_deal above. The notifications_sent
+        row was already written when the job was enqueued (see send_deal) — writing
+        it again here would violate dedupe_key's UNIQUE constraint."""
         p = job.payload
         await self._bot.send_message(p["chat_id"], p["text"])
-        await self._repo.record(
-            route_id=job.route_id,  # type: ignore[arg-type]
-            dedupe_key=p["dedupe_key"],
-            itinerary_hash=p["itinerary_hash"],
-            price_minor=p["price_minor"],
-            mode=p["mode"],
-            depart_date=p["depart_date"],
-            tier_at_send=p["tier"],
-        )
 
 
 def _combined_hash(itinerary: Itinerary) -> str:

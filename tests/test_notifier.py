@@ -1,15 +1,93 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import aiosqlite
 import pytest
 
-from aviapars.db.models import User
+from aviapars.adapters.base import Leg, Mode, Offer, PlaceRef, Tier
+from aviapars.db.models import Route, User
+from aviapars.db.repo_jobs import JobsRepo
 from aviapars.db.repo_notifications import NotificationsRepo
+from aviapars.domain.combiner import Itinerary
 from aviapars.notify.dedupe import DedupeGate
-from aviapars.notify.notifier import is_quiet_hours, next_quiet_hours_end
+from aviapars.notify.notifier import Notifier, is_quiet_hours, next_quiet_hours_end
+
+JOBS_TABLE = """
+CREATE TABLE jobs (
+    id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL,
+    route_id INTEGER,
+    priority INTEGER NOT NULL DEFAULT 0,
+    payload_json TEXT,
+    state TEXT NOT NULL DEFAULT 'queued',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    run_after TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    finished_at TEXT
+);
+"""
+
+
+def _route(*, route_id: int = 1) -> Route:
+    return Route(
+        id=route_id,
+        user_id=1,
+        title="LED -> MOW",
+        origin_place_id=1,
+        dest_place_id=2,
+        mode_pref="plane",
+        date_mode="fixed",
+        fixed_dates=["2026-09-18"],
+        window_start_date=None,
+        window_start_offset_days=None,
+        window_length_days=None,
+        date_cursor=0,
+        max_price=600000,
+        max_price_currency="RUB",
+        pax=1,
+        allow_hub_routing=False,
+        hub_place_ids=None,
+        max_hops=0,
+        max_transfer_min=None,
+        max_total_hours=None,
+        poll_interval_min=60,
+        active=True,
+        next_run_at=None,
+        last_run_at=None,
+        created_at="",
+    )
+
+
+def _itinerary(*, price_minor: int = 500000, itinerary_hash: str = "h1") -> Itinerary:
+    place_a = PlaceRef(place_id=1, iata="LED", yandex_code=None, rzd_code=None, city_id=None)
+    place_b = PlaceRef(place_id=2, iata="MOW", yandex_code=None, rzd_code=None, city_id=None)
+    now = datetime(2026, 9, 18, 6, 0, tzinfo=timezone.utc)
+    leg = Leg(mode=Mode.PLANE, from_place=place_a, to_place=place_b, depart_utc=now, depart_local=now)
+    offer = Offer(
+        legs=(leg,),
+        price_minor=price_minor,
+        currency="RUB",
+        deep_link=None,
+        source_id="pobeda_direct",
+        tier=Tier.CONFIRMATION,
+        observed_at=now,
+        source_cached_at=now,
+        expires_at=None,
+        confidence=1.0,
+        itinerary_hash=itinerary_hash,
+    )
+    return Itinerary(offers=(offer,), price_minor=price_minor, currency="RUB")
+
+
+class _FakeBot:
+    def __init__(self) -> None:
+        self.sent: list[tuple[int, str]] = []
+
+    async def send_message(self, chat_id: int, text: str) -> object:
+        self.sent.append((chat_id, text))
+        return object()
 
 MIGRATION_TABLES = """
 CREATE TABLE notifications_sent (
@@ -70,6 +148,7 @@ def test_next_quiet_hours_end_rolls_to_tomorrow_if_already_past() -> None:
 async def db(tmp_path) -> aiosqlite.Connection:
     conn = await aiosqlite.connect(tmp_path / "notif.db")
     await conn.executescript(MIGRATION_TABLES)
+    await conn.executescript(JOBS_TABLE)
     yield conn
     await conn.close()
 
@@ -111,3 +190,61 @@ async def test_dedupe_gate_enforces_daily_cap(db: aiosqlite.Connection) -> None:
         )
 
     assert await gate.can_send(route_id=2, itinerary_hash="brand-new", now=now, cooldown_h=12, daily_cap=3) is False
+
+
+async def test_quiet_hours_defer_records_immediately_so_dedupe_sees_it(db: aiosqlite.Connection) -> None:
+    # regression: the notifications_sent row used to be written only at delivery time
+    # (deliver_pending), not at enqueue time — so during quiet hours, can_send() had
+    # nothing to read and the same deal was re-enqueued on every poll cycle all night.
+    #
+    # repo.record() stamps sent_at from the real wall clock (see repo_notifications.py),
+    # so `now` here has to track real time too — a fictional pinned date would make the
+    # cooldown comparison (now - real_sent_at) meaningless. An always-quiet window
+    # (00:00-23:59) sidesteps needing to land `now` inside a specific quiet-hours slice;
+    # that boundary logic is already covered by test_quiet_hours_wraps_midnight.
+    repo = NotificationsRepo(db)
+    jobs = JobsRepo(db)
+    gate = DedupeGate(repo)
+    bot = _FakeBot()
+    notifier = Notifier(bot, repo, jobs, gate, cooldown_h=12, daily_cap=3)
+
+    user = _user(start="00:00", end="23:59")
+    route = _route()
+    itinerary = _itinerary()
+    now = datetime.now(timezone.utc)
+
+    first = await notifier.send_deal(user=user, route=route, itinerary=itinerary, confirmed=True, now=now)
+    assert first is False  # deferred, not sent
+    assert bot.sent == []
+
+    # a second poll cycle moments later finds the identical price again
+    second = await notifier.send_deal(user=user, route=route, itinerary=itinerary, confirmed=True, now=now)
+    assert second is False
+    assert bot.sent == []
+
+    pending = await jobs.due(now=next_quiet_hours_end(user, now) + timedelta(minutes=1), limit=10)
+    assert len(pending) == 1  # only one job queued, not two, despite two send_deal calls
+
+
+async def test_deliver_pending_does_not_double_record(db: aiosqlite.Connection) -> None:
+    # regression: deliver_pending used to call repo.record() again with the same
+    # dedupe_key already written at enqueue time — a UNIQUE constraint violation that
+    # would crash the scheduler's notify-job delivery instead of just sending the message.
+    repo = NotificationsRepo(db)
+    jobs = JobsRepo(db)
+    gate = DedupeGate(repo)
+    bot = _FakeBot()
+    notifier = Notifier(bot, repo, jobs, gate, cooldown_h=12, daily_cap=3)
+
+    user = _user(start="00:00", end="23:59")
+    route = _route()
+    itinerary = _itinerary()
+    now = datetime.now(timezone.utc)
+
+    await notifier.send_deal(user=user, route=route, itinerary=itinerary, confirmed=True, now=now)
+    pending = await jobs.due(now=next_quiet_hours_end(user, now) + timedelta(minutes=1), limit=10)
+    assert len(pending) == 1
+
+    await notifier.deliver_pending(pending[0])  # must not raise
+
+    assert bot.sent == [(user.tg_user_id, bot.sent[0][1])]
