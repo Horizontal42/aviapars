@@ -131,6 +131,71 @@ async def test_cheap_direct_flight_triggers_notification(db: aiosqlite.Connectio
     assert row[0] >= 1
 
 
+async def test_route_deleted_mid_cycle_does_not_crash_the_notify_step(
+    db: aiosqlite.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: "🔍 Проверить сейчас" on a route the user deletes while a slow
+    search is still in flight left `route.id` gone by the time observation-recording
+    ran — an unhandled FOREIGN KEY IntegrityError that crashed the whole update and,
+    since it happened before the notify step in process_route(), silently swallowed
+    the notification too. Reproduced here by actually deleting the route out from
+    under an in-flight call, same as the live crash."""
+    await db.execute("PRAGMA foreign_keys = ON")
+    origin_id, dest_id = await _seed_places(db)
+
+    users_repo = UsersRepo(db)
+    user = await users_repo.get_or_create(555, is_admin=True)
+    user = await _disable_quiet_hours(db, user)
+
+    routes_repo = RoutesRepo(db)
+    route = await routes_repo.create(
+        user_id=user.tg_user_id,
+        title="Екатеринбург → Сочи",
+        origin_place_id=origin_id,
+        dest_place_id=dest_id,
+        mode_pref="plane",
+        date_mode="fixed",
+        fixed_dates=["2026-09-29"],
+        window_start_offset_days=None,
+        window_length_days=None,
+        max_price=700000,
+        max_price_currency="RUB",
+    )
+    await routes_repo.delete(route.id)  # gone before process_route() ever touches the DB again
+
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+
+    async def fake_fetch_month(self, session, origin, dest, month, currency):
+        return payload["data"], True
+
+    monkeypatch.setattr(TravelpayoutsAdapter, "_fetch_month", fake_fetch_month)
+
+    registry = AdapterRegistry(
+        db, http_concurrency_global=2, http_concurrency_interactive=1, http_concurrency_per_source=1
+    )
+    registry.register(TravelpayoutsAdapter(token="fake", marker="fake"))
+
+    bot = FakeBot()
+    notifier = Notifier(bot, NotificationsRepo(db), JobsRepo(db), DedupeGate(NotificationsRepo(db)), cooldown_h=12, daily_cap=3)
+
+    await process_route(  # must not raise
+        route,
+        user=user,
+        registry=registry,
+        places_repo=PlacesRepo(db),
+        routes_repo=routes_repo,
+        observations_repo=ObservationsRepo(db),
+        notifier=notifier,
+    )
+
+    async with db.execute("SELECT COUNT(*) FROM price_observations") as cur:
+        row = await cur.fetchone()
+    assert row[0] == 0  # the doomed insert didn't happen, but nothing else crashed either
+    # the deal still reached the user — record()'s own FK failure (notify/notifier.py) is
+    # caught the same way, logged, and does not stop the message that already went out
+    assert len(bot.sent) == 1
+
+
 async def test_digest_route_defers_instead_of_messaging_immediately(
     db: aiosqlite.Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:

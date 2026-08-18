@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from datetime import datetime, time, timedelta, timezone
 from typing import Protocol
 from zoneinfo import ZoneInfo
+
+import aiosqlite
 
 from aviapars.db.models import Route, User
 from aviapars.db.repo_jobs import Job, JobsRepo
@@ -12,6 +15,8 @@ from aviapars.domain.combiner import Itinerary, itinerary_modes
 from aviapars.domain.dealer import threshold_for
 from aviapars.notify.dedupe import DedupeGate
 from aviapars.telegram.format import format_deal_card
+
+log = logging.getLogger(__name__)
 
 
 class TelegramSender(Protocol):
@@ -102,15 +107,22 @@ class Notifier:
             # being suppressed by the cooldown it's supposed to respect. Same reasoning
             # covers digest mode: without recording at enqueue time, a route polled again
             # before its digest fires could queue the same qualifying price twice.
-            await self._repo.record(
-                route_id=route.id,
-                dedupe_key=dedupe_key,
-                itinerary_hash=itinerary_hash,
-                price_minor=itinerary.price_minor,
-                mode=mode,
-                depart_date=depart_date,
-                tier_at_send=tier,
-            )
+            try:
+                await self._repo.record(
+                    route_id=route.id,
+                    dedupe_key=dedupe_key,
+                    itinerary_hash=itinerary_hash,
+                    price_minor=itinerary.price_minor,
+                    mode=mode,
+                    depart_date=depart_date,
+                    tier_at_send=tier,
+                )
+            except aiosqlite.IntegrityError:
+                # route_id's FK — the route was deleted between crosses_threshold() finding
+                # this deal and getting here (a slow multi-adapter search leaves a wide window
+                # for that race). Nothing to defer for a route that no longer exists.
+                log.warning("route %s vanished before its deferred deal could be recorded", route.id)
+                return False
             await self._jobs.enqueue(
                 "notify",
                 route_id=route.id,
@@ -120,17 +132,35 @@ class Notifier:
                     "text": text,
                 },
             )
+            log.info(
+                "deferred deal for route %s: %s %s on %s (hash %s)",
+                route.id, mode, itinerary.price_minor, depart_date, itinerary_hash,
+            )
             return False
 
         await self._bot.send_message(user.tg_user_id, text)
-        await self._repo.record(
-            route_id=route.id,
-            dedupe_key=dedupe_key,
-            itinerary_hash=itinerary_hash,
-            price_minor=itinerary.price_minor,
-            mode=mode,
-            depart_date=depart_date,
-            tier_at_send=tier,
+        try:
+            await self._repo.record(
+                route_id=route.id,
+                dedupe_key=dedupe_key,
+                itinerary_hash=itinerary_hash,
+                price_minor=itinerary.price_minor,
+                mode=mode,
+                depart_date=depart_date,
+                tier_at_send=tier,
+            )
+        except aiosqlite.IntegrityError:
+            # Same race as above, but the message is already sent by this point — recording
+            # is bookkeeping for dedupe/history, not a precondition for delivery, so a route
+            # deleted out from under us here is a log line, not a reason to report failure.
+            log.warning("route %s vanished right after its deal was sent (dedupe row not recorded)", route.id)
+        # No log line here before this fix — the only way to answer "why did I get notified
+        # three times tonight" was to guess from notifications_sent, which doesn't record
+        # *why* a poll considered something new (a different depart_date within a flexible
+        # window is a legitimately distinct itinerary_hash, not a duplicate).
+        log.info(
+            "sent deal for route %s: %s %s on %s (hash %s)",
+            route.id, mode, itinerary.price_minor, depart_date, itinerary_hash,
         )
         return True
 

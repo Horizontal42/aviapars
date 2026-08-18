@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 from datetime import date
+
+import aiosqlite
 
 from aviapars.adapters.base import Mode, Tier
 from aviapars.adapters.registry import AdapterRegistry
@@ -14,6 +17,8 @@ from aviapars.domain.dates import DatePlan, resolve_date_plan, selection_from_ro
 from aviapars.domain.dealer import crosses_threshold
 from aviapars.domain.places import allowed_modes
 from aviapars.notify.notifier import Notifier
+
+log = logging.getLogger(__name__)
 
 
 async def process_route(
@@ -89,7 +94,15 @@ async def process_route(
             if offer.itinerary_hash in recorded_hashes:
                 continue
             recorded_hashes.add(offer.itinerary_hash)
-            await observations_repo.record(route.id, offer)
+            try:
+                await observations_repo.record(route.id, offer)
+            except aiosqlite.IntegrityError:
+                # Observed live: "🔍 Проверить сейчас" on a route the user deletes mid-search
+                # (a slow cycle against several confirmation adapters can run minutes) leaves
+                # `route.id` gone by the time this INSERT runs — a FOREIGN KEY failure that,
+                # unhandled, used to crash the whole update and skip the notify step below for
+                # every other offer in this same cycle, not just the doomed one.
+                log.warning("observation insert for route %s failed (route likely deleted mid-cycle)", route.id)
 
     for deal in _deals_to_send(route, outcome.itineraries):
         confirmed = all(offer.tier == Tier.CONFIRMATION for offer in deal.offers)
