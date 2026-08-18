@@ -10,6 +10,7 @@ from aviapars.adapters.registry import AdapterRegistry
 from aviapars.adapters.rzd_direct import RzdDirectAdapter
 from aviapars.adapters.s7_direct import S7DirectAdapter
 from aviapars.adapters.travelpayouts import TravelpayoutsAdapter
+from aviapars.adapters.tutu_avia_direct import TutuAviaDirectAdapter
 from aviapars.adapters.tutu_rail_direct import TutuRailDirectAdapter
 from aviapars.adapters.yandex_rasp import YandexRaspAdapter
 from aviapars.config import settings
@@ -61,6 +62,7 @@ async def main() -> None:
         registry.register(
             PobedaDirectAdapter(proxy_url=settings.pobeda_proxy_url, cache_ttl_s=settings.cache_ttl_s.airline_direct)
         )
+        registry.register(TutuAviaDirectAdapter(cache_ttl_s=settings.cache_ttl_s.airline_direct))
 
         sessions_repo = SessionsRepo(db)
         registry.register(
