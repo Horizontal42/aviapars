@@ -65,9 +65,16 @@ class AeroflotDirectAdapter:
     # one POST per probe date, nothing before the loop
     total_timeout_s = probe_dates_total_timeout_s(request_timeout_s)
 
-    def __init__(self, *, rate_limit: RateLimitPolicy | None = None, cache_ttl_s: int = 1800) -> None:
+    def __init__(
+        self,
+        *,
+        proxy_url: str | None = None,
+        rate_limit: RateLimitPolicy | None = None,
+        cache_ttl_s: int = 1800,
+    ) -> None:
         self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=15.0)
         self.default_cache_ttl_s = cache_ttl_s
+        self._proxy_url = proxy_url
 
     def _deep_link(self, q: SearchQuery, depart_date: date) -> str:
         """Same query shape as a real user's search — captured verbatim from
@@ -89,10 +96,14 @@ class AeroflotDirectAdapter:
         if not q.origin.iata or not q.dest.iata or not q.dates:
             return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="missing iata/date")
 
+        session_kwargs: dict[str, Any] = {"impersonate": "chrome", "timeout": self.request_timeout_s}
+        if self._proxy_url:
+            session_kwargs["proxy"] = self._proxy_url
+
         offers: list[Offer] = []
         blocked = False
         partial = False
-        async with AsyncSession(impersonate="chrome", timeout=self.request_timeout_s) as session:
+        async with AsyncSession(**session_kwargs) as session:
             for depart_date in q.dates:
                 day_offers, outcome = await self._search_day(session, q, depart_date)
                 if outcome == "blocked":

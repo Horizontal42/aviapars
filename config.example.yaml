@@ -73,3 +73,9 @@ telegram_proxy_url: null
 # помогает только настоящий резидентский IP (например через домашний Tailscale-релей
 # админа). Никак не связан с telegram_proxy_url. null = без прокси (напрямую, будет BLOCKED).
 pobeda_proxy_url: null
+
+# прокси только для aeroflot_direct — их WAF банит датацентровый IP VDS (200 OK с HTML-
+# страницей блокировки вместо JSON, проверено вживую). Помогает выход через российский
+# xray-outbound на самой VDS (см. ARCHITECTURE.md "Прокси"), не домашний релей, как у
+# Победы. null = без прокси (напрямую, будет BLOCKED). Пример: socks5://127.0.0.1:10809
+aeroflot_proxy_url: null

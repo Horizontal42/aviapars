@@ -163,6 +163,40 @@ async def test_waf_block_returns_blocked_status(monkeypatch: Any) -> None:
     assert result.status == ResultStatus.BLOCKED
 
 
+async def test_proxy_url_forwarded_to_session(monkeypatch: Any) -> None:
+    # regression: the WAF blocks the VDS's own datacenter IP with a 200-OK HTML page
+    # (verified live) — a Russian xray outbound fixes it, but only if proxy_url actually
+    # reaches curl_cffi's AsyncSession, which nothing exercised until now.
+    captured: dict[str, Any] = {}
+
+    def fake_session(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+
+        class FakeResp:
+            status_code = 200
+
+            def json(self) -> Any:
+                return {"data": {"route_itineraries": []}}
+
+        class FakeSession:
+            async def __aenter__(self) -> "FakeSession":
+                return self
+
+            async def __aexit__(self, *exc: object) -> None:
+                return None
+
+            async def post(self, *args: Any, **kwargs: Any) -> FakeResp:
+                return FakeResp()
+
+        return FakeSession()
+
+    monkeypatch.setattr("aviapars.adapters.aeroflot_direct.AsyncSession", fake_session)
+
+    adapter = AeroflotDirectAdapter(proxy_url="socks5://127.0.0.1:10809")
+    await adapter.search(_query())
+    assert captured.get("proxy") == "socks5://127.0.0.1:10809"
+
+
 def test_as_utc_treats_naive_as_already_utc() -> None:
     naive = datetime(2026, 9, 10, 12, 0)
     assert _as_utc(naive) == datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)

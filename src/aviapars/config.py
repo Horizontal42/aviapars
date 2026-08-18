@@ -92,6 +92,12 @@ class Settings(BaseSettings):
     # telegram_proxy_url — different egress, different reason. None = no proxy (direct).
     pobeda_proxy_url: str | None = None
 
+    # SOCKS5 proxy for aeroflot_direct only — verified live: the VDS's own (datacenter) IP
+    # gets a 200 OK WAF block page instead of JSON from this endpoint; the same request
+    # through a Russian xray outbound already running on this box (see ARCHITECTURE.md
+    # "Прокси") gets a real API response. None = no proxy (direct, will come back BLOCKED).
+    aeroflot_proxy_url: str | None = None
+
     @classmethod
     def settings_customise_sources(
         cls,
