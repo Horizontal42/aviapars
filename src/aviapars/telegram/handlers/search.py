@@ -8,12 +8,12 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
-from aviapars.adapters.base import Tier
+from aviapars.adapters.base import Mode, Tier
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.config import settings
 from aviapars.db.repo_places import PlacesRepo
 from aviapars.db.models import Place, Route
-from aviapars.domain.combiner import Itinerary, SearchOpts, search_itineraries
+from aviapars.domain.combiner import Itinerary, SearchOpts, itinerary_modes, search_itineraries
 from aviapars.domain.dates import DateSelection, resolve_date_plan, selection_from_route
 from aviapars.domain.places import modes_for_pref
 from aviapars.telegram import date_picker
@@ -26,6 +26,7 @@ from aviapars.telegram.format import (
     format_mode_label,
     format_money,
     mode_group,
+    place_label,
     screen_text,
     select_top_itineraries,
 )
@@ -285,6 +286,12 @@ async def _run_search(
         await state.clear()
         return
 
+    gap_note = _mode_gap_note(
+        modes_for_pref(data.get("mode_pref", "auto")), outcome.itineraries, outcome.sources_skipped, registry
+    )
+    if gap_note:
+        checked = f"{checked}\n{gap_note}"
+
     await state.update_data(
         results_all_itineraries=select_top_itineraries(outcome.itineraries, limit=_RESULTS_MAX),
         results_found_total=len(outcome.itineraries),
@@ -295,6 +302,34 @@ async def _run_search(
     )
     await state.set_state(SearchFlow.results)
     await _render_results(screen, state, limit=_RESULTS_SHOWN)
+
+
+def _mode_gap_note(
+    modes: frozenset[Mode],
+    itineraries: list[Itinerary],
+    sources_skipped: list[tuple[str, str]],
+    registry: AdapterRegistry,
+) -> str:
+    """When one whole requested mode comes back with zero itineraries while
+    another mode found plenty, the results screen otherwise looks identical
+    to "trains genuinely don't exist here" — say which sources were asked
+    for that mode and why they didn't contribute (adapter EMPTY/blocked/
+    missing-code reasons), instead of silently dropping the mode."""
+    found_modes = {m for it in itineraries for m in itinerary_modes(it)}
+    missing = [m for m in modes if m not in found_modes]
+    if not missing:
+        return ""
+    adapters_by_id = {a.id: a for a in registry.all()}
+    lines: list[str] = []
+    for mode in missing:
+        reasons = [
+            f"{adapters_by_id[sid].display_name} ({reason})"
+            for sid, reason in sources_skipped
+            if sid in adapters_by_id and mode in adapters_by_id[sid].modes
+        ]
+        label = MODE_GROUP_TITLE.get(mode.value, mode.value)
+        lines.append(f"{label}: без результатов" + (f" — {', '.join(reasons)}." if reasons else "."))
+    return "\n".join(lines)
 
 
 async def _render_results(screen: Screen, state: FSMContext, *, limit: int) -> None:
@@ -355,7 +390,7 @@ def _render_itinerary_line(itinerary: Itinerary) -> str:
     parts = [f"<b>{price}</b>", depart, mode_label]
     if len(itinerary.offers) > 1:
         hub_place = all_legs[0].to_place
-        parts[-1] += f" через {hub_place.iata or hub_place.place_id}"
+        parts[-1] += f" через {place_label(hub_place)}"
     if itinerary.duration_minutes is not None:
         h, m = divmod(itinerary.duration_minutes, 60)
         parts.append(f"{h}ч{f' {m:02d}м' if m else ''}")

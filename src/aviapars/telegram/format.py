@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Mapping
 
-from aviapars.adapters.base import Mode
+from aviapars.adapters.base import Mode, PlaceRef
 from aviapars.db.models import Route
 from aviapars.domain.combiner import Itinerary, itinerary_modes
 from aviapars.domain.dates import DatePlan, DateSelection, selection_from_route, window
@@ -113,6 +113,15 @@ def select_top_itineraries(itineraries: list[Itinerary], *, limit: int) -> list[
 
     picked.sort(key=lambda it: (_group_rank(mode_group(it)), it.price_minor))
     return picked
+
+
+def place_label(ref: PlaceRef) -> str:
+    """«Москва Шереметьево (SVO)» instead of a bare 3-letter code — the
+    picker step still shows codes in parens on purpose (keyboards.py), this
+    is only for screens where the code alone means nothing without context."""
+    if ref.name_ru and ref.iata:
+        return f"{ref.name_ru} ({ref.iata})"
+    return ref.name_ru or ref.iata or str(ref.place_id)
 
 
 def format_date(day: date) -> str:
@@ -259,8 +268,8 @@ def format_deal_card(
     multi_leg = len(itinerary.offers) > 1
     for offer in itinerary.offers:
         for leg in offer.legs:
-            origin = leg.from_place.iata or str(leg.from_place.place_id)
-            dest = leg.to_place.iata or str(leg.to_place.place_id)
+            origin = place_label(leg.from_place)
+            dest = place_label(leg.to_place)
             carrier_bits = " ".join(b for b in (leg.carrier, leg.number) if b)
             time_str = leg.depart_local.strftime("%H:%M") if leg.time_precision == "exact" else "время неизвестно"
             detail_bits = [b for b in (carrier_bits or None, time_str) if b]

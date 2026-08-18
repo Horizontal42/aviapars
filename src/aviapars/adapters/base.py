@@ -36,6 +36,10 @@ class PlaceRef:
     yandex_code: str | None
     rzd_code: str | None
     city_id: int | None
+    # Carried through so result rendering can show a human-readable place
+    # instead of a bare 3-letter code — adapters never read this themselves,
+    # they only pass q.origin/q.dest through to Leg.from_place/to_place.
+    name_ru: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

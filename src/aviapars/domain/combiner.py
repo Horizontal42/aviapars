@@ -360,4 +360,5 @@ def _place_ref(place: Place) -> PlaceRef:
         yandex_code=place.yandex_code,
         rzd_code=place.rzd_code,
         city_id=place.city_id,
+        name_ru=place.name_ru,
     )
