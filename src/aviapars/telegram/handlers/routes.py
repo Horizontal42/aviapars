@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import date
 
 import aiosqlite
@@ -21,6 +22,14 @@ from aviapars.telegram.handlers import search as search_handlers
 from aviapars.telegram.keyboards import RouteAction, route_card_kb, routes_list_kb
 
 router = Router(name="routes")
+
+# "🔍 Проверить сейчас" bypasses the scheduler entirely and calls process_route()
+# in-process (unlike a scheduled poll, it never touches routes.last_run_at) — with
+# nothing here, a user tapping it repeatedly fires a full multi-adapter search, S7's
+# browser-solver included, on every tap. In-memory/per-process is fine: this is a
+# UI-spam guard, not a durable rate limit, and a restart resetting it is harmless.
+_CHECK_NOW_COOLDOWN_S = 60.0
+_last_manual_check: dict[int, float] = {}
 
 
 @router.message(Command("routes"))
@@ -78,6 +87,13 @@ async def on_route_action(
         if isinstance(query.message, Message):
             await query.message.delete()
     elif callback_data.action == "check":
+        last_check = _last_manual_check.get(route.id)
+        now = time.monotonic()
+        if last_check is not None and now - last_check < _CHECK_NOW_COOLDOWN_S:
+            wait_s = int(_CHECK_NOW_COOLDOWN_S - (now - last_check))
+            await query.answer(f"Недавно уже проверял — подожди {wait_s} с.", show_alert=True)
+            return
+        _last_manual_check[route.id] = now
         await query.answer("Проверяю...")
         user = await UsersRepo(db).get(route.user_id)
         assert user is not None
