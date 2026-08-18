@@ -299,6 +299,7 @@ async def _run_search(
         results_title=title,
         results_selection=selection,
         results_checked=checked,
+        results_source_names={a.id: a.display_name for a in registry.all()},
     )
     await state.set_state(SearchFlow.results)
     await _render_results(screen, state, limit=_RESULTS_SHOWN)
@@ -322,11 +323,19 @@ def _mode_gap_note(
     adapters_by_id = {a.id: a for a in registry.all()}
     lines: list[str] = []
     for mode in missing:
-        reasons = [
-            f"{adapters_by_id[sid].display_name} ({reason})"
-            for sid, reason in sources_skipped
-            if sid in adapters_by_id and mode in adapters_by_id[sid].modes
-        ]
+        # One /search can call the same adapter several times (direct leg + one
+        # call per hub candidate — see combiner.search_itineraries), so the same
+        # (source, reason) pair often repeats 2-4x; dict.fromkeys collapses exact
+        # repeats while keeping distinct reasons for the same source (e.g. a
+        # direct-leg TIMEOUT next to a hub-leg RATE_LIMITED is real signal, not
+        # noise — that's the rate-limit bucket contention itself showing through).
+        reasons = list(
+            dict.fromkeys(
+                f"{adapters_by_id[sid].display_name} ({reason})"
+                for sid, reason in sources_skipped
+                if sid in adapters_by_id and mode in adapters_by_id[sid].modes
+            )
+        )
         label = MODE_GROUP_TITLE.get(mode.value, mode.value)
         lines.append(f"{label}: без результатов" + (f" — {', '.join(reasons)}." if reasons else "."))
     return "\n".join(lines)
@@ -341,6 +350,7 @@ async def _render_results(screen: Screen, state: FSMContext, *, limit: int) -> N
     today = date.today()
     all_found: list[Itinerary] = data["results_all_itineraries"]
     total: int = data["results_found_total"]
+    source_names: dict[str, str] = data.get("results_source_names", {})
     shown = all_found[:limit]
 
     note = f"Нашёл вариантов: {total}. Показываю {len(shown)}."
@@ -358,7 +368,7 @@ async def _render_results(screen: Screen, state: FSMContext, *, limit: int) -> N
                 lines.append("")
             current_group = group
             lines.append(f"<b>{MODE_GROUP_TITLE.get(group, group)}</b>")
-        lines.append(f"{i}️⃣ {_render_itinerary_line(itinerary)}")
+        lines.append(f"{i}️⃣ {_render_itinerary_line(itinerary, source_names)}")
 
     legend = "✅ цена подтверждена перевозчиком · ⚠️ из кэша агрегатора"
     await state.update_data(results_itineraries=shown)
@@ -381,7 +391,21 @@ async def on_search_show_all(query: CallbackQuery, state: FSMContext) -> None:
     await query.answer()
 
 
-def _render_itinerary_line(itinerary: Itinerary) -> str:
+def _carrier_or_source_label(itinerary: Itinerary, source_names: dict[str, str]) -> str:
+    """Who's actually flying/selling this, not just ✅/⚠️. Confirmation-tier
+    offers know the real carrier (airline/train operator); discovery-tier
+    offers from an aggregator often don't (Travelpayouts' month-matrix has no
+    airline field at all — see base.py Leg docstring), so this falls back to
+    the source name itself rather than showing nothing."""
+    all_legs = [leg for offer in itinerary.offers for leg in offer.legs]
+    carriers = list(dict.fromkeys(leg.carrier for leg in all_legs if leg.carrier))
+    if carriers:
+        return "/".join(carriers)
+    sources = list(dict.fromkeys(source_names.get(o.source_id, o.source_id) for o in itinerary.offers))
+    return "/".join(sources)
+
+
+def _render_itinerary_line(itinerary: Itinerary, source_names: dict[str, str]) -> str:
     all_legs = [leg for offer in itinerary.offers for leg in offer.legs]
     mode_label = format_mode_label([leg.mode for leg in all_legs])
     price = format_money(itinerary.price_minor, itinerary.currency)
@@ -394,6 +418,7 @@ def _render_itinerary_line(itinerary: Itinerary) -> str:
     if itinerary.duration_minutes is not None:
         h, m = divmod(itinerary.duration_minutes, 60)
         parts.append(f"{h}ч{f' {m:02d}м' if m else ''}")
+    parts.append(_carrier_or_source_label(itinerary, source_names))
     confirmed_all = all(o.tier == Tier.CONFIRMATION for o in itinerary.offers)
     return " · ".join(parts) + (" ✅" if confirmed_all else " ⚠️")
 
