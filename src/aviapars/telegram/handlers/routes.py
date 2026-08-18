@@ -10,6 +10,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from aviapars.adapters.registry import AdapterRegistry
+from aviapars.db.models import Route
+from aviapars.db.repo_digests import DigestsRepo
 from aviapars.db.repo_observations import ObservationsRepo
 from aviapars.db.repo_places import PlacesRepo
 from aviapars.db.repo_routes import RoutesRepo
@@ -17,7 +19,7 @@ from aviapars.db.repo_users import UsersRepo
 from aviapars.notify.notifier import Notifier
 from aviapars.scheduler.worker import process_route
 from aviapars.domain.dates import selection_from_route
-from aviapars.telegram.format import describe_selection, format_money
+from aviapars.telegram.format import describe_notification_mode, describe_selection, format_money
 from aviapars.telegram.handlers import search as search_handlers
 from aviapars.telegram.keyboards import RouteAction, route_card_kb, routes_list_kb
 
@@ -45,14 +47,21 @@ async def render_routes(message: Message, user_id: int, db: aiosqlite.Connection
         return
     today = date.today()
     for route in routes:
-        status = "▶️ активен" if route.active else "⏸ на паузе"
-        text = (
-            f"{route.title}\n"
-            f"Даты: {describe_selection(selection_from_route(route), today)}\n"
-            f"Порог: {format_money(route.max_price, route.max_price_currency)} · "
-            f"каждые {route.poll_interval_min} мин · {status}"
+        await message.answer(
+            _route_card_text(route, today),
+            reply_markup=route_card_kb(route.id, active=route.active, notification_mode=route.notification_mode),
         )
-        await message.answer(text, reply_markup=route_card_kb(route.id, active=route.active))
+
+
+def _route_card_text(route: Route, today: date) -> str:
+    status = "▶️ активен" if route.active else "⏸ на паузе"
+    return (
+        f"{route.title}\n"
+        f"Даты: {describe_selection(selection_from_route(route), today)}\n"
+        f"Порог: {format_money(route.max_price, route.max_price_currency)} · "
+        f"каждые {route.poll_interval_min} мин · {status}\n"
+        f"Уведомления: {describe_notification_mode(route.notification_mode)}"
+    )
 
 
 @router.callback_query(RouteAction.filter())
@@ -75,12 +84,31 @@ async def on_route_action(
         await routes_repo.set_active(route.id, False)
         await query.answer("Поставил на паузу.")
         if isinstance(query.message, Message):
-            await query.message.edit_reply_markup(reply_markup=route_card_kb(route.id, active=False))
+            await query.message.edit_reply_markup(
+                reply_markup=route_card_kb(route.id, active=False, notification_mode=route.notification_mode)
+            )
     elif callback_data.action == "resume":
         await routes_repo.set_active(route.id, True)
         await query.answer("Возобновил.")
         if isinstance(query.message, Message):
-            await query.message.edit_reply_markup(reply_markup=route_card_kb(route.id, active=True))
+            await query.message.edit_reply_markup(
+                reply_markup=route_card_kb(route.id, active=True, notification_mode=route.notification_mode)
+            )
+    elif callback_data.action == "notify":
+        new_mode = "digest" if route.notification_mode == "instant" else "instant"
+        await routes_repo.set_notification_mode(route.id, new_mode)
+        if new_mode == "instant":
+            # Whatever was staged belongs to a digest window that will now never be
+            # delivered — leaving it would surface a stale price if the user switches back.
+            await DigestsRepo(db).clear(route.id)
+        await query.answer("⚡ Буду присылать сразу." if new_mode == "instant" else "📬 Буду присылать раз в день.")
+        if isinstance(query.message, Message):
+            updated = await routes_repo.get(route.id)
+            assert updated is not None
+            await query.message.edit_text(
+                _route_card_text(updated, date.today()),
+                reply_markup=route_card_kb(route.id, active=updated.active, notification_mode=new_mode),
+            )
     elif callback_data.action == "delete":
         await routes_repo.delete(route.id)
         await query.answer("Удалил.")

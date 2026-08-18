@@ -12,8 +12,10 @@ _COLUMNS = (
     "window_start_date, window_start_offset_days, window_length_days, date_cursor, "
     "max_price, max_price_currency, pax, "
     "allow_hub_routing, hub_place_ids, max_hops, max_transfer_min, max_total_hours, "
-    "poll_interval_min, active, next_run_at, last_run_at, created_at"
+    "poll_interval_min, notification_mode, active, next_run_at, last_run_at, created_at"
 )
+
+NOTIFICATION_MODES = ("instant", "digest")
 
 
 def _row_to_route(row: aiosqlite.Row) -> Route:
@@ -39,10 +41,11 @@ def _row_to_route(row: aiosqlite.Row) -> Route:
         max_transfer_min=row[18],
         max_total_hours=row[19],
         poll_interval_min=row[20],
-        active=bool(row[21]),
-        next_run_at=row[22],
-        last_run_at=row[23],
-        created_at=row[24],
+        notification_mode=row[21],
+        active=bool(row[22]),
+        next_run_at=row[23],
+        last_run_at=row[24],
+        created_at=row[25],
     )
 
 
@@ -72,6 +75,7 @@ class RoutesRepo:
         max_transfer_min: int | None = None,
         max_total_hours: float | None = None,
         poll_interval_min: int = 60,
+        notification_mode: str = "instant",
     ) -> Route:
         now = datetime.now(timezone.utc).isoformat()
         cursor = await self._db.execute(
@@ -81,8 +85,8 @@ class RoutesRepo:
                 window_start_date, window_start_offset_days, window_length_days,
                 max_price, max_price_currency, pax,
                 allow_hub_routing, hub_place_ids, max_hops, max_transfer_min, max_total_hours,
-                poll_interval_min, active, next_run_at, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                poll_interval_min, notification_mode, active, next_run_at, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
             """,
             (
                 user_id,
@@ -104,6 +108,7 @@ class RoutesRepo:
                 max_transfer_min,
                 max_total_hours,
                 poll_interval_min,
+                notification_mode,
                 now,  # next_run_at = now => picked up on the next tick
                 now,
             ),
@@ -147,6 +152,11 @@ class RoutesRepo:
 
     async def set_date_cursor(self, route_id: int, cursor: int) -> None:
         await self._db.execute("UPDATE routes SET date_cursor = ? WHERE id = ?", (cursor, route_id))
+        await self._db.commit()
+
+    async def set_notification_mode(self, route_id: int, mode: str) -> None:
+        assert mode in NOTIFICATION_MODES
+        await self._db.execute("UPDATE routes SET notification_mode = ? WHERE id = ?", (mode, route_id))
         await self._db.commit()
 
     async def set_active(self, route_id: int, active: bool) -> None:

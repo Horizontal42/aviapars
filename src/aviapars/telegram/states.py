@@ -5,9 +5,9 @@ from aiogram.fsm.state import State, StatesGroup
 
 class AddRoute(StatesGroup):
     """§10 /add wizard: origin, destination, mode, dates (exact / ±3 дня /
-    диапазон / любая), threshold, poll interval. Hub-routing filters
-    (max_hops/max_transfer_min/max_total_hours) are still Phase D/E (§13) and
-    keep their schema defaults."""
+    диапазон / любая), threshold, poll interval, notification mode. Hub-routing
+    filters (max_hops/max_transfer_min/max_total_hours) are still Phase D/E
+    (§13) and keep their schema defaults."""
 
     origin = State()
     origin_pick = State()
@@ -18,6 +18,7 @@ class AddRoute(StatesGroup):
     date_value = State()
     threshold = State()
     interval = State()
+    notify_mode = State()
     confirm = State()
 
 

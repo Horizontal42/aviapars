@@ -11,6 +11,7 @@ from aviapars.adapters.registry import AdapterRegistry
 from aviapars.adapters.travelpayouts import TravelpayoutsAdapter
 from aviapars.config import settings
 from aviapars.db.models import User
+from aviapars.db.repo_digests import DigestsRepo
 from aviapars.db.repo_jobs import JobsRepo
 from aviapars.db.repo_notifications import NotificationsRepo
 from aviapars.db.repo_observations import ObservationsRepo
@@ -101,7 +102,13 @@ async def test_cheap_direct_flight_triggers_notification(db: aiosqlite.Connectio
 
     bot = FakeBot()
     notifier = Notifier(
-        bot, NotificationsRepo(db), JobsRepo(db), DedupeGate(NotificationsRepo(db)), cooldown_h=12, daily_cap=3
+        bot,
+        NotificationsRepo(db),
+        JobsRepo(db),
+        DedupeGate(NotificationsRepo(db)),
+        DigestsRepo(db),
+        cooldown_h=12,
+        daily_cap=3,
     )
 
     await process_route(
@@ -123,6 +130,71 @@ async def test_cheap_direct_flight_triggers_notification(db: aiosqlite.Connectio
     async with db.execute("SELECT COUNT(*) FROM price_observations WHERE route_id = ?", (route.id,)) as cur:
         row = await cur.fetchone()
     assert row[0] >= 1
+
+
+async def test_digest_route_stages_instead_of_messaging(
+    db: aiosqlite.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same qualifying price as the test above, same threshold check — only the
+    delivery differs. crosses_threshold() stays mode-agnostic; process_route
+    branches."""
+    origin_id, dest_id = await _seed_places(db)
+    users_repo = UsersRepo(db)
+    user = await users_repo.get_or_create(557, is_admin=True)
+    user = await _disable_quiet_hours(db, user)
+
+    routes_repo = RoutesRepo(db)
+    route = await routes_repo.create(
+        user_id=user.tg_user_id,
+        title="Екатеринбург → Сочи",
+        origin_place_id=origin_id,
+        dest_place_id=dest_id,
+        mode_pref="plane",
+        date_mode="fixed",
+        fixed_dates=["2026-09-29"],
+        max_price=700000,
+        max_price_currency="RUB",
+        notification_mode="digest",
+    )
+
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+
+    async def fake_fetch_month(self, session, origin, dest, month, currency):
+        return payload["data"], True
+
+    monkeypatch.setattr(TravelpayoutsAdapter, "_fetch_month", fake_fetch_month)
+
+    registry = AdapterRegistry(
+        db, http_concurrency_global=2, http_concurrency_interactive=1, http_concurrency_per_source=1
+    )
+    registry.register(TravelpayoutsAdapter(token="fake", marker="fake"))
+
+    bot = FakeBot()
+    notifier = Notifier(
+        bot,
+        NotificationsRepo(db),
+        JobsRepo(db),
+        DedupeGate(NotificationsRepo(db)),
+        DigestsRepo(db),
+        cooldown_h=12,
+        daily_cap=3,
+    )
+
+    await process_route(
+        route,
+        user=user,
+        registry=registry,
+        places_repo=PlacesRepo(db),
+        routes_repo=routes_repo,
+        observations_repo=ObservationsRepo(db),
+        notifier=notifier,
+    )
+
+    assert bot.sent == []
+    pending = await DigestsRepo(db).pending()
+    assert len(pending) == 1
+    assert pending[0].route_id == route.id
+    assert "Екатеринбург → Сочи" in pending[0].card_text
 
 
 async def test_price_above_threshold_does_not_notify(db: aiosqlite.Connection, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -159,7 +231,13 @@ async def test_price_above_threshold_does_not_notify(db: aiosqlite.Connection, m
 
     bot = FakeBot()
     notifier = Notifier(
-        bot, NotificationsRepo(db), JobsRepo(db), DedupeGate(NotificationsRepo(db)), cooldown_h=12, daily_cap=3
+        bot,
+        NotificationsRepo(db),
+        JobsRepo(db),
+        DedupeGate(NotificationsRepo(db)),
+        DigestsRepo(db),
+        cooldown_h=12,
+        daily_cap=3,
     )
 
     await process_route(
@@ -219,7 +297,13 @@ async def test_flexible_window_finds_a_date_the_user_never_named(
 
     bot = FakeBot()
     notifier = Notifier(
-        bot, NotificationsRepo(db), JobsRepo(db), DedupeGate(NotificationsRepo(db)), cooldown_h=12, daily_cap=3
+        bot,
+        NotificationsRepo(db),
+        JobsRepo(db),
+        DedupeGate(NotificationsRepo(db)),
+        DigestsRepo(db),
+        cooldown_h=12,
+        daily_cap=3,
     )
 
     await process_route(

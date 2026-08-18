@@ -97,7 +97,12 @@ async def process_route(
         return
 
     confirmed = all(offer.tier == Tier.CONFIRMATION for offer in best.offers)
-    await notifier.send_deal(user=user, route=route, itinerary=best, confirmed=confirmed)
+    # crosses_threshold() stays mode-agnostic on purpose — "is this cheap enough" is a fact
+    # about the price, not about how the user wants to hear it. Only delivery branches here.
+    if route.notification_mode == "digest":
+        await notifier.stage_digest(user=user, route=route, itinerary=best, confirmed=confirmed)
+    else:
+        await notifier.send_deal(user=user, route=route, itinerary=best, confirmed=confirmed)
 
 
 def _resolve_dates(route: Route) -> tuple[DatePlan, int]:

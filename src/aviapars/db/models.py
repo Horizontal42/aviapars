@@ -56,6 +56,7 @@ class Route:
     max_transfer_min: int | None
     max_total_hours: float | None
     poll_interval_min: int
+    notification_mode: str  # instant|digest — when a qualifying price becomes a message (§9)
     active: bool
     next_run_at: str | None
     last_run_at: str | None

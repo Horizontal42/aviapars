@@ -8,6 +8,7 @@ import pytest
 
 from aviapars.adapters.base import Leg, Mode, Offer, PlaceRef, Tier
 from aviapars.db.models import Route, User
+from aviapars.db.repo_digests import DigestsRepo
 from aviapars.db.repo_jobs import JobsRepo
 from aviapars.db.repo_notifications import NotificationsRepo
 from aviapars.domain.combiner import Itinerary
@@ -30,7 +31,7 @@ CREATE TABLE jobs (
 """
 
 
-def _route(*, route_id: int = 1) -> Route:
+def _route(*, route_id: int = 1, notification_mode: str = "instant") -> Route:
     return Route(
         id=route_id,
         user_id=1,
@@ -53,6 +54,7 @@ def _route(*, route_id: int = 1) -> Route:
         max_transfer_min=None,
         max_total_hours=None,
         poll_interval_min=60,
+        notification_mode=notification_mode,
         active=True,
         next_run_at=None,
         last_run_at=None,
@@ -100,6 +102,11 @@ CREATE TABLE notifications_sent (
     depart_date TEXT NOT NULL,
     tier_at_send TEXT NOT NULL,
     sent_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE route_digests (
+    route_id INTEGER PRIMARY KEY, pending_day TEXT, price_minor INTEGER, currency TEXT,
+    itinerary_hash TEXT, mode TEXT, depart_date TEXT, tier_at_send TEXT, card_text TEXT,
+    staged_at TEXT, last_sent_day TEXT
 );
 """
 
@@ -270,7 +277,7 @@ async def test_quiet_hours_defer_records_immediately_so_dedupe_sees_it(db: aiosq
     jobs = JobsRepo(db)
     gate = DedupeGate(repo)
     bot = _FakeBot()
-    notifier = Notifier(bot, repo, jobs, gate, cooldown_h=12, daily_cap=3)
+    notifier = Notifier(bot, repo, jobs, gate, DigestsRepo(db), cooldown_h=12, daily_cap=3)
 
     user = _user(start="00:00", end="23:59")
     route = _route()
@@ -298,7 +305,7 @@ async def test_deliver_pending_does_not_double_record(db: aiosqlite.Connection) 
     jobs = JobsRepo(db)
     gate = DedupeGate(repo)
     bot = _FakeBot()
-    notifier = Notifier(bot, repo, jobs, gate, cooldown_h=12, daily_cap=3)
+    notifier = Notifier(bot, repo, jobs, gate, DigestsRepo(db), cooldown_h=12, daily_cap=3)
 
     user = _user(start="00:00", end="23:59")
     route = _route()

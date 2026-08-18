@@ -12,14 +12,16 @@ from aviapars.config import settings
 from aviapars.db.repo_routes import RoutesRepo
 from aviapars.domain.dates import DateSelection, to_route_fields
 from aviapars.telegram import date_picker
-from aviapars.telegram.format import describe_selection, format_money
+from aviapars.telegram.format import describe_notification_mode, describe_selection, format_money
 from aviapars.telegram.keyboards import (
     DatePick,
     ModePick,
+    NotifyModePick,
     PlacePick,
     date_mode_kb,
     menu_only_kb,
     mode_picker_kb,
+    notify_mode_kb,
     route_saved_kb,
 )
 from aviapars.telegram.place_picker import ask_place_pick
@@ -160,7 +162,7 @@ async def on_threshold_text(message: Message, state: FSMContext) -> None:
 
 
 @router.message(AddRoute.interval)
-async def on_interval_text(message: Message, state: FSMContext, db: aiosqlite.Connection) -> None:
+async def on_interval_text(message: Message, state: FSMContext) -> None:
     assert message.text is not None
     try:
         minutes = int(message.text.strip())
@@ -174,13 +176,39 @@ async def on_interval_text(message: Message, state: FSMContext, db: aiosqlite.Co
         )
         return
 
+    await state.update_data(poll_interval_min=minutes)
+    await state.set_state(AddRoute.notify_mode)
+    await message.answer(
+        "Как присылать уведомления?\n\n"
+        "⚡ <b>Сразу</b> — как только цена упадёт ниже порога.\n"
+        "📬 <b>Раз в день</b> — одно сообщение с лучшей ценой за сутки.",
+        reply_markup=notify_mode_kb(),
+    )
+
+
+@router.callback_query(AddRoute.notify_mode, NotifyModePick.filter())
+async def on_notify_mode_pick(
+    query: CallbackQuery, callback_data: NotifyModePick, state: FSMContext, db: aiosqlite.Connection
+) -> None:
+    if not isinstance(query.message, Message):
+        await query.answer()
+        return
+    await _create_route(query.message, state, db, notification_mode=callback_data.value, user_id=query.from_user.id)
+    await query.answer()
+
+
+async def _create_route(
+    message: Message, state: FSMContext, db: aiosqlite.Connection, *, notification_mode: str, user_id: int
+) -> None:
     data = await state.get_data()
-    assert message.from_user is not None
+    minutes: int = data["poll_interval_min"]
     selection: DateSelection = data["date_selection"]
     dates = to_route_fields(selection)
     routes_repo = RoutesRepo(db)
     route = await routes_repo.create(
-        user_id=message.from_user.id,
+        # `user_id` is passed in, not read off `message.from_user`: the last wizard step is a
+        # button press, so the message this replies to was sent by the bot itself.
+        user_id=user_id,
         title=f"{data['origin_title']} → {data['dest_title']}",
         origin_place_id=data["origin_place_id"],
         dest_place_id=data["dest_place_id"],
@@ -193,12 +221,14 @@ async def on_interval_text(message: Message, state: FSMContext, db: aiosqlite.Co
         max_price=data["max_price_minor"],
         max_price_currency="RUB",
         poll_interval_min=minutes,
+        notification_mode=notification_mode,
     )
     await state.clear()
     await message.answer(
         f"Готово! Слежу за маршрутом «{route.title}».\n"
         f"Даты: {describe_selection(selection, date.today())}.\n"
         f"Порог: {format_money(route.max_price, route.max_price_currency)}. "
-        f"Проверяю каждые {minutes} мин.",
+        f"Проверяю каждые {minutes} мин.\n"
+        f"Уведомления: {describe_notification_mode(route.notification_mode)}.",
         reply_markup=route_saved_kb(),
     )

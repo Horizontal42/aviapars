@@ -27,8 +27,12 @@ class ModePick(CallbackData, prefix="md"):
     value: str
 
 
+class NotifyModePick(CallbackData, prefix="nm"):
+    value: str  # instant|digest
+
+
 class RouteAction(CallbackData, prefix="r"):
-    action: str  # pause|resume|check|search|delete
+    action: str  # pause|resume|check|search|delete|notify
     route_id: int
 
 
@@ -75,6 +79,18 @@ def date_mode_kb() -> InlineKeyboardMarkup:
     builder.button(text="📅± Дата ±3 дня", callback_data=DatePick(kind="around").pack())
     builder.button(text="🗓 Диапазон дат", callback_data=DatePick(kind="range").pack())
     builder.button(text="🎲 Любая дата (30 дней)", callback_data=DatePick(kind="any").pack())
+    _menu_button(builder)
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+NOTIFY_MODE_LABEL = {"instant": "⚡ Сразу", "digest": "📬 Раз в день"}
+
+
+def notify_mode_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⚡ Сразу, как найдётся", callback_data=NotifyModePick(value="instant").pack())
+    builder.button(text="📬 Раз в день, лучшая цена", callback_data=NotifyModePick(value="digest").pack())
     _menu_button(builder)
     builder.adjust(1)
     return builder.as_markup()
@@ -139,15 +155,22 @@ def search_results_kb(n: int) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def route_card_kb(route_id: int, *, active: bool) -> InlineKeyboardMarkup:
+def route_card_kb(route_id: int, *, active: bool, notification_mode: str = "instant") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if active:
         builder.button(text="⏸ Пауза", callback_data=RouteAction(action="pause", route_id=route_id).pack())
     else:
         builder.button(text="▶️ Возобновить", callback_data=RouteAction(action="resume", route_id=route_id).pack())
     builder.button(text="🔍 Проверить сейчас", callback_data=RouteAction(action="check", route_id=route_id).pack())
+    # Labelled with the mode it switches *to*, like the pause/resume button above it —
+    # the card text right next to it already states which mode is on now.
+    target = "digest" if notification_mode == "instant" else "instant"
+    builder.button(
+        text=f"🔔 Уведомлять: {NOTIFY_MODE_LABEL[target]}",
+        callback_data=RouteAction(action="notify", route_id=route_id).pack(),
+    )
     builder.button(text="🔎 Варианты", callback_data=RouteAction(action="search", route_id=route_id).pack())
     builder.button(text="🗑 Удалить", callback_data=RouteAction(action="delete", route_id=route_id).pack())
     _menu_button(builder)
-    builder.adjust(2, 2, 1)
+    builder.adjust(2, 1, 2, 1)
     return builder.as_markup()
