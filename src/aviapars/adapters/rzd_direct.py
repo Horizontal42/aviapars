@@ -115,7 +115,7 @@ class RzdDirectAdapter:
 
     async def _post(
         self, session: aiohttp.ClientSession, src: str, dst: str, day: date, rid: int | None
-    ) -> dict[str, Any] | None:
+    ) -> tuple[dict[str, Any] | None, int | None]:
         params = {"layer_id": TRAIN_LAYER_ID}
         data = {
             "checkSeats": "1",
@@ -133,22 +133,26 @@ class RzdDirectAdapter:
                 BASE_URL, params=params, data=data, timeout=aiohttp.ClientTimeout(total=self.request_timeout_s)
             ) as resp:
                 if resp.status != 200:
-                    return None
+                    return None, resp.status
                 text = await resp.text()
         except (aiohttp.ClientError, TimeoutError):
-            return None
+            return None, None
         try:
             result: dict[str, Any] = json.loads(text)
-            return result
+            return result, resp.status
         except ValueError:
-            return None
+            return None, resp.status
 
     async def _search_day(
         self, session: aiohttp.ClientSession, src: str, dst: str, day: date
     ) -> tuple[list[dict[str, Any]], str]:
-        response = await self._post(session, src, dst, day, rid=None)
+        # A 403 is pass.rzd.ru's network-level IP ban (confirmed live — see
+        # ARCHITECTURE.md), not a transient upstream hiccup; distinguishing it
+        # from a plain non-200/parse failure is what lets /status say "blocked"
+        # instead of a generic "error" that looks recoverable on its own.
+        response, status = await self._post(session, src, dst, day, rid=None)
         if response is None:
-            return [], "error"
+            return [], "blocked" if status == 403 else "error"
         if response.get("error"):
             return [], "blocked"
 
@@ -159,9 +163,9 @@ class RzdDirectAdapter:
             if rid is None:
                 return [], "error"
             await asyncio.sleep(_POLL_INTERVAL_S)
-            response = await self._post(session, src, dst, day, rid=rid)
+            response, status = await self._post(session, src, dst, day, rid=rid)
             if response is None:
-                return [], "error"
+                return [], "blocked" if status == 403 else "error"
             if response.get("error"):
                 return [], "blocked"
             rid = response.get("RID", rid)

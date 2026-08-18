@@ -32,7 +32,7 @@ async def render_status(screen: Screen, db: aiosqlite.Connection, registry: Adap
     now = datetime.now(timezone.utc)
     lines = []
     async with db.execute(
-        "SELECT source_id, status, last_success_at, consecutive_failures FROM source_health"
+        "SELECT source_id, status, last_success_at, consecutive_failures, last_error_kind FROM source_health"
     ) as cursor:
         rows = {row[0]: row for row in await cursor.fetchall()}
 
@@ -41,10 +41,27 @@ async def render_status(screen: Screen, db: aiosqlite.Connection, registry: Adap
         if row is None:
             lines.append(f"⚪ {adapter.display_name} — ещё не опрашивал")
             continue
-        _, status, last_success, failures = row
+        _, status, last_success, failures, last_error_kind = row
         emoji = _STATUS_EMOJI.get(status, "❓")
         moment = _parse_moment(last_success)
-        detail = f"отвечал {describe_age(moment, now)}" if moment else f"ошибок подряд: {failures}"
+        # A source can have an old last_success_at from before it started failing
+        # (e.g. banned mid-project) — showing "отвечал N назад" for a currently
+        # "down"/"degraded" source read as "it's fine" next to the ❌/⚠️ emoji and
+        # buried the fact that every recent attempt has failed. Failures currently
+        # in progress take priority over a stale success timestamp, and the reason
+        # (last_error_kind, already written by the registry but never shown before)
+        # is what actually lets the reader tell "blocked" apart from "rate_limited"
+        # apart from "timeout" instead of just a bare number.
+        if failures > 0:
+            detail = f"ошибок подряд: {failures}"
+            if last_error_kind:
+                detail += f" ({last_error_kind})"
+            if moment:
+                detail += f" · отвечал {describe_age(moment, now)}"
+        elif moment:
+            detail = f"отвечал {describe_age(moment, now)}"
+        else:
+            detail = f"ошибок подряд: {failures}"
         lines.append(f"{emoji} {adapter.display_name} — {detail}")
 
     due_jobs = await JobsRepo(db).due(now=now, limit=100)

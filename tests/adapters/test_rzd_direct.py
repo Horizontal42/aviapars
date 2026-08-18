@@ -27,11 +27,13 @@ def adapter(monkeypatch: pytest.MonkeyPatch) -> RzdDirectAdapter:
     final = json.loads(FIXTURE.read_text(encoding="utf-8"))
     calls = {"n": 0}
 
-    async def fake_post(self: RzdDirectAdapter, session: Any, src: str, dst: str, day: date, rid: int | None) -> dict[str, Any]:
+    async def fake_post(
+        self: RzdDirectAdapter, session: Any, src: str, dst: str, day: date, rid: int | None
+    ) -> tuple[dict[str, Any], int]:
         calls["n"] += 1
         if calls["n"] == 1:
-            return {"result": "RID", "RID": 46344281635}
-        return final  # type: ignore[no-any-return]
+            return {"result": "RID", "RID": 46344281635}, 200
+        return final, 200  # type: ignore[no-any-return]
 
     monkeypatch.setattr(RzdDirectAdapter, "_post", fake_post)
     return a
@@ -79,10 +81,26 @@ async def test_non_train_mode_returns_empty(adapter: RzdDirectAdapter) -> None:
 async def test_captcha_response_maps_to_blocked(monkeypatch: pytest.MonkeyPatch) -> None:
     a = RzdDirectAdapter()
 
-    async def fake_post_blocked(self: RzdDirectAdapter, session: Any, src: str, dst: str, day: date, rid: int | None) -> dict[str, Any]:
-        return {"error": "captcha required"}
+    async def fake_post_blocked(
+        self: RzdDirectAdapter, session: Any, src: str, dst: str, day: date, rid: int | None
+    ) -> tuple[dict[str, Any], int]:
+        return {"error": "captcha required"}, 200
 
     monkeypatch.setattr(RzdDirectAdapter, "_post", fake_post_blocked)
+    q = SearchQuery(origin=_origin(), dest=_dest(), dates=(date(2026, 8, 27),), pax=1, mode=Mode.TRAIN)
+    result = await a.search(q)
+    assert result.status == ResultStatus.BLOCKED
+
+
+async def test_403_response_maps_to_blocked(monkeypatch: pytest.MonkeyPatch) -> None:
+    a = RzdDirectAdapter()
+
+    async def fake_post_403(
+        self: RzdDirectAdapter, session: Any, src: str, dst: str, day: date, rid: int | None
+    ) -> tuple[dict[str, Any] | None, int]:
+        return None, 403
+
+    monkeypatch.setattr(RzdDirectAdapter, "_post", fake_post_403)
     q = SearchQuery(origin=_origin(), dest=_dest(), dates=(date(2026, 8, 27),), pax=1, mode=Mode.TRAIN)
     result = await a.search(q)
     assert result.status == ResultStatus.BLOCKED
