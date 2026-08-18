@@ -210,10 +210,26 @@ async def _search_leg(
     # own try/except), but a bare gather() cancels every other in-flight adapter the instant one
     # task raises — concurrency is what turns a single adapter's bug into a whole-leg blackout,
     # and the old sequential loop simply could not lose already-collected offers that way.
+    # A busy per-source rate-limit bucket makes `RateLimiter.acquire` block *before*
+    # the adapter's own asyncio.timeout(timeout_s) window even starts (see
+    # registry.search — the acquire happens ahead of that block). In the scheduler
+    # lane that's fine, nobody is watching a chat. In the interactive lane it would
+    # silently blow straight through `interactive_l1_deadline_s` — a source another
+    # concurrent /search or the scheduler just hit stays "in flight" from the
+    # rate limiter's point of view for up to its own min_interval_s, which can be
+    # longer than the whole search is supposed to take. Capping the wait at the
+    # same deadline the caller already declared means a contended source degrades
+    # to RATE_LIMITED (shown, skippable) instead of quietly stalling the reply.
+    bucket_wait_s = opts.deadline_s if opts.lane == "interactive" else None
     results = await asyncio.gather(
         *(
             registry.search(
-                adapter, query, lane=opts.lane, allow_network=opts.allow_network, deadline_s=opts.deadline_s
+                adapter,
+                query,
+                lane=opts.lane,
+                allow_network=opts.allow_network,
+                deadline_s=opts.deadline_s,
+                bucket_wait_s=bucket_wait_s,
             )
             for adapter, query in planned
         ),
