@@ -69,6 +69,16 @@ class PlacesRepo:
         great-circle-deviation filter is worth adding once places span
         multiple countries and "same country" stops being a tight enough
         filter on its own.
+
+        Excludes by city_id, not place id: origin/dest are place rows (one
+        airport, one station), but a hub candidate is degenerate the moment
+        it's in the *same city* as either endpoint, not just the same exact
+        row — e.g. proposing origin's own train station as a "hub" for a
+        route departing from origin's airport. Uses `IS NOT` rather than
+        `NOT IN` for the city_id comparison: with plain `NOT IN`, a NULL
+        origin/dest city_id (unmapped place) poisons SQL's three-valued
+        logic and silently excludes every candidate row, not just the ones
+        that actually share a city — `IS NOT` compares NULL safely instead.
         """
         async with self._db.execute(
             f"""
@@ -76,10 +86,11 @@ class PlacesRepo:
             WHERE is_hub_candidate = 1
               AND country IN (?, ?)
               AND id NOT IN (?, ?)
+              AND (city_id IS NULL OR (city_id IS NOT ? AND city_id IS NOT ?))
             ORDER BY popularity DESC
             LIMIT ?
             """,
-            (origin.country, dest.country, origin.id, dest.id, limit),
+            (origin.country, dest.country, origin.id, dest.id, origin.city_id, dest.city_id, limit),
         ) as cursor:
             rows = await cursor.fetchall()
         return [_row_to_place(row) for row in rows]
