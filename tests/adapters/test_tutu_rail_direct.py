@@ -5,7 +5,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from aviapars.adapters.base import Mode, PlaceRef, ResultStatus, SearchQuery
+from aviapars.adapters.base import Mode, PlaceRef, ResultStatus, SearchQuery, Tier
 from aviapars.adapters.tutu_rail_direct import TutuRailDirectAdapter
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "tutu_rail_direct" / "search_mow_led.json"
@@ -41,8 +41,12 @@ def test_parse_offers_from_real_response() -> None:
     assert {o.price_minor for o in offers} == {514106, 581025, 846464}
     approx = next(o for o in offers if o.price_minor == 846464)
     assert approx.confidence == 0.5
+    # not CONFIRMATION: an "approximate" fare isn't bookable, and the bot's confirmed/✅
+    # display checks tier alone — this must not be shown as a confirmed real price.
+    assert approx.tier == Tier.DISCOVERY
     priced = next(o for o in offers if o.price_minor == 514106)
     assert priced.confidence == 1.0
+    assert priced.tier == Tier.CONFIRMATION
     assert priced.currency == "RUB"
     leg = priced.legs[0]
     assert leg.carrier == "ФПК"
@@ -64,6 +68,7 @@ def test_approximate_price_used_with_reduced_confidence_when_no_exact_offer() ->
 
     assert len(offers) == 2
     assert all(o.confidence == 0.5 for o in offers)
+    assert all(o.tier == Tier.DISCOVERY for o in offers)
     assert sorted(o.price_minor for o in offers) == [90337, 281962]
 
 

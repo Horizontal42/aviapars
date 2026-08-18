@@ -8,6 +8,7 @@ from typing import Any
 
 from curl_cffi.requests import AsyncSession
 
+from aviapars.adapters._tutu_common import select_price_variant
 from aviapars.adapters.base import (
     HealthStatus,
     Leg,
@@ -209,22 +210,10 @@ class TutuAviaDirectAdapter:
             if not legs:
                 continue
 
-            # price.type: "exact" (real fare, booking open), "approximate" (booking not
-            # open yet for this flight — Tutu shows an estimate), "absent" (no seats /
-            # waitlist placeholder, amount=0). Verified live on tutu_rail_direct that
-            # further-out dates can come back 100% "approximate"/"absent" with zero
-            # "exact" offers — same platform, same risk here. Prefer "exact", fall back to
-            # the cheapest "approximate" at reduced confidence rather than lose the offer
-            # entirely; "absent" is never a real price and is always excluded.
-            variants = offer.get("offerVariants") or []
-            exact = [v for v in variants if v.get("price", {}).get("type") == "exact"]
-            approximate = [v for v in variants if v.get("price", {}).get("type") == "approximate"]
-            if exact:
-                chosen, confidence = min(exact, key=lambda v: v["price"]["value"]["amount"]), 1.0
-            elif approximate:
-                chosen, confidence = min(approximate, key=lambda v: v["price"]["value"]["amount"]), 0.5
-            else:
+            selected = select_price_variant(offer.get("offerVariants") or [])
+            if selected is None:
                 continue
+            chosen, confidence, tier = selected
             price = chosen["price"]["value"]
 
             duration = None
@@ -242,7 +231,7 @@ class TutuAviaDirectAdapter:
                     currency=price.get("currencyCode", "RUB"),
                     deep_link=None,
                     source_id=self.id,
-                    tier=Tier.CONFIRMATION,
+                    tier=tier,
                     observed_at=now,
                     source_cached_at=now,
                     expires_at=None,

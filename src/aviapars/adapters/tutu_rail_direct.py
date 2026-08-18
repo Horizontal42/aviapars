@@ -7,6 +7,7 @@ from typing import Any
 
 from curl_cffi.requests import AsyncSession
 
+from aviapars.adapters._tutu_common import select_price_variant
 from aviapars.adapters.base import (
     HealthStatus,
     Leg,
@@ -201,24 +202,10 @@ class TutuRailDirectAdapter:
             if not legs:
                 continue
 
-            # price.type: "exact" (real fare, sales open), "approximate" (sales haven't
-            # opened yet for this train — Tutu shows an estimate based on past fares),
-            # "absent" (no seats / waitlist placeholder, amount=0). Verified live: dates
-            # ~30 days out came back 100% "approximate"/"absent" with zero "exact" offers
-            # (RZD's own sales-open horizon per train, commonly 45-90 days, hadn't hit yet)
-            # — dropping "approximate" outright would make this adapter return EMPTY for
-            # most of a route's monitored date window. Prefer "exact" when available, fall
-            # back to the cheapest "approximate" at reduced confidence rather than lose the
-            # offer entirely; "absent" is never a real price and is always excluded.
-            variants = offer.get("offerVariants") or []
-            exact = [v for v in variants if v.get("price", {}).get("type") == "exact"]
-            approximate = [v for v in variants if v.get("price", {}).get("type") == "approximate"]
-            if exact:
-                chosen, confidence = min(exact, key=lambda v: v["price"]["value"]["amount"]), 1.0
-            elif approximate:
-                chosen, confidence = min(approximate, key=lambda v: v["price"]["value"]["amount"]), 0.5
-            else:
+            selected = select_price_variant(offer.get("offerVariants") or [])
+            if selected is None:
                 continue
+            chosen, confidence, tier = selected
             price = chosen["price"]["value"]
 
             duration = None
@@ -236,7 +223,7 @@ class TutuRailDirectAdapter:
                     currency=price.get("currencyCode", "RUB"),
                     deep_link=None,
                     source_id=self.id,
-                    tier=Tier.CONFIRMATION,
+                    tier=tier,
                     observed_at=now,
                     source_cached_at=now,
                     expires_at=None,

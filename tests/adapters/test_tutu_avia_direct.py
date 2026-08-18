@@ -5,7 +5,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from aviapars.adapters.base import Mode, PlaceRef, ResultStatus, SearchQuery
+from aviapars.adapters.base import Mode, PlaceRef, ResultStatus, SearchQuery, Tier
 from aviapars.adapters.tutu_avia_direct import TutuAviaDirectAdapter
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "tutu_avia_direct" / "search_mow_svx.json"
@@ -37,6 +37,7 @@ def test_parse_offers_from_real_response() -> None:
     cheapest = min(offers, key=lambda o: o.price_minor)
     assert cheapest.currency == "RUB"
     assert cheapest.price_minor == 1026700
+    assert cheapest.tier == Tier.CONFIRMATION
     leg = cheapest.legs[0]
     assert leg.carrier == "Уральские авиалинии"
     assert leg.number == "U6-299"
@@ -58,9 +59,13 @@ def test_approximate_price_used_with_reduced_confidence_when_no_exact_variant() 
     assert len(offers) == 3
     approx = next(o for o in offers if o.price_minor == 1026700)
     assert approx.confidence == 0.5
+    # not CONFIRMATION: an "approximate" fare isn't bookable, and the bot's confirmed/✅
+    # display checks tier alone — this must not be shown as a confirmed real price.
+    assert approx.tier == Tier.DISCOVERY
     exact = [o for o in offers if o.price_minor == 1042000]
     assert len(exact) == 2
     assert all(o.confidence == 1.0 for o in exact)
+    assert all(o.tier == Tier.CONFIRMATION for o in exact)
 
 
 async def test_non_plane_mode_returns_empty() -> None:
