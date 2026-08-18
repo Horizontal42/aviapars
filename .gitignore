@@ -29,3 +29,7 @@ data/places_seed.sqlite
 /sp_*.html
 
 *.log
+/scratchpad_*.json
+/*_resp.json
+/*_test_out.txt
+/solve_err.txt

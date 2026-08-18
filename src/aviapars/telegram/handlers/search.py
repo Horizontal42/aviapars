@@ -83,7 +83,11 @@ async def on_search_origin_text(message: Message, state: FSMContext, db: aiosqli
 @router.callback_query(SearchFlow.origin_pick, PlacePick.filter())
 async def on_search_origin_pick(query: CallbackQuery, callback_data: PlacePick, state: FSMContext) -> None:
     data = await state.get_data()
-    place = data["candidates_origin"][callback_data.idx]
+    candidates = data.get("candidates_origin")
+    if not candidates or not 0 <= callback_data.idx < len(candidates):
+        await query.answer("Список устарел, начните заново: /search", show_alert=True)
+        return
+    place = candidates[callback_data.idx]
     await state.update_data(origin_place_id=place.id, origin_title=place.name_ru)
     await state.set_state(SearchFlow.destination)
     assert query.message is not None
@@ -99,7 +103,11 @@ async def on_search_destination_text(message: Message, state: FSMContext, db: ai
 @router.callback_query(SearchFlow.destination_pick, PlacePick.filter())
 async def on_search_destination_pick(query: CallbackQuery, callback_data: PlacePick, state: FSMContext) -> None:
     data = await state.get_data()
-    place = data["candidates_dest"][callback_data.idx]
+    candidates = data.get("candidates_dest")
+    if not candidates or not 0 <= callback_data.idx < len(candidates):
+        await query.answer("Список устарел, начните заново: /search", show_alert=True)
+        return
+    place = candidates[callback_data.idx]
     await state.update_data(dest_place_id=place.id, dest_title=place.name_ru)
     await state.set_state(SearchFlow.date_mode)
     assert query.message is not None
@@ -235,7 +243,11 @@ async def on_search_track(query: CallbackQuery, callback_data: SearchTrack, stat
     else pre-filled from the search the user just ran — including the date
     selection, so a flexible search becomes a flexible route."""
     data = await state.get_data()
-    itinerary: Itinerary = data["results_itineraries"][callback_data.idx]
+    itineraries = data.get("results_itineraries")
+    if not itineraries or not 0 <= callback_data.idx < len(itineraries):
+        await query.answer("Поиск устарел, начните заново: /search", show_alert=True)
+        return
+    itinerary: Itinerary = itineraries[callback_data.idx]
     all_legs = [leg for offer in itinerary.offers for leg in offer.legs]
     modes_used = {leg.mode.value for leg in all_legs}
     mode_pref = modes_used.pop() if len(modes_used) == 1 else "auto"

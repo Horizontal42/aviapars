@@ -28,6 +28,11 @@ from aviapars.telegram.states import AddRoute
 router = Router(name="add")
 
 _MODE_LABEL = {"plane": "✈️ Самолёт", "train": "🚂 Поезд", "auto": "🔀 Авто"}
+# Sanity ceilings, not real limits — no real ticket costs this much, no route needs polling
+# this rarely. Without them an absurd digit string (e.g. 19 digits) overflows timedelta()
+# or SQLite's bind for max_price and takes down the whole scheduler tick, not just this route.
+_MAX_PRICE_RUB = 100_000_000
+_MAX_INTERVAL_MIN = 43_200  # 30 days
 
 
 async def start_wizard(message: Message, state: FSMContext) -> None:
@@ -50,7 +55,11 @@ async def on_origin_text(message: Message, state: FSMContext, db: aiosqlite.Conn
 @router.callback_query(AddRoute.origin_pick, PlacePick.filter())
 async def on_origin_pick(query: CallbackQuery, callback_data: PlacePick, state: FSMContext) -> None:
     data = await state.get_data()
-    place = data["candidates_origin"][callback_data.idx]
+    candidates = data.get("candidates_origin")
+    if not candidates or not 0 <= callback_data.idx < len(candidates):
+        await query.answer("Список устарел, начните заново: /add", show_alert=True)
+        return
+    place = candidates[callback_data.idx]
     await state.update_data(origin_place_id=place.id, origin_title=place.name_ru)
     await state.set_state(AddRoute.destination)
     assert query.message is not None
@@ -66,7 +75,11 @@ async def on_destination_text(message: Message, state: FSMContext, db: aiosqlite
 @router.callback_query(AddRoute.destination_pick, PlacePick.filter())
 async def on_destination_pick(query: CallbackQuery, callback_data: PlacePick, state: FSMContext) -> None:
     data = await state.get_data()
-    place = data["candidates_dest"][callback_data.idx]
+    candidates = data.get("candidates_dest")
+    if not candidates or not 0 <= callback_data.idx < len(candidates):
+        await query.answer("Список устарел, начните заново: /add", show_alert=True)
+        return
+    place = candidates[callback_data.idx]
     await state.update_data(dest_place_id=place.id, dest_title=place.name_ru)
     await state.set_state(AddRoute.mode)
     assert query.message is not None
@@ -134,8 +147,8 @@ async def on_threshold_text(message: Message, state: FSMContext) -> None:
     except ValueError:
         await message.answer("Введите число, например 8000.", reply_markup=menu_only_kb())
         return
-    if rub <= 0:
-        await message.answer("Цена должна быть больше нуля.", reply_markup=menu_only_kb())
+    if rub <= 0 or rub > _MAX_PRICE_RUB:
+        await message.answer(f"Введите цену от 1 до {_MAX_PRICE_RUB:,} ₽.".replace(",", " "), reply_markup=menu_only_kb())
         return
     await state.update_data(max_price_minor=rub * 100)
     await state.set_state(AddRoute.interval)
@@ -154,9 +167,9 @@ async def on_interval_text(message: Message, state: FSMContext, db: aiosqlite.Co
     except ValueError:
         await message.answer("Введите целое число минут, например 60.", reply_markup=menu_only_kb())
         return
-    if minutes < settings.poll_interval_floor_min:
+    if minutes < settings.poll_interval_floor_min or minutes > _MAX_INTERVAL_MIN:
         await message.answer(
-            f"Минимум {settings.poll_interval_floor_min} минут — иначе долбим источники слишком часто.",
+            f"Введите от {settings.poll_interval_floor_min} до {_MAX_INTERVAL_MIN} минут.",
             reply_markup=menu_only_kb(),
         )
         return

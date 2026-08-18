@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import ipaddress
 import socket
 import struct
 import subprocess
@@ -27,7 +28,21 @@ import subprocess
 
 def _detect_tailscale_ip() -> str:
     out = subprocess.run(["tailscale", "ip", "-4"], capture_output=True, text=True, check=True)
-    return out.stdout.strip()
+    ip = out.stdout.strip()
+    if not ip:
+        raise RuntimeError("tailscale ip -4 returned nothing — is tailscaled up and assigned an IPv4?")
+    return ip
+
+
+def _is_forwardable(addr: str) -> bool:
+    """Refuses loopback/private/link-local/reserved destinations — this relay exists to reach
+    public carrier sites over a residential egress, not to pivot into the admin's home LAN
+    (router admin panels, other LAN hosts) from whatever's on the other end of the tailnet."""
+    try:
+        ip = ipaddress.ip_address(addr)
+    except ValueError:
+        return True  # a hostname — resolved and re-checked at connect time by open_connection
+    return not (ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast)
 
 
 async def _handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -49,6 +64,24 @@ async def _handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) ->
             writer.close()
             return
         port = struct.unpack("!H", await reader.readexactly(2))[0]
+
+        if _cmd != 1:  # CONNECT only — docstring promise, now actually enforced
+            writer.write(b"\x05\x07\x00\x01\x00\x00\x00\x00\x00\x00")  # command not supported
+            await writer.drain()
+            writer.close()
+            return
+
+        try:
+            loop = asyncio.get_event_loop()
+            infos = await loop.getaddrinfo(addr, port, type=socket.SOCK_STREAM)
+        except OSError:
+            infos = []
+        resolved = {info[4][0] for info in infos}
+        if not resolved or any(not _is_forwardable(ip) for ip in resolved):
+            writer.write(b"\x05\x02\x00\x01\x00\x00\x00\x00\x00\x00")  # connection not allowed
+            await writer.drain()
+            writer.close()
+            return
 
         try:
             remote_reader, remote_writer = await asyncio.wait_for(asyncio.open_connection(addr, port), timeout=15)
@@ -88,6 +121,8 @@ async def main() -> None:
     args = parser.parse_args()
 
     host = args.host or _detect_tailscale_ip()
+    if not host or host in ("0.0.0.0", "::"):
+        raise SystemExit(f"refusing to bind {host!r} — this relay is tailnet-only, never public")
     server = await asyncio.start_server(_handle, host, args.port)
     print(f"socks5 relay listening on {host}:{args.port}", flush=True)
     async with server:
