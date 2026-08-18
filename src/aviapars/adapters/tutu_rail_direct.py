@@ -201,13 +201,25 @@ class TutuRailDirectAdapter:
             if not legs:
                 continue
 
-            # "absent"-type prices are waitlist/notify-me placeholders with amount=0
-            # (no seats currently on sale) — a real fare always comes back "exact".
-            variants = [v for v in (offer.get("offerVariants") or []) if v.get("price", {}).get("type") == "exact"]
-            if not variants:
+            # price.type: "exact" (real fare, sales open), "approximate" (sales haven't
+            # opened yet for this train — Tutu shows an estimate based on past fares),
+            # "absent" (no seats / waitlist placeholder, amount=0). Verified live: dates
+            # ~30 days out came back 100% "approximate"/"absent" with zero "exact" offers
+            # (RZD's own sales-open horizon per train, commonly 45-90 days, hadn't hit yet)
+            # — dropping "approximate" outright would make this adapter return EMPTY for
+            # most of a route's monitored date window. Prefer "exact" when available, fall
+            # back to the cheapest "approximate" at reduced confidence rather than lose the
+            # offer entirely; "absent" is never a real price and is always excluded.
+            variants = offer.get("offerVariants") or []
+            exact = [v for v in variants if v.get("price", {}).get("type") == "exact"]
+            approximate = [v for v in variants if v.get("price", {}).get("type") == "approximate"]
+            if exact:
+                chosen, confidence = min(exact, key=lambda v: v["price"]["value"]["amount"]), 1.0
+            elif approximate:
+                chosen, confidence = min(approximate, key=lambda v: v["price"]["value"]["amount"]), 0.5
+            else:
                 continue
-            cheapest = min(variants, key=lambda v: v["price"]["value"]["amount"])
-            price = cheapest["price"]["value"]
+            price = chosen["price"]["value"]
 
             duration = None
             if legs[-1].arrive_utc:
@@ -228,7 +240,7 @@ class TutuRailDirectAdapter:
                     observed_at=now,
                     source_cached_at=now,
                     expires_at=None,
-                    confidence=1.0,
+                    confidence=confidence,
                     itinerary_hash=itinerary_hash,
                     duration_minutes=duration,
                 )

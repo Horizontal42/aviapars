@@ -9,6 +9,9 @@ from aviapars.adapters.base import Mode, PlaceRef, ResultStatus, SearchQuery
 from aviapars.adapters.tutu_rail_direct import TutuRailDirectAdapter
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "tutu_rail_direct" / "search_mow_led.json"
+APPROXIMATE_FIXTURE = (
+    Path(__file__).parent.parent / "fixtures" / "tutu_rail_direct" / "search_mow_led_approximate.json"
+)
 
 
 def _origin() -> PlaceRef:
@@ -29,12 +32,17 @@ def test_parse_offers_from_real_response() -> None:
 
     offers = adapter._parse_offers(payload, _query(), date(2026, 9, 20))
 
-    # fixture has 4 offers merged across two response chunks (2 unique to chunk0,
-    # 1 overlapping, 1 unique to chunk1) but 2 of them only have "absent"-priced
-    # (sold-out/waitlist) variants and must be dropped
-    assert len(offers) == 2
-    assert {o.price_minor for o in offers} == {514106, 581025}
+    # fixture has 4 unique offers merged across two response chunks (2 unique to chunk0,
+    # 1 overlapping, 1 unique to chunk1). The overlapping one resolves to chunk1's later
+    # snapshot (dict.update semantics), which has 3 "absent" variants and 1 "approximate"
+    # — kept via the approximate fallback at reduced confidence. The other chunk1-only
+    # offer is "absent"-only and correctly dropped, leaving 3 of the 4.
+    assert len(offers) == 3
+    assert {o.price_minor for o in offers} == {514106, 581025, 846464}
+    approx = next(o for o in offers if o.price_minor == 846464)
+    assert approx.confidence == 0.5
     priced = next(o for o in offers if o.price_minor == 514106)
+    assert priced.confidence == 1.0
     assert priced.currency == "RUB"
     leg = priced.legs[0]
     assert leg.carrier == "ФПК"
@@ -42,6 +50,21 @@ def test_parse_offers_from_real_response() -> None:
     assert leg.depart_utc.isoformat() == "2026-09-20T20:55:00+00:00"
     assert leg.arrive_utc is not None
     assert leg.arrive_utc.isoformat() == "2026-09-21T04:55:00+00:00"
+
+
+def test_approximate_price_used_with_reduced_confidence_when_no_exact_offer() -> None:
+    # regression: live-captured 30-days-out response where every offer's variants were
+    # "approximate" (ticket sales not yet open) or "absent" (sold out) — zero "exact".
+    # The old exact-only filter dropped every one of these, returning EMPTY for a route
+    # that genuinely has trains running; this proves the fallback keeps them, flagged.
+    adapter = TutuRailDirectAdapter()
+    payload = json.loads(APPROXIMATE_FIXTURE.read_text(encoding="utf-8"))
+
+    offers = adapter._parse_offers(payload, _query(), date(2026, 9, 17))
+
+    assert len(offers) == 2
+    assert all(o.confidence == 0.5 for o in offers)
+    assert sorted(o.price_minor for o in offers) == [90337, 281962]
 
 
 async def test_non_train_mode_returns_empty() -> None:

@@ -1,0 +1,650 @@
+[
+ {
+  "dictionary": {
+   "avia": {
+    "conditions": {},
+    "feedback": {},
+    "points": {},
+    "vehicles": {},
+    "voyages": {}
+   },
+   "bus": {
+    "conditions": null,
+    "feedback": null,
+    "points": null,
+    "voyages": {}
+   },
+   "car": {
+    "conditions": null,
+    "points": null,
+    "vehicles": null,
+    "voyages": null
+   },
+   "common": {
+    "bookingUpsales": {},
+    "carriers": {
+     "1111": {
+      "displaySettings": {
+       "logo": {
+        "mobile": "https://cdn2.tu-tu.ru/image/source/1/cf0d8c2df7260cbcc7930110449f9dc0/"
+       }
+      },
+      "name": "Уральские авиалинии",
+      "uri": "https://www.uralairlines.ru/"
+     },
+     "1062": {
+      "displaySettings": {
+       "logo": {
+        "mobile": "https://cdn2.tu-tu.ru/image/source/1/2dc89c49a077f45485e51cf1767b8692/"
+       }
+      },
+      "name": "Аэрофлот",
+      "uri": "https://www.aeroflot.ru/ru-ru"
+     }
+    },
+    "cities": {},
+    "countries": {},
+    "currency": {},
+    "fareApplications": {},
+    "routes": {
+     "cbf51da3459a0d33d56737b0fbe04352": {
+      "id": "cbf51da3459a0d33d56737b0fbe04352",
+      "segmentIds": [
+       "cbf51da3459a0d33d56737b0fbe04352"
+      ],
+      "transferIds": []
+     },
+     "cce44bdd76a5a3671e117c92a6586edf": {
+      "id": "cce44bdd76a5a3671e117c92a6586edf",
+      "segmentIds": [
+       "cce44bdd76a5a3671e117c92a6586edf"
+      ],
+      "transferIds": []
+     },
+     "91922f131d87c37727282c1070793494": {
+      "id": "91922f131d87c37727282c1070793494",
+      "segmentIds": [
+       "91922f131d87c37727282c1070793494"
+      ],
+      "transferIds": []
+     }
+    },
+    "segments": {
+     "cbf51da3459a0d33d56737b0fbe04352": {
+      "arrivalDateTime": "2026-09-20T22:10:00+05:00",
+      "arrivalGeoPointId": 2718720,
+      "arrivalTerminal": "",
+      "bookingGroupId": 0,
+      "carriers": [
+       {
+        "id": "1111",
+        "type": "marketing"
+       },
+       {
+        "id": "1111",
+        "type": "operating"
+       }
+      ],
+      "departureDateTime": "2026-09-20T17:45:00+03:00",
+      "departureGeoPointId": 2718688,
+      "departureTerminal": "",
+      "duration": 145,
+      "id": "cbf51da3459a0d33d56737b0fbe04352",
+      "type": "avia",
+      "vehicleId": "2441",
+      "voyageNumber": "U6-299"
+     },
+     "cce44bdd76a5a3671e117c92a6586edf": {
+      "arrivalDateTime": "2026-09-20T15:30:00+05:00",
+      "arrivalGeoPointId": 2718720,
+      "arrivalTerminal": "",
+      "bookingGroupId": 0,
+      "carriers": [
+       {
+        "id": "1062",
+        "type": "marketing"
+       },
+       {
+        "id": "1062",
+        "type": "operating"
+       }
+      ],
+      "departureDateTime": "2026-09-20T11:05:00+03:00",
+      "departureGeoPointId": 2719726,
+      "departureTerminal": "B",
+      "duration": 145,
+      "id": "cce44bdd76a5a3671e117c92a6586edf",
+      "type": "avia",
+      "vehicleId": "0",
+      "voyageNumber": "SU-1402"
+     },
+     "91922f131d87c37727282c1070793494": {
+      "arrivalDateTime": "2026-09-20T17:10:00+05:00",
+      "arrivalGeoPointId": 2718720,
+      "arrivalTerminal": "",
+      "bookingGroupId": 0,
+      "carriers": [
+       {
+        "id": "1062",
+        "type": "marketing"
+       },
+       {
+        "id": "1062",
+        "type": "operating"
+       }
+      ],
+      "departureDateTime": "2026-09-20T12:55:00+03:00",
+      "departureGeoPointId": 2719726,
+      "departureTerminal": "B",
+      "duration": 135,
+      "id": "91922f131d87c37727282c1070793494",
+      "type": "avia",
+      "vehicleId": "0",
+      "voyageNumber": "SU-1436"
+     }
+    },
+    "transfers": {}
+   },
+   "etrain": {},
+   "train": {
+    "conditions": {},
+    "feedback": {},
+    "payLaterTerms": [],
+    "points": {},
+    "vehicles": {},
+    "voyages": {}
+   }
+  },
+  "offers": {
+   "actual": {
+    "cbf51da3459a0d33d56737b0fbe04352": {
+     "id": "cbf51da3459a0d33d56737b0fbe04352",
+     "labels": [
+      {
+       "additionalInfo": {
+        "paragraphs": [
+         "— Обычно билеты этой авиакомпании стоят на 10–30% дороже",
+         "— Во время распродажи есть шанс купить их с хорошей скидкой"
+        ],
+        "title": "Что такое распродажа"
+       },
+       "backgroundColor": {
+        "kite": "background-negative"
+       },
+       "id": "sale_short",
+       "leftIcon": {
+        "name": "badge-percentage-sign"
+       },
+       "textColor": {
+        "kite": "content-negative-primary"
+       }
+      }
+     ],
+     "offerSetId": "ff00e9f46447f23141365b387582ce18",
+     "offerVariants": [
+      {
+       "actions": null,
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "cbf51da3459a0d33d56737b0fbe04352": [
+         "4a0f9b4be40468bb9e803f5be02a3e52"
+        ]
+       },
+       "id": "bcf8ad2c2d086120c19c13eab8188906:8013b510421c06f18c4d156ad2aca2d4",
+       "monthlyInstallment": {
+        "type": "exact",
+        "value": {
+         "amount": 85558,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "offerHash": "{\"Price\":10267,\"OriginalHash\":\"[{\\\"offerVariantHash\\\":\\\"4a0f9b4be40468bb9e803f5be02a3e52\\\",\\\"variantConditionsHash\\\":\\\"cbf51da3459a0d33d56737b0fbe04352:03d1ea601a2e40701ecafefc616d02e6\\\",\\\"pricingVariantHash\\\":\\\"7102fd20c89229a6ee775c3eb03f9f18\\\"}]\"}",
+       "price": {
+        "type": "approximate",
+        "value": {
+         "amount": 1026700,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 524288,
+       "status": {
+        "saleStatus": ""
+       },
+       "uuid": "227e5211-5408-5944-91ef-8cfa49ece2a4"
+      },
+      {
+       "actions": null,
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "cbf51da3459a0d33d56737b0fbe04352": [
+         "72c414e6f94f050847fa02183ee480ef"
+        ]
+       },
+       "id": "bcf8ad2c2d086120c19c13eab8188906:e17195945116eee5cc4360dcb82da5f9",
+       "monthlyInstallment": {
+        "type": "exact",
+        "value": {
+         "amount": 111933,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "offerHash": "{\"Price\":13432,\"OriginalHash\":\"[{\\\"offerVariantHash\\\":\\\"72c414e6f94f050847fa02183ee480ef\\\",\\\"variantConditionsHash\\\":\\\"cbf51da3459a0d33d56737b0fbe04352:3f16fe56f25b907e45fe29c6f0fc995a\\\",\\\"pricingVariantHash\\\":\\\"3e4827d92b27f0b4c10c181178a95321\\\"}]\"}",
+       "price": {
+        "type": "approximate",
+        "value": {
+         "amount": 1343200,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 524288,
+       "status": {
+        "saleStatus": ""
+       },
+       "uuid": "f51dcf7c-0f8a-529d-8df8-6ed5b629d832"
+      },
+      {
+       "actions": null,
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "cbf51da3459a0d33d56737b0fbe04352": [
+         "a5a4b698a6ff3f0574032abf35b0c010"
+        ]
+       },
+       "id": "bcf8ad2c2d086120c19c13eab8188906:4d092885eeefcfea271ba047c06138ee",
+       "monthlyInstallment": {
+        "type": "exact",
+        "value": {
+         "amount": 142458,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "offerHash": "{\"Price\":17095,\"OriginalHash\":\"[{\\\"offerVariantHash\\\":\\\"a5a4b698a6ff3f0574032abf35b0c010\\\",\\\"variantConditionsHash\\\":\\\"cbf51da3459a0d33d56737b0fbe04352:02df24e25a638e082aefa3824ebbb3b2\\\",\\\"pricingVariantHash\\\":\\\"8f9a608c7ea7a9cb286114913d8ac9a3\\\"}]\"}",
+       "price": {
+        "type": "approximate",
+        "value": {
+         "amount": 1709500,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 524288,
+       "status": {
+        "saleStatus": ""
+       },
+       "uuid": "fd9cbbd9-dafe-5a22-9390-8d4be29c1651"
+      }
+     ],
+     "routeIds": [
+      "cbf51da3459a0d33d56737b0fbe04352"
+     ],
+     "sortValue": 4,
+     "warnings": null
+    },
+    "cce44bdd76a5a3671e117c92a6586edf": {
+     "id": "cce44bdd76a5a3671e117c92a6586edf",
+     "offerSetId": "32d7acd1cfff32494af4149109cc63ba",
+     "offerVariants": [
+      {
+       "actions": null,
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "cce44bdd76a5a3671e117c92a6586edf": [
+         "cf4b3ccdf508316be48a656c155322e4"
+        ]
+       },
+       "id": "579eb1d4f5c46a181b3c3c2bc017fa4a:06dd44ad3a22ddcce66412f835719a8b",
+       "monthlyInstallment": {
+        "type": "exact",
+        "value": {
+         "amount": 86833,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "offerHash": "{\"Price\":10420,\"OriginalHash\":\"[{\\\"offerVariantHash\\\":\\\"cf4b3ccdf508316be48a656c155322e4\\\",\\\"variantConditionsHash\\\":\\\"cce44bdd76a5a3671e117c92a6586edf:4a15ebaf82f14491e2bac3a776e17da0\\\",\\\"pricingVariantHash\\\":\\\"b68ffa077983c7fef19b70aaa461b343\\\"}]\"}",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 1042000,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 524288,
+       "status": {
+        "saleStatus": ""
+       },
+       "uuid": "c46b1d7d-cd2a-578f-83c6-44319851fda9"
+      },
+      {
+       "actions": null,
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "cce44bdd76a5a3671e117c92a6586edf": [
+         "473216116a599ae8cd7622b975cb9106"
+        ]
+       },
+       "id": "579eb1d4f5c46a181b3c3c2bc017fa4a:e17195945116eee5cc4360dcb82da5f9",
+       "monthlyInstallment": {
+        "type": "exact",
+        "value": {
+         "amount": 116958,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "offerHash": "{\"Price\":14035,\"OriginalHash\":\"[{\\\"offerVariantHash\\\":\\\"473216116a599ae8cd7622b975cb9106\\\",\\\"variantConditionsHash\\\":\\\"cce44bdd76a5a3671e117c92a6586edf:3512777c0927777baf7233034bcadd1e\\\",\\\"pricingVariantHash\\\":\\\"1164dc4d19dd735f8cb354f238dd8916\\\"}]\"}",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 1403500,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 524288,
+       "status": {
+        "saleStatus": ""
+       },
+       "uuid": "7c233ca9-67fa-518a-b470-abb01fc3b862"
+      },
+      {
+       "actions": null,
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "cce44bdd76a5a3671e117c92a6586edf": [
+         "e809dee5dd50a9d2ce71e4ccbfd596d5"
+        ]
+       },
+       "id": "579eb1d4f5c46a181b3c3c2bc017fa4a:4d092885eeefcfea271ba047c06138ee",
+       "monthlyInstallment": {
+        "type": "exact",
+        "value": {
+         "amount": 173516,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "offerHash": "{\"Price\":20822,\"OriginalHash\":\"[{\\\"offerVariantHash\\\":\\\"e809dee5dd50a9d2ce71e4ccbfd596d5\\\",\\\"variantConditionsHash\\\":\\\"cce44bdd76a5a3671e117c92a6586edf:82e1de26d80c0447c4375b0fe9df31c8\\\",\\\"pricingVariantHash\\\":\\\"b7e2b96f0d89af8c884a4f7bb3a2a332\\\"}]\"}",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 2082200,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 524288,
+       "status": {
+        "saleStatus": ""
+       },
+       "uuid": "b97a90ad-6436-5a78-a98b-abec87ed5a37"
+      },
+      {
+       "actions": null,
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "cce44bdd76a5a3671e117c92a6586edf": [
+         "2cfd7a35748558f6662b411debfa09b8"
+        ]
+       },
+       "id": "579eb1d4f5c46a181b3c3c2bc017fa4a:3816b3b0bc66756051ce27437191e540",
+       "monthlyInstallment": {
+        "type": "exact",
+        "value": {
+         "amount": 461583,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "offerHash": "{\"Price\":55390,\"OriginalHash\":\"[{\\\"offerVariantHash\\\":\\\"2cfd7a35748558f6662b411debfa09b8\\\",\\\"variantConditionsHash\\\":\\\"cce44bdd76a5a3671e117c92a6586edf:71ac8e907bd67cd6dcdbf26f298bfc43\\\",\\\"pricingVariantHash\\\":\\\"c48a9e8d34b4ead648e08d1d387c2b62\\\"}]\"}",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 5539000,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 524288,
+       "status": {
+        "saleStatus": ""
+       },
+       "uuid": "6fd8dcdd-394a-563e-bae5-7e987e3fd436"
+      },
+      {
+       "actions": null,
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "cce44bdd76a5a3671e117c92a6586edf": [
+         "19153ee65aa12653804281088c89bc6c"
+        ]
+       },
+       "id": "579eb1d4f5c46a181b3c3c2bc017fa4a:46f9e51481197e3f8f65e1d51d167338",
+       "monthlyInstallment": {
+        "type": "exact",
+        "value": {
+         "amount": 525608,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "offerHash": "{\"Price\":63073,\"OriginalHash\":\"[{\\\"offerVariantHash\\\":\\\"19153ee65aa12653804281088c89bc6c\\\",\\\"variantConditionsHash\\\":\\\"cce44bdd76a5a3671e117c92a6586edf:8f2a245a2a2a76b399b0cd6268977c2f\\\",\\\"pricingVariantHash\\\":\\\"5b01029b0e15a09cebd391cdef572683\\\"}]\"}",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 6307300,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 524288,
+       "status": {
+        "saleStatus": ""
+       },
+       "uuid": "4a34656a-dd74-527a-9509-35de5f85c015"
+      }
+     ],
+     "routeIds": [
+      "cce44bdd76a5a3671e117c92a6586edf"
+     ],
+     "sortValue": 7,
+     "warnings": null
+    },
+    "91922f131d87c37727282c1070793494": {
+     "id": "91922f131d87c37727282c1070793494",
+     "offerSetId": "a79cf3eaa49b061cb7d05cf397a6ef9a",
+     "offerVariants": [
+      {
+       "actions": null,
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "91922f131d87c37727282c1070793494": [
+         "cb7960f565c121ed2deecd42db05370a"
+        ]
+       },
+       "id": "ca974194a098aaa6cc3c033dc33b8d2f:06dd44ad3a22ddcce66412f835719a8b",
+       "monthlyInstallment": {
+        "type": "exact",
+        "value": {
+         "amount": 86833,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "offerHash": "{\"Price\":10420,\"OriginalHash\":\"[{\\\"offerVariantHash\\\":\\\"cb7960f565c121ed2deecd42db05370a\\\",\\\"variantConditionsHash\\\":\\\"91922f131d87c37727282c1070793494:4a15ebaf82f14491e2bac3a776e17da0\\\",\\\"pricingVariantHash\\\":\\\"d70f1176195bd6df8de32907eee67787\\\"}]\"}",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 1042000,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 524288,
+       "status": {
+        "saleStatus": ""
+       },
+       "uuid": "c4cf6e79-a35d-55b9-9de5-37db366678bf"
+      },
+      {
+       "actions": null,
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "91922f131d87c37727282c1070793494": [
+         "d87e721202bca6274d12f564a1206cf8"
+        ]
+       },
+       "id": "ca974194a098aaa6cc3c033dc33b8d2f:e17195945116eee5cc4360dcb82da5f9",
+       "monthlyInstallment": {
+        "type": "exact",
+        "value": {
+         "amount": 116958,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "offerHash": "{\"Price\":14035,\"OriginalHash\":\"[{\\\"offerVariantHash\\\":\\\"d87e721202bca6274d12f564a1206cf8\\\",\\\"variantConditionsHash\\\":\\\"91922f131d87c37727282c1070793494:3512777c0927777baf7233034bcadd1e\\\",\\\"pricingVariantHash\\\":\\\"88771366851ad074677b6e9da9832ee4\\\"}]\"}",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 1403500,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 524288,
+       "status": {
+        "saleStatus": ""
+       },
+       "uuid": "64b37b38-9302-5d76-ad25-bb15e3a28864"
+      },
+      {
+       "actions": null,
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "91922f131d87c37727282c1070793494": [
+         "bb87ffd3e64591f37ad56c8ee799b445"
+        ]
+       },
+       "id": "ca974194a098aaa6cc3c033dc33b8d2f:4d092885eeefcfea271ba047c06138ee",
+       "monthlyInstallment": {
+        "type": "exact",
+        "value": {
+         "amount": 173516,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "offerHash": "{\"Price\":20822,\"OriginalHash\":\"[{\\\"offerVariantHash\\\":\\\"bb87ffd3e64591f37ad56c8ee799b445\\\",\\\"variantConditionsHash\\\":\\\"91922f131d87c37727282c1070793494:82e1de26d80c0447c4375b0fe9df31c8\\\",\\\"pricingVariantHash\\\":\\\"798e0002c7b4f7dcc2b7060efbc83321\\\"}]\"}",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 2082200,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 524288,
+       "status": {
+        "saleStatus": ""
+       },
+       "uuid": "1dfaad25-7b66-57da-b6a7-5a7f5085683e"
+      },
+      {
+       "actions": null,
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "91922f131d87c37727282c1070793494": [
+         "04963405339b1ffa6fc09dc3b7f37ced"
+        ]
+       },
+       "id": "ca974194a098aaa6cc3c033dc33b8d2f:3816b3b0bc66756051ce27437191e540",
+       "monthlyInstallment": {
+        "type": "exact",
+        "value": {
+         "amount": 461583,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "offerHash": "{\"Price\":55390,\"OriginalHash\":\"[{\\\"offerVariantHash\\\":\\\"04963405339b1ffa6fc09dc3b7f37ced\\\",\\\"variantConditionsHash\\\":\\\"91922f131d87c37727282c1070793494:71ac8e907bd67cd6dcdbf26f298bfc43\\\",\\\"pricingVariantHash\\\":\\\"d88deed3d167f2d8f8f7ecb80a58fdb4\\\"}]\"}",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 5539000,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 524288,
+       "status": {
+        "saleStatus": ""
+       },
+       "uuid": "7a02b649-46a6-5095-9f5f-abc01fef68db"
+      },
+      {
+       "actions": null,
+       "bonuses": [],
+       "debugInfo": "",
+       "fareApplications": {
+        "91922f131d87c37727282c1070793494": [
+         "cfa374fa3f81c2b70d92d303423f0dbe"
+        ]
+       },
+       "id": "ca974194a098aaa6cc3c033dc33b8d2f:46f9e51481197e3f8f65e1d51d167338",
+       "monthlyInstallment": {
+        "type": "exact",
+        "value": {
+         "amount": 525608,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "offerHash": "{\"Price\":63073,\"OriginalHash\":\"[{\\\"offerVariantHash\\\":\\\"cfa374fa3f81c2b70d92d303423f0dbe\\\",\\\"variantConditionsHash\\\":\\\"91922f131d87c37727282c1070793494:8f2a245a2a2a76b399b0cd6268977c2f\\\",\\\"pricingVariantHash\\\":\\\"d6ade671cea1b931d104b47c735d5586\\\"}]\"}",
+       "price": {
+        "type": "exact",
+        "value": {
+         "amount": 6307300,
+         "currencyCode": "RUB",
+         "fraction": 100
+        }
+       },
+       "score": 524288,
+       "status": {
+        "saleStatus": ""
+       },
+       "uuid": "83b14945-3487-5b2f-9064-7893969c0b36"
+      }
+     ],
+     "routeIds": [
+      "91922f131d87c37727282c1070793494"
+     ],
+     "sortValue": 8,
+     "warnings": null
+    }
+   },
+   "future": {},
+   "past": {}
+  },
+  "requestDateTime": "2026-08-18T03:18:23+03:00",
+  "warnings": []
+ }
+]

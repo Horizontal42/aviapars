@@ -9,6 +9,9 @@ from aviapars.adapters.base import Mode, PlaceRef, ResultStatus, SearchQuery
 from aviapars.adapters.tutu_avia_direct import TutuAviaDirectAdapter
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "tutu_avia_direct" / "search_mow_svx.json"
+APPROXIMATE_FIXTURE = (
+    Path(__file__).parent.parent / "fixtures" / "tutu_avia_direct" / "search_mow_svx_approximate.json"
+)
 
 
 def _origin() -> PlaceRef:
@@ -40,6 +43,24 @@ def test_parse_offers_from_real_response() -> None:
     assert leg.depart_utc.isoformat() == "2026-09-20T14:45:00+00:00"
     assert leg.arrive_utc is not None
     assert leg.arrive_utc.isoformat() == "2026-09-20T17:10:00+00:00"
+
+
+def test_approximate_price_used_with_reduced_confidence_when_no_exact_variant() -> None:
+    # regression: tutu_rail_direct proved live that a route/date can come back with zero
+    # "exact" variants (booking not open yet) — same platform, same offerVariants shape,
+    # so avia gets the identical fallback. Fixture: cheapest offer's variants mutated to
+    # "approximate", the other two left "exact", to prove both paths coexist correctly.
+    adapter = TutuAviaDirectAdapter()
+    payload = json.loads(APPROXIMATE_FIXTURE.read_text(encoding="utf-8"))
+
+    offers = adapter._parse_offers(payload, _query(), date(2026, 9, 20))
+
+    assert len(offers) == 3
+    approx = next(o for o in offers if o.price_minor == 1026700)
+    assert approx.confidence == 0.5
+    exact = [o for o in offers if o.price_minor == 1042000]
+    assert len(exact) == 2
+    assert all(o.confidence == 1.0 for o in exact)
 
 
 async def test_non_plane_mode_returns_empty() -> None:

@@ -209,13 +209,23 @@ class TutuAviaDirectAdapter:
             if not legs:
                 continue
 
-            # "absent"-type prices are waitlist/notify-me placeholders with amount=0
-            # (no seats currently on sale) — a real fare always comes back "exact".
-            variants = [v for v in (offer.get("offerVariants") or []) if v.get("price", {}).get("type") == "exact"]
-            if not variants:
+            # price.type: "exact" (real fare, booking open), "approximate" (booking not
+            # open yet for this flight — Tutu shows an estimate), "absent" (no seats /
+            # waitlist placeholder, amount=0). Verified live on tutu_rail_direct that
+            # further-out dates can come back 100% "approximate"/"absent" with zero
+            # "exact" offers — same platform, same risk here. Prefer "exact", fall back to
+            # the cheapest "approximate" at reduced confidence rather than lose the offer
+            # entirely; "absent" is never a real price and is always excluded.
+            variants = offer.get("offerVariants") or []
+            exact = [v for v in variants if v.get("price", {}).get("type") == "exact"]
+            approximate = [v for v in variants if v.get("price", {}).get("type") == "approximate"]
+            if exact:
+                chosen, confidence = min(exact, key=lambda v: v["price"]["value"]["amount"]), 1.0
+            elif approximate:
+                chosen, confidence = min(approximate, key=lambda v: v["price"]["value"]["amount"]), 0.5
+            else:
                 continue
-            cheapest = min(variants, key=lambda v: v["price"]["value"]["amount"])
-            price = cheapest["price"]["value"]
+            price = chosen["price"]["value"]
 
             duration = None
             if legs[-1].arrive_utc:
@@ -236,7 +246,7 @@ class TutuAviaDirectAdapter:
                     observed_at=now,
                     source_cached_at=now,
                     expires_at=None,
-                    confidence=1.0,
+                    confidence=confidence,
                     itinerary_hash=itinerary_hash,
                     duration_minutes=duration,
                 )
