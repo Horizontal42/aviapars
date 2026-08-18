@@ -7,6 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from aviapars.adapters.registry import AdapterRegistry
+from aviapars.config import settings
 from aviapars.telegram.format import screen_text
 from aviapars.telegram.handlers import add, routes, search, status
 from aviapars.telegram.keyboards import MenuAction, main_menu_kb
@@ -79,7 +80,7 @@ async def on_menu_action(
     elif callback_data.action == "routes":
         await routes.render_routes(screen, query.from_user.id, db)
     elif callback_data.action == "status":
-        await status.render_status(screen, db, registry)
+        await status.render_status(screen, db, registry, is_admin=query.from_user.id == settings.admin_tg_id)
     elif callback_data.action == "help":
         await screen.show(HELP_TEXT, reply_markup=main_menu_kb())
     else:
