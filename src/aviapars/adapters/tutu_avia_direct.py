@@ -52,6 +52,14 @@ class TutuAviaDirectAdapter:
     `?name=SVX` returns `city.id` for the matching `city.code == "SVX"`
     suggestion) — same dynamic-resolve-and-cache pattern as
     `s7_direct._resolve_location_id`, not a new DB column.
+
+    `supports_batch_dates = False` means the combiner hands `search()` a
+    whole cycle's worth of dates at once (`flex_probe_dates_per_cycle`,
+    default 7 - see domain/dates.py's rotating-cursor plan, not all 30 days
+    of a flexible window in one go). `search()` loops over every date in
+    `q.dates`, resolving city ids once up front (cached, so a 7-date query
+    only pays for 2 suggester GETs, not 14) and then one offers POST per
+    date - one date's failure doesn't drop the others.
     """
 
     id = "tutu_avia_direct"
@@ -61,7 +69,7 @@ class TutuAviaDirectAdapter:
     countries: frozenset[str] | None = frozenset({"RU"})
     supports_batch_dates = False
     request_timeout_s = 20
-    total_timeout_s = 30
+    total_timeout_s = 60  # up to flex_probe_dates_per_cycle (default 7) sequential POSTs
 
     def __init__(self, *, rate_limit: RateLimitPolicy | None = None, cache_ttl_s: int = 1800) -> None:
         self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=12.0)
@@ -74,54 +82,79 @@ class TutuAviaDirectAdapter:
         if not q.origin.iata or not q.dest.iata or not q.dates:
             return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="missing iata/date")
 
-        depart_date = q.dates[0]  # confirmation tier: one specific leg/date (plan §6 L2)
-
+        offers: list[Offer] = []
+        blocked = False
+        partial = False
         async with AsyncSession(impersonate="chrome", timeout=self.request_timeout_s) as session:
             origin_id = await self._resolve_city_id(session, q.origin.iata)
             dest_id = await self._resolve_city_id(session, q.dest.iata)
             if origin_id is None or dest_id is None:
                 return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="city not found")
 
-            body = {
-                "passengers": {"child": 0, "infant": 0, "full": q.pax},
-                "serviceClass": "Y",
-                "routes": [
-                    {"departureCityId": origin_id, "arrivalCityId": dest_id, "departureDate": depart_date.isoformat()}
-                ],
-                "searchId": str(uuid.uuid4()),
-                "sessionId": str(uuid.uuid4()),
-                "pageId": uuid.uuid4().hex[:11],
-                "userData": {},
-                "source": "offers",
-                "dynamicFilters": {
-                    "optionFilters": [],
-                    "rangeFilters": [],
-                    "buttonFilters": [],
-                    "shortcuts": [],
-                    "switchFilters": [],
-                },
-                "offset": 0,
-                "isNewSearch": True,
-            }
-            try:
-                resp = await session.post(OFFERS_URL, headers=_OFFERS_HEADERS, data=json.dumps(body))
-            except Exception:
-                return SearchResult(status=ResultStatus.UPSTREAM_ERROR, offers=[], partial=False)
+            for depart_date in q.dates:
+                day_offers, outcome = await self._search_day(session, q, origin_id, dest_id, depart_date)
+                if outcome == "blocked":
+                    blocked = True
+                    continue
+                if outcome == "error":
+                    partial = True
+                    continue
+                offers.extend(day_offers)
+
+        if offers:
+            status = ResultStatus.OK
+        elif blocked:
+            status = ResultStatus.BLOCKED
+        elif partial:
+            status = ResultStatus.UPSTREAM_ERROR
+        else:
+            status = ResultStatus.EMPTY
+        return SearchResult(status=status, offers=offers, partial=partial)
+
+    async def _search_day(
+        self, session: Any, q: SearchQuery, origin_id: str, dest_id: str, depart_date: date
+    ) -> tuple[list[Offer], str]:
+        """Returns (offers, outcome) where outcome is "ok" (incl. legitimately empty),
+        "blocked" (403), or "error" (network/parse failure) — mirrors rzd_direct's
+        per-day result so one bad date in the window doesn't sink the whole cycle."""
+        body = {
+            "passengers": {"child": 0, "infant": 0, "full": q.pax},
+            "serviceClass": "Y",
+            "routes": [
+                {"departureCityId": origin_id, "arrivalCityId": dest_id, "departureDate": depart_date.isoformat()}
+            ],
+            "searchId": str(uuid.uuid4()),
+            "sessionId": str(uuid.uuid4()),
+            "pageId": uuid.uuid4().hex[:11],
+            "userData": {},
+            "source": "offers",
+            "dynamicFilters": {
+                "optionFilters": [],
+                "rangeFilters": [],
+                "buttonFilters": [],
+                "shortcuts": [],
+                "switchFilters": [],
+            },
+            "offset": 0,
+            "isNewSearch": True,
+        }
+        try:
+            resp = await session.post(OFFERS_URL, headers=_OFFERS_HEADERS, data=json.dumps(body))
+        except Exception:
+            return [], "error"
 
         if resp.status_code == 403:
-            return SearchResult(status=ResultStatus.BLOCKED, offers=[], partial=False)
+            return [], "blocked"
         if resp.status_code != 200:
-            return SearchResult(status=ResultStatus.UPSTREAM_ERROR, offers=[], partial=False)
+            return [], "error"
         try:
             payload = resp.json()
         except ValueError:
-            return SearchResult(status=ResultStatus.PARSE_ERROR, offers=[], partial=False)
+            return [], "error"
         if not isinstance(payload, list) or not payload:
-            return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False)
+            return [], "ok"  # legitimate "nothing found" — not a failure
 
-        offers = self._parse_offers(payload, q, depart_date)
-        status = ResultStatus.OK if offers else ResultStatus.EMPTY
-        return SearchResult(status=status, offers=offers, partial=False)
+        return self._parse_offers(payload, q, depart_date), "ok"
 
     async def _resolve_city_id(self, session: Any, iata: str) -> str | None:
         cached = self._city_id_cache.get(iata)

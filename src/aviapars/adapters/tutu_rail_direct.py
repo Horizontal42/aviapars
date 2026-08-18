@@ -66,6 +66,14 @@ class TutuRailDirectAdapter:
     can carry multiple segments (interchange trains) and every segment's
     departure/arrival is a real ISO-8601 timestamp with its own UTC offset —
     no per-station timezone guess needed.
+
+    `supports_batch_dates = False` means the combiner hands `search()` a
+    whole cycle's worth of dates at once (`flex_probe_dates_per_cycle`,
+    default 7 — see domain/dates.py's rotating-cursor plan, not all 30 days
+    of a flexible window in one go). `search()` must loop over every date in
+    `q.dates` itself, same as rzd_direct/yandex_rasp/s7_direct — a query for
+    N dates costs N sequential POSTs in one `search()` call, one date's
+    failure doesn't drop the others.
     """
 
     id = "tutu_rail_direct"
@@ -75,7 +83,7 @@ class TutuRailDirectAdapter:
     countries: frozenset[str] | None = frozenset({"RU"})
     supports_batch_dates = False
     request_timeout_s = 20
-    total_timeout_s = 30
+    total_timeout_s = 60  # up to flex_probe_dates_per_cycle (default 7) sequential POSTs
 
     def __init__(self, *, rate_limit: RateLimitPolicy | None = None, cache_ttl_s: int = 2700) -> None:
         self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=15.0)
@@ -87,7 +95,36 @@ class TutuRailDirectAdapter:
         if not q.origin.rzd_code or not q.dest.rzd_code or not q.dates:
             return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="missing rzd_code/date")
 
-        depart_date = q.dates[0]  # confirmation tier: one specific leg/date (plan §6 L2)
+        offers: list[Offer] = []
+        blocked = False
+        partial = False
+        async with AsyncSession(impersonate="chrome", timeout=self.request_timeout_s) as session:
+            for depart_date in q.dates:
+                day_offers, outcome = await self._search_day(session, q, depart_date)
+                if outcome == "blocked":
+                    blocked = True
+                    continue
+                if outcome == "error":
+                    partial = True
+                    continue
+                offers.extend(day_offers)
+
+        if offers:
+            status = ResultStatus.OK
+        elif blocked:
+            status = ResultStatus.BLOCKED
+        elif partial:
+            status = ResultStatus.UPSTREAM_ERROR
+        else:
+            status = ResultStatus.EMPTY
+        return SearchResult(status=status, offers=offers, partial=partial)
+
+    async def _search_day(
+        self, session: Any, q: SearchQuery, depart_date: date
+    ) -> tuple[list[Offer], str]:
+        """Returns (offers, outcome) where outcome is "ok" (incl. legitimately empty),
+        "blocked" (403), or "error" (network/parse failure) — mirrors rzd_direct's
+        per-day result so one bad date in the window doesn't sink the whole cycle."""
         body = {
             "routes": [
                 {
@@ -109,25 +146,22 @@ class TutuRailDirectAdapter:
         }
 
         try:
-            async with AsyncSession(impersonate="chrome", timeout=self.request_timeout_s) as session:
-                resp = await session.post(OFFERS_URL, headers=_HEADERS, json=body)
+            resp = await session.post(OFFERS_URL, headers=_HEADERS, json=body)
         except Exception:
-            return SearchResult(status=ResultStatus.UPSTREAM_ERROR, offers=[], partial=False)
+            return [], "error"
 
         if resp.status_code == 403:
-            return SearchResult(status=ResultStatus.BLOCKED, offers=[], partial=False)
+            return [], "blocked"
         if resp.status_code != 200:
-            return SearchResult(status=ResultStatus.UPSTREAM_ERROR, offers=[], partial=False)
+            return [], "error"
         try:
             payload = resp.json()
         except ValueError:
-            return SearchResult(status=ResultStatus.PARSE_ERROR, offers=[], partial=False)
+            return [], "error"
         if not isinstance(payload, list) or not payload:
-            return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False)
+            return [], "ok"  # legitimate "nothing found" — not a failure
 
-        offers = self._parse_offers(payload, q, depart_date)
-        status = ResultStatus.OK if offers else ResultStatus.EMPTY
-        return SearchResult(status=status, offers=offers, partial=False)
+        return self._parse_offers(payload, q, depart_date), "ok"
 
     def _merge_chunks(self, payload: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
         merged_offers: dict[str, Any] = {}

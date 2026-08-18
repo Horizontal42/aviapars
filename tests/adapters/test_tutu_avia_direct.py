@@ -115,6 +115,55 @@ async def test_city_id_cache_avoids_repeat_suggest_calls() -> None:
     assert calls["suggest"] == 1
 
 
+async def test_multiple_dates_each_get_their_own_request(monkeypatch: Any) -> None:
+    # regression: search() used to read only q.dates[0] and silently drop the rest of
+    # whatever window the combiner handed it (up to flex_probe_dates_per_cycle dates per
+    # cycle, see domain/dates.py) — it must issue one request per date and merge results.
+    seen_dates: list[str] = []
+    suggest_calls = {"n": 0}
+
+    class FakeSuggestResp:
+        status_code = 200
+
+        def __init__(self, iata: str) -> None:
+            self._iata = iata
+
+        def json(self) -> Any:
+            return {"suggestions": [{"city": {"id": "1", "code": self._iata}}]}
+
+    class FakeOffersResp:
+        status_code = 200
+
+        def json(self) -> Any:
+            return [{"dictionary": {"common": {}}, "offers": {"actual": {}}}]
+
+    class FakeSession:
+        async def __aenter__(self) -> "FakeSession":
+            return self
+
+        async def __aexit__(self, *exc: object) -> None:
+            return None
+
+        async def get(self, *args: Any, **kwargs: Any) -> FakeSuggestResp:
+            suggest_calls["n"] += 1
+            return FakeSuggestResp(kwargs["params"]["name"])
+
+        async def post(self, *args: Any, **kwargs: Any) -> FakeOffersResp:
+            seen_dates.append(json.loads(kwargs["data"])["routes"][0]["departureDate"])
+            return FakeOffersResp()
+
+    monkeypatch.setattr("aviapars.adapters.tutu_avia_direct.AsyncSession", lambda **kw: FakeSession())
+
+    adapter = TutuAviaDirectAdapter()
+    dates = (date(2026, 9, 20), date(2026, 9, 21), date(2026, 9, 22))
+    q = SearchQuery(origin=_origin(), dest=_dest(), dates=dates, pax=1, mode=Mode.PLANE)
+    result = await adapter.search(q)
+
+    assert seen_dates == ["2026-09-20", "2026-09-21", "2026-09-22"]
+    assert suggest_calls["n"] == 2  # city ids cached — resolved once, not once per date
+    assert result.status == ResultStatus.EMPTY  # each date legitimately empty, not a failure
+
+
 async def test_blocked_status_on_403(monkeypatch: Any) -> None:
     class FakeSuggestResp:
         status_code = 200
