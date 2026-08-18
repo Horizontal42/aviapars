@@ -30,6 +30,17 @@ class AddRoute(StatesGroup):
     confirm = State()
 
 
+class EditRoute(StatesGroup):
+    """Post-creation edits from a route card (§10) — currently just the poll
+    interval. A separate tiny group rather than reusing AddRoute.interval:
+    that state means "finishing wizard creation", this one means "editing an
+    existing route", and the two need different handlers on the same text
+    (the wizard's continues into the notify-mode step; this one just saves
+    and re-renders the card)."""
+
+    interval = State()
+
+
 class SearchFlow(StatesGroup):
     """§10 /search — one-shot interactive search, no route saved unless the
     user taps "Отслеживать". Same step order as AddRoute up to the dates

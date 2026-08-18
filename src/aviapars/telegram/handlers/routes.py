@@ -10,6 +10,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from aviapars.adapters.registry import AdapterRegistry
+from aviapars.config import settings
 from aviapars.db.models import Route
 from aviapars.db.repo_observations import ObservationsRepo
 from aviapars.db.repo_places import PlacesRepo
@@ -20,7 +21,8 @@ from aviapars.scheduler.worker import process_route
 from aviapars.domain.dates import selection_from_route
 from aviapars.telegram.format import describe_notification_mode, describe_selection, describe_thresholds
 from aviapars.telegram.handlers import search as search_handlers
-from aviapars.telegram.keyboards import RouteAction, route_card_kb, routes_list_kb
+from aviapars.telegram.keyboards import RouteAction, menu_only_kb, route_card_kb, routes_list_kb
+from aviapars.telegram.states import EditRoute
 
 router = Router(name="routes")
 
@@ -31,6 +33,11 @@ router = Router(name="routes")
 # UI-spam guard, not a durable rate limit, and a restart resetting it is harmless.
 _CHECK_NOW_COOLDOWN_S = 60.0
 _last_manual_check: dict[int, float] = {}
+
+# Same sanity ceiling as the /add wizard's own interval step (handlers/add.py) — kept as a
+# local constant there too rather than a shared import, matching this file's existing
+# per-handler sanity-ceiling style (_CHECK_NOW_COOLDOWN_S above).
+_MAX_INTERVAL_MIN = 43_200  # 30 days
 
 
 @router.message(Command("routes"))
@@ -135,3 +142,50 @@ async def on_route_action(
         await query.answer()  # search below outlives Telegram's callback deadline
         if isinstance(query.message, Message):
             await search_handlers.start_from_route(query.message, state, db, registry, route)
+    elif callback_data.action == "interval":
+        await state.update_data(edit_route_id=route.id)
+        await state.set_state(EditRoute.interval)
+        await query.answer()
+        assert query.message is not None
+        await query.message.answer(
+            f"Сейчас проверяю каждые {route.poll_interval_min} мин. Введите новый интервал в минутах "
+            f"(от {settings.poll_interval_floor_min} до {_MAX_INTERVAL_MIN}).",
+            reply_markup=menu_only_kb(),
+        )
+
+
+@router.message(EditRoute.interval)
+async def on_interval_edit_text(message: Message, state: FSMContext, db: aiosqlite.Connection) -> None:
+    assert message.text is not None
+    data = await state.get_data()
+    route_id = data.get("edit_route_id")
+    if route_id is None:
+        await state.clear()
+        return
+    try:
+        minutes = int(message.text.strip())
+    except ValueError:
+        await message.answer("Не понял число. Введите интервал в минутах, например 60.", reply_markup=menu_only_kb())
+        return
+    if not settings.poll_interval_floor_min <= minutes <= _MAX_INTERVAL_MIN:
+        await message.answer(
+            f"Введите от {settings.poll_interval_floor_min} до {_MAX_INTERVAL_MIN} минут.",
+            reply_markup=menu_only_kb(),
+        )
+        return
+
+    assert message.from_user is not None
+    routes_repo = RoutesRepo(db)
+    route = await routes_repo.get(route_id)
+    if route is None or route.user_id != message.from_user.id:
+        await state.clear()
+        await message.answer("Маршрут не найден.")
+        return
+    await routes_repo.set_poll_interval(route_id, minutes)
+    await state.clear()
+    updated = await routes_repo.get(route_id)
+    assert updated is not None
+    await message.answer(
+        f"Готово, теперь каждые {minutes} мин.\n\n" + _route_card_text(updated, date.today()),
+        reply_markup=route_card_kb(route_id, active=updated.active, notification_mode=updated.notification_mode),
+    )

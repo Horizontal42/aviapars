@@ -36,7 +36,7 @@ class ThresholdScopePick(CallbackData, prefix="ts"):
 
 
 class RouteAction(CallbackData, prefix="r"):
-    action: str  # pause|resume|check|search|delete|notify
+    action: str  # pause|resume|check|search|delete|notify|interval
     route_id: int
 
 
@@ -82,7 +82,7 @@ def date_mode_kb() -> InlineKeyboardMarkup:
     builder.button(text="📅 Точная дата", callback_data=DatePick(kind="exact").pack())
     builder.button(text="📅± Дата ±3 дня", callback_data=DatePick(kind="around").pack())
     builder.button(text="🗓 Диапазон дат", callback_data=DatePick(kind="range").pack())
-    builder.button(text="🎲 Любая дата (30 дней)", callback_data=DatePick(kind="any").pack())
+    builder.button(text="🎲 Любая дата (окно N дней)", callback_data=DatePick(kind="any").pack())
     _menu_button(builder)
     builder.adjust(1)
     return builder.as_markup()
@@ -187,8 +187,9 @@ def route_card_kb(route_id: int, *, active: bool, notification_mode: str = "inst
         text=f"🔔 Уведомлять: {NOTIFY_MODE_LABEL[target]}",
         callback_data=RouteAction(action="notify", route_id=route_id).pack(),
     )
+    builder.button(text="⏱ Интервал проверки", callback_data=RouteAction(action="interval", route_id=route_id).pack())
     builder.button(text="🔎 Варианты", callback_data=RouteAction(action="search", route_id=route_id).pack())
     builder.button(text="🗑 Удалить", callback_data=RouteAction(action="delete", route_id=route_id).pack())
     _menu_button(builder)
-    builder.adjust(2, 1, 2, 1)
+    builder.adjust(2, 1, 2, 1, 1)
     return builder.as_markup()

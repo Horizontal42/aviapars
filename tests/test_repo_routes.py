@@ -62,3 +62,16 @@ async def test_shared_threshold_stores_null_not_an_empty_object(db: aiosqlite.Co
 
     assert route is not None
     assert route.max_price_by_mode is None
+
+
+async def test_set_poll_interval_updates_only_that_route(db: aiosqlite.Connection) -> None:
+    repo = RoutesRepo(db)
+    route_id = await _create(db, None)
+    other_id = await _create(db, None)
+
+    await repo.set_poll_interval(route_id, 15)
+
+    updated = await repo.get(route_id)
+    other = await repo.get(other_id)
+    assert updated is not None and updated.poll_interval_min == 15
+    assert other is not None and other.poll_interval_min == 60  # untouched

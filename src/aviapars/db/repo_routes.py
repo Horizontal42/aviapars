@@ -162,6 +162,10 @@ class RoutesRepo:
         await self._db.execute("UPDATE routes SET notification_mode = ? WHERE id = ?", (mode, route_id))
         await self._db.commit()
 
+    async def set_poll_interval(self, route_id: int, minutes: int) -> None:
+        await self._db.execute("UPDATE routes SET poll_interval_min = ? WHERE id = ?", (minutes, route_id))
+        await self._db.commit()
+
     async def set_active(self, route_id: int, active: bool) -> None:
         await self._db.execute("UPDATE routes SET active = ? WHERE id = ?", (int(active), route_id))
         await self._db.commit()
