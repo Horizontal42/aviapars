@@ -273,8 +273,11 @@ class TutuAviaDirectAdapter:
             result.append(
                 Offer(
                     legs=tuple(legs),
-                    price_minor=round(price["amount"] / price.get("fraction", 100) * 100),
-                    currency=price.get("currencyCode", "RUB"),
+                    # `.get(k, default)` only covers a missing key — Tutu has sent an
+                    # explicit `null` for either field before; `or` catches that too
+                    # (and a `fraction: 0` would otherwise ZeroDivisionError).
+                    price_minor=round(price["amount"] / (price.get("fraction") or 100) * 100),
+                    currency=price.get("currencyCode") or "RUB",
                     deep_link=deep_link,
                     source_id=self.id,
                     tier=tier,

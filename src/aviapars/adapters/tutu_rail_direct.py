@@ -253,8 +253,11 @@ class TutuRailDirectAdapter:
             result.append(
                 Offer(
                     legs=tuple(legs),
-                    price_minor=round(price["amount"] / price.get("fraction", 100) * 100),
-                    currency=price.get("currencyCode", "RUB"),
+                    # `.get(k, default)` only covers a missing key — Tutu has sent an
+                    # explicit `null` for either field before; `or` catches that too
+                    # (and a `fraction: 0` would otherwise ZeroDivisionError).
+                    price_minor=round(price["amount"] / (price.get("fraction") or 100) * 100),
+                    currency=price.get("currencyCode") or "RUB",
                     # not prefilled: the real page URL uses a city-name slug in the path
                     # (www.tutu.ru.har: /poezda/Moskva/Sankt-Peterburg/?date=...), and this
                     # adapter only has rzd_code, no slug lookup — fabricating one risks a

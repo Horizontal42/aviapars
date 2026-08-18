@@ -172,10 +172,10 @@ class AeroflotDirectAdapter:
 
     def _parse_segment(self, seg: dict[str, Any], q: SearchQuery) -> Leg:
         dep_local = datetime.fromisoformat(seg["departure"])
-        dep_utc = datetime.fromisoformat(seg["departure_utc"]).replace(tzinfo=timezone.utc)
+        dep_utc = _as_utc(datetime.fromisoformat(seg["departure_utc"]))
         arr_utc = None
         if seg.get("arrival_utc"):
-            arr_utc = datetime.fromisoformat(seg["arrival_utc"]).replace(tzinfo=timezone.utc)
+            arr_utc = _as_utc(datetime.fromisoformat(seg["arrival_utc"]))
         offset_min = seg.get("departure_offset")
         tz = _format_offset(offset_min) if offset_min is not None else None
 
@@ -211,3 +211,11 @@ def _format_offset(minutes: int) -> str:
     sign = "+" if minutes >= 0 else "-"
     h, m = divmod(abs(minutes), 60)
     return f"{sign}{h:02d}:{m:02d}"
+
+
+def _as_utc(parsed: datetime) -> datetime:
+    """The recorded fixture's `*_utc` fields are naive today, but `.replace(tzinfo=utc)`
+    would silently discard a real offset if Aeroflot ever starts sending one — `.astimezone`
+    only when the value is actually aware, otherwise treat naive as already-UTC per the
+    field's own name."""
+    return parsed.astimezone(timezone.utc) if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)

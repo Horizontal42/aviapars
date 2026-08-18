@@ -87,6 +87,54 @@ async def test_missing_rzd_code_returns_empty() -> None:
     assert result.status == ResultStatus.EMPTY
 
 
+def test_null_or_zero_fraction_does_not_crash() -> None:
+    # regression: `.get("fraction", 100)` doesn't defend against an explicit `null` (still
+    # returns None, not the default) or a `fraction: 0` (ZeroDivisionError) — both are real
+    # shapes Tutu's own platform is known to send (see _tutu_common.py).
+    segment_id = "seg1"
+    route_id = "route1"
+    payload = [
+        {
+            "dictionary": {
+                "common": {
+                    "routes": {route_id: {"id": route_id, "segmentIds": [segment_id], "transferIds": []}},
+                    "segments": {
+                        segment_id: {
+                            "id": segment_id,
+                            "departureDateTime": "2026-09-20T10:00:00+03:00",
+                            "arrivalDateTime": "2026-09-20T12:00:00+03:00",
+                            "carriers": [],
+                            "voyageNumber": "",
+                        }
+                    },
+                    "carriers": {},
+                },
+                "train": {"voyages": {}},
+            },
+            "offers": {
+                "actual": {
+                    "null-fraction": {
+                        "routeIds": [route_id],
+                        "offerVariants": [
+                            {"price": {"type": "exact", "value": {"amount": 100000, "fraction": None}}}
+                        ],
+                    },
+                    "zero-fraction": {
+                        "routeIds": [route_id],
+                        "offerVariants": [{"price": {"type": "exact", "value": {"amount": 50000, "fraction": 0}}}],
+                    },
+                }
+            },
+        }
+    ]
+
+    adapter = TutuRailDirectAdapter()
+    offers = adapter._parse_offers(payload, _query(), date(2026, 9, 20))
+
+    assert len(offers) == 2
+    assert sorted(o.price_minor for o in offers) == [50000, 100000]
+
+
 async def test_multiple_dates_each_get_their_own_request(monkeypatch: Any) -> None:
     # regression: search() used to read only q.dates[0] and silently drop the rest of
     # whatever window the combiner handed it (up to flex_probe_dates_per_cycle dates per

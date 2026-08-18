@@ -20,15 +20,29 @@ from aviapars.adapters.base import Tier
 # would show an estimate to the user as "✅ Подтверждено" for a price that isn't bookable.
 
 
+def _amount(variant: dict[str, Any]) -> float | None:
+    """None means unusable — missing/non-numeric `value.amount` — never a defect to crash
+    the whole batch over; the caller just treats this variant as absent."""
+    value = variant.get("price", {}).get("value")
+    if not isinstance(value, dict):
+        return None
+    amount = value.get("amount")
+    return amount if isinstance(amount, (int, float)) else None
+
+
 def select_price_variant(variants: list[dict[str, Any]]) -> tuple[dict[str, Any], float, Tier] | None:
     """Pick the cheapest usable price variant. Returns (variant, confidence, tier), or
-    None if every variant is "absent" (no real or estimated price at all)."""
-    exact = [v for v in variants if v.get("price", {}).get("type") == "exact"]
-    if exact:
-        return min(exact, key=lambda v: v["price"]["value"]["amount"]), 1.0, Tier.CONFIRMATION
+    None if every variant is "absent" (no real or estimated price at all) or malformed."""
 
-    approximate = [v for v in variants if v.get("price", {}).get("type") == "approximate"]
+    def usable(variant: dict[str, Any], price_type: str) -> bool:
+        return variant.get("price", {}).get("type") == price_type and _amount(variant) is not None
+
+    exact = [v for v in variants if usable(v, "exact")]
+    if exact:
+        return min(exact, key=_amount), 1.0, Tier.CONFIRMATION  # type: ignore[arg-type]
+
+    approximate = [v for v in variants if usable(v, "approximate")]
     if approximate:
-        return min(approximate, key=lambda v: v["price"]["value"]["amount"]), 0.5, Tier.DISCOVERY
+        return min(approximate, key=_amount), 0.5, Tier.DISCOVERY  # type: ignore[arg-type]
 
     return None

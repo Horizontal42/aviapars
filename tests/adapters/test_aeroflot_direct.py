@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from aviapars.adapters.aeroflot_direct import AeroflotDirectAdapter
+from aviapars.adapters.aeroflot_direct import AeroflotDirectAdapter, _as_utc
 from aviapars.adapters.base import Mode, PlaceRef, ResultStatus, SearchQuery
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "aeroflot_direct" / "search_led_aer.json"
@@ -126,3 +127,15 @@ async def test_waf_block_returns_blocked_status(monkeypatch: Any) -> None:
     adapter = AeroflotDirectAdapter()
     result = await adapter.search(_query())
     assert result.status == ResultStatus.BLOCKED
+
+
+def test_as_utc_treats_naive_as_already_utc() -> None:
+    naive = datetime(2026, 9, 10, 12, 0)
+    assert _as_utc(naive) == datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
+
+
+def test_as_utc_converts_aware_instead_of_overwriting_offset() -> None:
+    # regression: `.replace(tzinfo=utc)` on an aware datetime silently discards its real
+    # offset instead of converting — this proves `_as_utc` converts, not overwrites.
+    aware = datetime(2026, 9, 10, 15, 0, tzinfo=ZoneInfo("Europe/Moscow"))  # UTC+3
+    assert _as_utc(aware) == datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)

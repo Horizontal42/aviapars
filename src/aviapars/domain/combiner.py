@@ -228,12 +228,19 @@ def _compose(leg_a: Offer, leg_b: Offer, *, max_transfer_min: int | None, max_to
     policy = transfer_policy(leg_a.legs[-1].mode, leg_b.legs[0].mode)
     a_last = leg_a.legs[-1]
     b_first = leg_b.legs[0]
-    transfer_times_known = a_last.time_precision == "exact" and b_first.time_precision == "exact"
+    # `time_precision == "exact"` is a claim about the *source*, not a guarantee — several
+    # adapters (rzd_direct, yandex_rasp, tutu_rail/avia direct) set "exact" while still
+    # leaving arrive_utc None when the upstream response omits an arrival time. Checking
+    # arrive_utc directly (not just time_precision) is what actually guarantees a usable
+    # timestamp; an `assert` here previously crashed the whole search on exactly that case,
+    # and would have silently stopped guarding anything at all under `python -O`.
+    transfer_times_known = (
+        a_last.time_precision == "exact" and b_first.time_precision == "exact" and a_last.arrive_utc is not None
+    )
 
     violations: list[str] = []
     gap_min: float | None = None
-    if transfer_times_known:
-        assert a_last.arrive_utc is not None  # exact precision guarantees a real arrival time
+    if transfer_times_known and a_last.arrive_utc is not None:
         gap_min = (b_first.depart_utc - a_last.arrive_utc).total_seconds() / 60
         if gap_min < 0:
             violations.append("плечо Б отправляется раньше прибытия плеча А")
@@ -247,8 +254,7 @@ def _compose(leg_a: Offer, leg_b: Offer, *, max_transfer_min: int | None, max_to
 
     duration_minutes: int | None = None
     last_leg_b = leg_b.legs[-1]
-    if transfer_times_known and last_leg_b.time_precision == "exact":
-        assert last_leg_b.arrive_utc is not None
+    if transfer_times_known and last_leg_b.time_precision == "exact" and last_leg_b.arrive_utc is not None:
         total_hours = (last_leg_b.arrive_utc - leg_a.legs[0].depart_utc).total_seconds() / 3600
         duration_minutes = int(total_hours * 60)
         if max_total_hours is not None and total_hours > max_total_hours:

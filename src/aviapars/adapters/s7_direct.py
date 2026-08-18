@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 import aiohttp
 from curl_cffi.requests import AsyncSession
@@ -262,20 +263,33 @@ class S7DirectAdapter:
 
                 legs: list[Leg] = []
                 for seg in segments:
-                    dep = datetime.fromisoformat(seg["departureDate"])
-                    arr = datetime.fromisoformat(seg["arrivalDate"]) if seg.get("arrivalDate") else None
+                    # departureDate/arrivalDate are naive local clock time; the response
+                    # gives the real IANA zone per endpoint (verified live: not always the
+                    # same zone at both ends), so each side gets localized separately before
+                    # conversion — treating either as UTC directly crashed on comparison
+                    # against any tz-aware datetime elsewhere in the pipeline (freshness_gate).
+                    dep_tz_name = seg.get("departureTimeZone")
+                    arr_tz_name = seg.get("arrivalTimeZone")
+                    dep_local = datetime.fromisoformat(seg["departureDate"])
+                    dep_utc = dep_local.replace(tzinfo=ZoneInfo(dep_tz_name) if dep_tz_name else timezone.utc)
+                    dep_utc = dep_utc.astimezone(timezone.utc)
+                    arr_utc = None
+                    if seg.get("arrivalDate"):
+                        arr_local = datetime.fromisoformat(seg["arrivalDate"])
+                        arr_utc = arr_local.replace(tzinfo=ZoneInfo(arr_tz_name) if arr_tz_name else timezone.utc)
+                        arr_utc = arr_utc.astimezone(timezone.utc)
                     airline = seg.get("operatingAirline") or {}
                     legs.append(
                         Leg(
                             mode=Mode.PLANE,
                             from_place=q.origin,
                             to_place=q.dest,
-                            depart_utc=dep,
-                            depart_local=dep,
+                            depart_utc=dep_utc,
+                            depart_local=dep_local,
                             carrier=airline.get("name"),
                             number=airline.get("flightNumber"),
-                            arrive_utc=arr,
-                            tz=seg.get("departureTimeZone"),
+                            arrive_utc=arr_utc,
+                            tz=dep_tz_name,
                             time_precision="exact",
                         )
                     )

@@ -4,6 +4,7 @@ import json
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -42,6 +43,11 @@ def test_parse_offers_from_real_response() -> None:
     assert leg.time_precision == "exact"
     assert leg.tz == "Europe/Moscow"
     assert offer.duration_minutes == 790
+    # regression: depart_utc/arrive_utc used to be the naive local datetime verbatim (crashed
+    # freshness_gate's aware-datetime comparison, or silently 3h wrong for Moscow flights).
+    assert leg.depart_utc.tzinfo is not None
+    assert leg.depart_utc == leg.depart_local.replace(tzinfo=ZoneInfo(leg.tz)).astimezone(timezone.utc)
+    assert leg.arrive_utc is not None and leg.arrive_utc.tzinfo is not None
 
 
 def test_parse_offers_picks_cheapest_by_price_not_iteration_order() -> None:
