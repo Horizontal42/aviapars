@@ -21,6 +21,7 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    probe_dates_total_timeout_s,
 )
 from aviapars.solver.client import BrowserSolverClient
 
@@ -69,7 +70,10 @@ class S7DirectAdapter:
     countries: frozenset[str] | None = None  # S7 flies international routes too, no restriction (§5)
     supports_batch_dates = False
     request_timeout_s = 20
-    total_timeout_s = 60
+    # Not a class constant like every other adapter's: the browser solve is a constructor
+    # param, and it is the single biggest term in this adapter's worst case — a flat class
+    # value would silently understate the ceiling for any caller that raises solver_timeout_s.
+    total_timeout_s: int
 
     def __init__(
         self,
@@ -88,6 +92,14 @@ class S7DirectAdapter:
         self._solver = BrowserSolverClient(timeout_s=solver_timeout_s)
         self._session_ttl_s = session_ttl_s
         self._location_id_cache: dict[str, str] = {}
+        # One /air POST per probe date, preceded by 2 location lookups (memoised after the
+        # first call), plus at most one browser solve for the whole search() — the solve is
+        # deliberately done once, not per date (see search() below). Without the solve term
+        # a single challenge could eat the entire budget and the outer asyncio.timeout would
+        # throw away offers that were already collected, purely because the clock ran out.
+        self.total_timeout_s = probe_dates_total_timeout_s(
+            self.request_timeout_s, setup_s=2 * self.request_timeout_s + solver_timeout_s
+        )
 
     async def search(self, q: SearchQuery) -> SearchResult:
         if q.mode != Mode.PLANE:

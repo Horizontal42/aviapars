@@ -107,7 +107,7 @@ class AdapterRegistry:
 
         http_sem = self._interactive_sem if lane == "interactive" else self._global_sem
         source_sem = self._per_source_sems[adapter.id]
-        timeout_s = deadline_s or adapter.total_timeout_s
+        timeout_s = _resolve_timeout_s(adapter, deadline_s, lane)
 
         result: SearchResult
         async with http_sem, source_sem:
@@ -160,6 +160,33 @@ class AdapterRegistry:
     def _cache_key(source_id: str, query: SearchQuery) -> str:
         dates = ",".join(d.isoformat() for d in query.dates)
         return f"{source_id}:{query.origin.place_id}:{query.dest.place_id}:{query.mode.value}:{dates}:{query.pax}"
+
+
+def _resolve_timeout_s(adapter: SourceAdapter, deadline_s: float | None, lane: Lane) -> float:
+    """How long one adapter call is allowed to take.
+
+    This used to be `deadline_s or adapter.total_timeout_s`, i.e. any truthy caller deadline
+    won outright and silently discarded whatever ceiling the adapter declared for itself. The
+    scheduler's flat 90s was below several adapters' honest worst case (s7_direct needs 270s
+    once a one-off browser solve is inside the budget), so a legitimate multi-date search
+    regularly had its already-collected offers thrown away by the outer asyncio.timeout —
+    not because anything failed, just because the clock ran out.
+
+    Scheduler lane: a caller's deadline can only *raise* an adapter's ceiling, never push it
+    below what the adapter says its own worst case costs. Nobody is waiting on a background
+    poll, so truncating one is pure loss.
+
+    Interactive lane: the exact opposite, deliberately. /search runs with a user watching the
+    chat under `interactive_l1_deadline_s` (12s), where the deadline is a hard budget and a
+    truncated answer beats a slow one. Confirmation-tier adapters *are* reachable from that
+    path (`SearchOpts.tiers` includes CONFIRMATION there), so applying the floor to it would
+    turn a 12-second search into a multi-minute one.
+    """
+    if deadline_s is None:
+        return float(adapter.total_timeout_s)
+    if lane == "interactive":
+        return deadline_s
+    return max(deadline_s, float(adapter.total_timeout_s))
 
 
 def _serialize_result(result: SearchResult) -> bytes:

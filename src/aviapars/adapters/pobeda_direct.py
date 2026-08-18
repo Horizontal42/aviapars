@@ -21,6 +21,7 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    probe_dates_total_timeout_s,
 )
 
 SEARCH_URL = "https://ticket.flypobeda.ru/websky/json/search-variants-mono-brand-cartesian"
@@ -101,7 +102,8 @@ class PobedaDirectAdapter:
     countries: frozenset[str] | None = None
     supports_batch_dates = False
     request_timeout_s = 20
-    total_timeout_s = 60  # up to flex_probe_dates_per_cycle (default 7) sequential POSTs
+    # one POST per probe date, nothing before the loop
+    total_timeout_s = probe_dates_total_timeout_s(request_timeout_s)
 
     def __init__(
         self,

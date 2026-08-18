@@ -52,7 +52,10 @@ class Settings(BaseSettings):
 
     worker_count: int = 2
     http_concurrency_global: int = 2
-    http_concurrency_interactive: int = 1
+    # /search's own slot, separate from the global pool. 2, not 1: the combiner asks every
+    # adapter for a leg concurrently now, and a 1-wide interactive lane would re-serialize
+    # exactly the path where a human is waiting for the answer.
+    http_concurrency_interactive: int = 2
     http_concurrency_per_source: int = 1
 
     poll_interval_floor_min: int = 15

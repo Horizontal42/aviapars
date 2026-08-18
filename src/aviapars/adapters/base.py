@@ -112,6 +112,26 @@ class RateLimitPolicy:
     daily_cap: int | None = None
 
 
+def probe_dates_total_timeout_s(per_date_s: float, *, setup_s: float = 0.0) -> int:
+    """Honest `total_timeout_s` for an adapter that spends one sequential request
+    per probe date inside a single `search()` call (`supports_batch_dates = False`).
+
+    Worst case is `per_date_s` x however many dates one cycle probes, plus whatever
+    one-off setup the adapter pays before the loop (a location/city id lookup, an
+    `init` RPC, S7's browser solve). Derived from `flex_probe_dates_per_cycle`
+    rather than hardcoded so the two can't drift — that drift is exactly what left
+    every confirmation adapter declaring a flat 60s for work whose own docstring
+    admitted it could need 7 sequential requests.
+
+    These are ceilings for a source that hangs, not expected durations; a source
+    that actually behaves that way trips the circuit breaker after 5 tries and
+    then costs nothing at all until it recovers.
+    """
+    from aviapars.config import settings  # local: keeps the adapter contract itself config-free
+
+    return int(per_date_s * settings.flex_probe_dates_per_cycle + setup_s)
+
+
 class SourceAdapter(Protocol):
     """See plans/squishy-scribbling-dawn.md §5 for the full contract rationale.
 

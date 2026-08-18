@@ -19,6 +19,7 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    probe_dates_total_timeout_s,
 )
 
 SEARCH_URL = "https://www.aeroflot.ru/sbe/flight-search/api/web/v1/flight/search"
@@ -61,7 +62,8 @@ class AeroflotDirectAdapter:
     countries: frozenset[str] | None = None  # group flies international routes too
     supports_batch_dates = False
     request_timeout_s = 20
-    total_timeout_s = 60  # up to flex_probe_dates_per_cycle (default 7) sequential POSTs
+    # one POST per probe date, nothing before the loop
+    total_timeout_s = probe_dates_total_timeout_s(request_timeout_s)
 
     def __init__(self, *, rate_limit: RateLimitPolicy | None = None, cache_ttl_s: int = 1800) -> None:
         self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=15.0)

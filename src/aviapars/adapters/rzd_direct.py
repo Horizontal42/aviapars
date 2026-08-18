@@ -19,6 +19,7 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    probe_dates_total_timeout_s,
 )
 
 BASE_URL = "https://pass.rzd.ru/timetable/public/ru"
@@ -67,7 +68,10 @@ class RzdDirectAdapter:
     countries: frozenset[str] | None = frozenset({"RU"})
     supports_batch_dates = False
     request_timeout_s = 15
-    total_timeout_s = 45
+    # a date here is not one request: the RID flow is a POST plus up to _POLL_TRIES polls
+    # paced _POLL_INTERVAL_S apart, so the per-date ceiling is the poll loop's own bound
+    # plus one request timeout, and only then multiplied by the dates in a cycle.
+    total_timeout_s = probe_dates_total_timeout_s(_POLL_TRIES * _POLL_INTERVAL_S + request_timeout_s)
 
     def __init__(self, *, rate_limit: RateLimitPolicy | None = None, cache_ttl_s: int = 2700) -> None:
         # §6: RZD gets the most conservative pacing in the roster — the RID flow is the

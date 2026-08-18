@@ -188,7 +188,12 @@ async def _run_search(
         opts=SearchOpts(
             tiers=frozenset({Tier.DISCOVERY, Tier.CONFIRMATION}),
             allow_network=True,
+            # A hard budget, unlike the scheduler's: the user is watching the chat, so a
+            # truncated answer beats a slow one. `lane` is what tells the registry to treat
+            # it that way (and routes /search onto its own http_concurrency_interactive slot
+            # instead of competing with the scheduler for the global ones).
             deadline_s=settings.interactive_l1_deadline_s,
+            lane="interactive",
             max_hops=1,
             hub_probe_dates_cap=settings.flex_hub_probe_dates,
         ),

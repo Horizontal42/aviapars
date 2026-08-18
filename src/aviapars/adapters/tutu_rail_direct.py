@@ -19,6 +19,7 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    probe_dates_total_timeout_s,
 )
 
 OFFERS_URL = "https://offers-api.tutu.ru/railway/offers"
@@ -83,7 +84,8 @@ class TutuRailDirectAdapter:
     countries: frozenset[str] | None = frozenset({"RU"})
     supports_batch_dates = False
     request_timeout_s = 20
-    total_timeout_s = 60  # up to flex_probe_dates_per_cycle (default 7) sequential POSTs
+    # one POST per probe date; station codes come from places.rzd_code, no lookup needed
+    total_timeout_s = probe_dates_total_timeout_s(request_timeout_s)
 
     def __init__(self, *, rate_limit: RateLimitPolicy | None = None, cache_ttl_s: int = 2700) -> None:
         self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=15.0)

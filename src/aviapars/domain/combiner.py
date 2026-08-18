@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from aviapars.adapters.base import Mode, Offer, PlaceRef, SearchQuery, SourceAdapter, Tier
-from aviapars.adapters.registry import AdapterRegistry
+from aviapars.adapters.registry import AdapterRegistry, Lane
 from aviapars.db.models import Place
 from aviapars.db.repo_places import PlacesRepo
 from aviapars.domain.dates import DatePlan
@@ -25,7 +25,11 @@ HUB_PROBE_DATES_CAP_DEFAULT = 1
 class SearchOpts:
     tiers: frozenset[Tier]
     allow_network: bool = True
-    deadline_s: float = 90.0
+    # None = let each adapter's own declared `total_timeout_s` govern, which is what the
+    # scheduler wants; a number is only meaningful for the interactive lane, where it is a
+    # hard budget. See `registry._resolve_timeout_s` for how the two lanes differ.
+    deadline_s: float | None = None
+    lane: Lane = "scheduler"
     max_hops: int = 1  # 0 = direct only
     hubs: tuple[int, ...] | None = None  # None = auto-discover (§8)
     leg_pool_size: int = 3
@@ -200,7 +204,9 @@ async def _search_leg(
     # and the old sequential loop simply could not lose already-collected offers that way.
     results = await asyncio.gather(
         *(
-            registry.search(adapter, query, allow_network=opts.allow_network, deadline_s=opts.deadline_s)
+            registry.search(
+                adapter, query, lane=opts.lane, allow_network=opts.allow_network, deadline_s=opts.deadline_s
+            )
             for adapter, query in planned
         ),
         return_exceptions=True,

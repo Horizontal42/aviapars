@@ -14,8 +14,10 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    probe_dates_total_timeout_s,
 )
-from aviapars.adapters.registry import AdapterRegistry
+from aviapars.adapters.registry import AdapterRegistry, _resolve_timeout_s
+from aviapars.config import settings
 
 MIGRATION_TABLES = """
 CREATE TABLE source_health (
@@ -85,3 +87,42 @@ async def test_repeated_empty_results_do_not_open_circuit(db: aiosqlite.Connecti
     status, failures = row
     assert status == "ok"
     assert failures == 0
+
+
+class _SlowCeilingAdapter(AlwaysEmptyAdapter):
+    id = "slow_ceiling"
+    total_timeout_s = 270  # e.g. s7_direct: 7 probe dates + 2 lookups + one browser solve
+
+
+def test_scheduler_deadline_cannot_starve_an_adapter_below_its_own_ceiling() -> None:
+    # regression: `deadline_s or adapter.total_timeout_s` let any truthy caller deadline win
+    # outright, so the scheduler's flat 90s silently discarded the ceiling the adapter itself
+    # declared and killed multi-date searches that were working, mid-flight.
+    adapter = _SlowCeilingAdapter()
+    assert _resolve_timeout_s(adapter, 90.0, "scheduler") == 270.0
+
+
+def test_scheduler_deadline_still_wins_when_it_is_more_generous() -> None:
+    adapter = _SlowCeilingAdapter()
+    assert _resolve_timeout_s(adapter, 400.0, "scheduler") == 400.0
+
+
+def test_interactive_deadline_is_a_hard_ceiling() -> None:
+    # /search has a human waiting under interactive_l1_deadline_s and confirmation-tier
+    # adapters are reachable from it — raising them to their own ceiling would turn a 12s
+    # search into a multi-minute one.
+    adapter = _SlowCeilingAdapter()
+    assert _resolve_timeout_s(adapter, 12.0, "interactive") == 12.0
+
+
+def test_no_deadline_falls_back_to_the_adapters_own_ceiling() -> None:
+    adapter = _SlowCeilingAdapter()
+    assert _resolve_timeout_s(adapter, None, "scheduler") == 270.0
+
+
+def test_probe_dates_ceiling_tracks_the_configured_cycle_width() -> None:
+    # the point of the helper: an adapter's declared worst case and the number of dates a
+    # cycle actually probes cannot drift apart, which is how every confirmation adapter ended
+    # up claiming a flat 60s for work its own docstring said needed 7 sequential requests.
+    assert probe_dates_total_timeout_s(20) == 20 * settings.flex_probe_dates_per_cycle
+    assert probe_dates_total_timeout_s(20, setup_s=90) == 20 * settings.flex_probe_dates_per_cycle + 90

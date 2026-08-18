@@ -49,10 +49,19 @@ async def process_route(
     if dates.is_empty:
         return  # window fully in the past — nothing left to watch
 
+    # No per-adapter deadline here on purpose (was a flat 90s). Nobody is waiting on a
+    # background poll, and 90s was below what several confirmation adapters honestly need for
+    # a 7-date cycle — it threw away offers they had already collected. Each adapter's own
+    # `total_timeout_s` governs instead (see adapters/base.probe_dates_total_timeout_s).
+    #
+    # The obvious worry — "N adapters x a big ceiling makes a cycle unbounded" — is smaller
+    # than it was, not larger: combiner fans the adapters out concurrently now (bounded by
+    # http_concurrency_global), so a leg costs roughly the max of the ceilings rather than
+    # their sum. Even fully pathological, that is below what the old sequential 90s-each loop
+    # cost, and a source that actually hangs trips the circuit breaker and stops being asked.
     opts = SearchOpts(
         tiers=frozenset({Tier.DISCOVERY, Tier.CONFIRMATION}),
         allow_network=True,
-        deadline_s=90,
         max_hops=route.max_hops if route.allow_hub_routing else 0,
         hubs=tuple(route.hub_place_ids) if route.hub_place_ids else None,
         max_transfer_min=route.max_transfer_min,

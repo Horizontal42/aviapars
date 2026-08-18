@@ -16,6 +16,7 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    probe_dates_total_timeout_s,
 )
 
 BASE_URL = "https://api.rasp.yandex-net.ru/v3.0/search/"
@@ -41,7 +42,8 @@ class YandexRaspAdapter:
     countries: frozenset[str] | None = frozenset({"RU", "BY", "KZ", "UA", "UZ"})  # §5: region-locked, declare it
     supports_batch_dates = False  # one date per request — no month-matrix equivalent here
     request_timeout_s = 15
-    total_timeout_s = 45
+    # one GET per probe date — supports_batch_dates is False, so the same 7-date loop applies
+    total_timeout_s = probe_dates_total_timeout_s(request_timeout_s)
 
     def __init__(self, api_key: str, *, rate_limit: RateLimitPolicy | None = None, cache_ttl_s: int = 7200) -> None:
         self._api_key = api_key

@@ -20,6 +20,7 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    probe_dates_total_timeout_s,
 )
 
 SUGGEST_URL = "https://suggester-avia.tutu.ru/api/location_suggest/v2"
@@ -79,7 +80,9 @@ class TutuAviaDirectAdapter:
     countries: frozenset[str] | None = frozenset({"RU"})
     supports_batch_dates = False
     request_timeout_s = 20
-    total_timeout_s = 60  # up to flex_probe_dates_per_cycle (default 7) sequential POSTs
+    # one offers POST per probe date, preceded by 2 suggester GETs (origin + dest city id,
+    # memoised after the first call — the ceiling has to cover the cold one)
+    total_timeout_s = probe_dates_total_timeout_s(request_timeout_s, setup_s=2 * request_timeout_s)
 
     def __init__(self, *, rate_limit: RateLimitPolicy | None = None, cache_ttl_s: int = 1800) -> None:
         self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=12.0)
