@@ -31,9 +31,11 @@ from aviapars.telegram.format import (
 )
 from aviapars.telegram.handlers import add as add_handlers
 from aviapars.telegram.keyboards import (
+    MODE_LABEL,
     DatePick,
     ModePick,
     PlacePick,
+    SearchShowAll,
     SearchTrack,
     date_mode_kb,
     menu_only_kb,
@@ -50,6 +52,11 @@ router = Router(name="search")
 TITLE = "🔎 Разовый поиск"
 
 _RESULTS_SHOWN = 5
+# "Показать все" shows up to this many, not literally every itinerary found — a wall of 80
+# one-line results would blow past Telegram's 4096-char message cap and stop being readable
+# long before that. If the true count is higher, the header says how many were actually found
+# vs shown, same honesty rule as `describe_checked_dates` for probed dates.
+_RESULTS_MAX = 25
 
 
 async def step(screen: Screen, state: FSMContext, prompt: str, *, reply_markup: InlineKeyboardMarkup | None) -> None:
@@ -220,7 +227,11 @@ async def _run_search(
     """
     today = date.today()
     data = await state.get_data()
-    title = f"🔎 {data['origin_title']} → {data['dest_title']}"
+    # Mode is shown here explicitly, not just implied by which offers turn up — a plane-only
+    # search and "trains genuinely don't exist on this route" look identical in the results
+    # otherwise, and the mode step is easy to tap through on habit without noticing the choice.
+    mode_label = MODE_LABEL.get(data.get("mode_pref", "auto"), "")
+    title = f"🔎 {data['origin_title']} → {data['dest_title']} · {mode_label}"
     plan, _ = resolve_date_plan(selection, today=today, probe_budget=settings.flex_search_probe_dates)
     if plan.is_empty:
         await screen.show(
@@ -274,13 +285,38 @@ async def _run_search(
         await state.clear()
         return
 
-    top = select_top_itineraries(outcome.itineraries, limit=_RESULTS_SHOWN)
-    lines = [f"Нашёл вариантов: {len(outcome.itineraries)}. Показываю {len(top)} самых дешёвых:", ""]
+    await state.update_data(
+        results_all_itineraries=select_top_itineraries(outcome.itineraries, limit=_RESULTS_MAX),
+        results_found_total=len(outcome.itineraries),
+        results_route_title=f"{data['origin_title']} → {data['dest_title']}",
+        results_title=title,
+        results_selection=selection,
+        results_checked=checked,
+    )
+    await state.set_state(SearchFlow.results)
+    await _render_results(screen, state, limit=_RESULTS_SHOWN)
+
+
+async def _render_results(screen: Screen, state: FSMContext, *, limit: int) -> None:
+    """Draws the results screen from whatever's already staged in FSM state
+    (see `_run_search`'s `state.update_data` above) — shared by the initial
+    search and by "📋 Показать все" (`on_search_show_all`), which re-renders
+    the same screen with a bigger `limit` instead of re-searching."""
+    data = await state.get_data()
+    today = date.today()
+    all_found: list[Itinerary] = data["results_all_itineraries"]
+    total: int = data["results_found_total"]
+    shown = all_found[:limit]
+
+    note = f"Нашёл вариантов: {total}. Показываю {len(shown)}."
+    if total > len(all_found):
+        note += f" (Показываю максимум {_RESULTS_MAX} за раз.)"
+    lines = [note, ""]
     # Headers only when there is actually something to separate — a plane-only search
     # gets the same flat list it always had, not a lone «✈️ Авиабилеты» banner.
-    grouped = len({mode_group(it) for it in top}) > 1
+    grouped = len({mode_group(it) for it in shown}) > 1
     current_group: str | None = None
-    for i, itinerary in enumerate(top, start=1):
+    for i, itinerary in enumerate(shown, start=1):
         group = mode_group(itinerary)
         if grouped and group != current_group:
             if current_group is not None:
@@ -290,16 +326,24 @@ async def _run_search(
         lines.append(f"{i}️⃣ {_render_itinerary_line(itinerary)}")
 
     legend = "✅ цена подтверждена перевозчиком · ⚠️ из кэша агрегатора"
-    await state.update_data(
-        results_itineraries=top,
-        results_route_title=f"{data['origin_title']} → {data['dest_title']}",
-        results_selection=selection,
-    )
-    await state.set_state(SearchFlow.results)
+    await state.update_data(results_itineraries=shown)
     await screen.show(
-        screen_text(title, describe_selection(selection, today), "\n".join(lines), legend, checked),
-        reply_markup=search_results_kb(len(top)),
+        screen_text(
+            data["results_title"], describe_selection(data["results_selection"], today), "\n".join(lines),
+            legend, data["results_checked"],
+        ),
+        reply_markup=search_results_kb(len(shown), more_available=len(all_found) - len(shown)),
     )
+
+
+@router.callback_query(SearchFlow.results, SearchShowAll.filter())
+async def on_search_show_all(query: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    if not data.get("results_all_itineraries"):
+        await query.answer("Поиск устарел, начните заново: /search", show_alert=True)
+        return
+    await _render_results(await screen_for(query, state), state, limit=_RESULTS_MAX)
+    await query.answer()
 
 
 def _render_itinerary_line(itinerary: Itinerary) -> str:

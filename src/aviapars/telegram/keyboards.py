@@ -51,6 +51,11 @@ class SearchTrack(CallbackData, prefix="st"):
     idx: int
 
 
+class SearchShowAll(CallbackData, prefix="sall"):
+    """Re-renders the same results screen with the full (capped) list instead
+    of just the top few — see handlers/search.py's `_RESULTS_SHOWN`/`_RESULTS_MAX`."""
+
+
 _KIND_LABEL = {"city": "город", "airport": "аэропорт", "rail_station": "ж/д станция"}
 
 MENU_BUTTON_TEXT = "☰ Меню"
@@ -181,10 +186,15 @@ def threshold_scope_kb() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def search_results_kb(n: int) -> InlineKeyboardMarkup:
+def search_results_kb(n: int, *, more_available: int = 0) -> InlineKeyboardMarkup:
+    """`more_available` is how many additional found itineraries aren't shown
+    yet (0 when the screen already shows everything) — draws "Показать все"
+    only when tapping it would actually change anything."""
     builder = InlineKeyboardBuilder()
     for i in range(n):
         builder.button(text=f"💾 Следить за №{i + 1}", callback_data=SearchTrack(idx=i).pack())
+    if more_available > 0:
+        builder.button(text=f"📋 Показать все (+{more_available})", callback_data=SearchShowAll().pack())
     builder.button(text="🔎 Новый поиск", callback_data=MenuAction(action="search").pack())
     _menu_button(builder)
     builder.adjust(1)
