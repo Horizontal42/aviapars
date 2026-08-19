@@ -144,14 +144,29 @@ class Settings(BaseSettings):
     # than an upstream error — see adapters/base.is_egress_failure.
     tutu_egress_pool: list[str | None] = Field(default_factory=list)
 
+    # --- per-adapter enable switches ---
+    # Every adapter setup_registry() (__main__.py) can register is individually toggleable —
+    # flip to False to pull one out of rotation without touching or deleting its code. Started
+    # as a one-off for s7_enabled (see below) and generalized: a source can be temporarily
+    # broken, mid-migration, or just not worth its timeout budget right now, and "comment out
+    # the registration" doesn't survive the next deploy/merge the way a named field does.
+    travelpayouts_enabled: bool = True
+    yandex_rasp_enabled: bool = True
+    rzd_enabled: bool = True
+    tutu_rail_enabled: bool = True
+    aeroflot_enabled: bool = True
+    azimuth_enabled: bool = True
+    pobeda_enabled: bool = True
+    tutu_avia_enabled: bool = True
     # s7_enabled — off by default: ibe.s7.ru fronts a Group-IB antibot that binds a trust
     # session to per-request client-computed signature headers, not just cookies. Confirmed
     # live: a real human browser session's own fresh cookies still get BLOCKED when replayed
     # through a different HTTP client, so the adapter's browser-solve fallback always burns
-    # its ~90s budget for a guaranteed failure. See ARCHITECTURE.md "S7" for the full finding.
-    # Flip to true only once a legitimate fix lands (e.g. Travelpayouts covering S7 routes
-    # makes this moot, or S7 changes their protection) — do not defeat the signing to force
-    # it back on, that's circumventing an access control, not scraping a public page.
+    # its ~90s budget for a guaranteed failure. Full writeup: docs/sources/s7.md and
+    # ARCHITECTURE.md "S7". Flip to true only once a legitimate fix lands (e.g. Travelpayouts
+    # covering S7 routes makes this moot, or S7 changes their protection) — do not defeat the
+    # signing to force it back on, that's circumventing an access control, not scraping a
+    # public page.
     s7_enabled: bool = False
 
     @classmethod

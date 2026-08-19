@@ -43,50 +43,58 @@ def setup_registry(db: aiosqlite.Connection) -> AdapterRegistry:
         http_concurrency_interactive=settings.http_concurrency_interactive,
         http_concurrency_per_source=settings.http_concurrency_per_source,
     )
-    registry.register(
-        TravelpayoutsAdapter(
-            token=settings.travelpayouts_token,
-            marker=settings.travelpayouts_marker,
-            cache_ttl_s=settings.cache_ttl_s.travelpayouts,
+    if settings.travelpayouts_enabled:
+        registry.register(
+            TravelpayoutsAdapter(
+                token=settings.travelpayouts_token,
+                marker=settings.travelpayouts_marker,
+                cache_ttl_s=settings.cache_ttl_s.travelpayouts,
+            )
         )
-    )
-    registry.register(
-        YandexRaspAdapter(
-            api_key=settings.yandex_rasp_api_key,
-            cache_ttl_s=settings.cache_ttl_s.yandex_rasp_price,
+    if settings.yandex_rasp_enabled:
+        registry.register(
+            YandexRaspAdapter(
+                api_key=settings.yandex_rasp_api_key,
+                cache_ttl_s=settings.cache_ttl_s.yandex_rasp_price,
+            )
         )
-    )
-    registry.register(
-        RzdDirectAdapter(
-            egress_pool=settings.rzd_egress_pool, cache_ttl_s=settings.cache_ttl_s.rzd_direct
+    if settings.rzd_enabled:
+        registry.register(
+            RzdDirectAdapter(
+                egress_pool=settings.rzd_egress_pool, cache_ttl_s=settings.cache_ttl_s.rzd_direct
+            )
         )
-    )
     # Both Tutu adapters read the same pool but each builds its own EgressPool: the
     # config is one list because the two endpoints are banned together, the rotation
     # state is per-adapter because everything else about them already is (rate limit,
     # circuit breaker, cache).
-    registry.register(
-        TutuRailDirectAdapter(
-            egress_pool=settings.tutu_egress_pool, cache_ttl_s=settings.cache_ttl_s.rzd_direct
+    if settings.tutu_rail_enabled:
+        registry.register(
+            TutuRailDirectAdapter(
+                egress_pool=settings.tutu_egress_pool, cache_ttl_s=settings.cache_ttl_s.rzd_direct
+            )
         )
-    )
-    registry.register(
-        AeroflotDirectAdapter(
-            egress_pool=settings.aeroflot_egress_pool,
-            cache_ttl_s=settings.cache_ttl_s.airline_direct,
+    if settings.aeroflot_enabled:
+        registry.register(
+            AeroflotDirectAdapter(
+                egress_pool=settings.aeroflot_egress_pool,
+                cache_ttl_s=settings.cache_ttl_s.airline_direct,
+            )
         )
-    )
-    registry.register(AzimuthDirectAdapter(cache_ttl_s=settings.cache_ttl_s.airline_direct))
-    registry.register(
-        PobedaDirectAdapter(
-            egress_pool=settings.pobeda_egress_pool, cache_ttl_s=settings.cache_ttl_s.airline_direct
+    if settings.azimuth_enabled:
+        registry.register(AzimuthDirectAdapter(cache_ttl_s=settings.cache_ttl_s.airline_direct))
+    if settings.pobeda_enabled:
+        registry.register(
+            PobedaDirectAdapter(
+                egress_pool=settings.pobeda_egress_pool, cache_ttl_s=settings.cache_ttl_s.airline_direct
+            )
         )
-    )
-    registry.register(
-        TutuAviaDirectAdapter(
-            egress_pool=settings.tutu_egress_pool, cache_ttl_s=settings.cache_ttl_s.airline_direct
+    if settings.tutu_avia_enabled:
+        registry.register(
+            TutuAviaDirectAdapter(
+                egress_pool=settings.tutu_egress_pool, cache_ttl_s=settings.cache_ttl_s.airline_direct
+            )
         )
-    )
 
     if settings.s7_enabled:
         sessions_repo = SessionsRepo(db)
