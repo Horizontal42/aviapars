@@ -45,10 +45,20 @@ async def test_search_folds_hyphen_and_space_as_equivalent(repo: PlacesRepo, que
     assert any(p.id == 2 for p in results)
 
 
-async def test_search_by_iata_code(repo: PlacesRepo) -> None:
+async def test_search_by_iata_code_excludes_airport_rows(repo: PlacesRepo) -> None:
+    # LED matches both the Saint Petersburg city row and the Пулково airport row by
+    # iata; only the city row must come back — kind = 'city' filter in search_by_name.
     results = await repo.search_by_name("led")
-    ids = {p.id for p in results}
-    assert {2, 3} <= ids
+    assert [p.id for p in results] == [2]
+
+
+async def test_search_never_surfaces_an_airport_row(repo: PlacesRepo) -> None:
+    # regression: airport-kind rows are never backfilled with rzd_code/yandex_code
+    # (only city rows are, per seed_places.py), so letting a pick resolve to an
+    # airport row silently breaks rail search for that leg. A query that matches
+    # only an airport (no city of the same name) must now find nothing at all.
+    results = await repo.search_by_name("Пулково")
+    assert results == []
 
 
 @pytest.fixture

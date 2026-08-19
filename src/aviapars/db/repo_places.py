@@ -49,12 +49,20 @@ class PlacesRepo:
         plain SQL LIKE only case-folds ASCII, never Cyrillic. Ranked by
         popularity so a well-known city outranks an obscure station with a
         similar name.
+
+        Restricted to `kind = 'city'`: airport-kind rows never get
+        `rzd_code`/`yandex_code` backfilled (only city rows do, per
+        seed_places.py), so letting a pick resolve to an airport row would
+        silently break rail search for that leg with no explanation to the
+        user. City rows already carry everything every adapter needs, so
+        airport rows add nothing but an extra disambiguation tap.
         """
         like = f"%{normalize_place_query(query)}%"
         async with self._db.execute(
             f"""
             SELECT {_COLUMNS} FROM places
-            WHERE normalize(name_ru) LIKE ? OR normalize(name_en) LIKE ? OR iata = ?
+            WHERE kind = 'city'
+              AND (normalize(name_ru) LIKE ? OR normalize(name_en) LIKE ? OR iata = ?)
             ORDER BY popularity DESC
             LIMIT ?
             """,
