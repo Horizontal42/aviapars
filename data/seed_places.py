@@ -38,12 +38,37 @@ preferring an exact head match over a suffixed one, and the highest `S`
 (relevance) score as a tiebreaker. Re-verified against Moscow/SPb/Sochi (the
 three previously-exact matches) to confirm this doesn't change their codes.
 
+Second correction from a live re-check against the production DB (2026-08-19):
+151/335 cities still had no rzd_code — traced to a client-side TLS trust-store
+gap (`pass.rzd.ru`'s cert chains through "Russian Trusted Sub CA", not in the
+standard trust store — same root cause `rzd_direct.py`'s `_ssl_context`/
+`_RU_TRUSTED_CA_PEM` already fixed for search calls), not a network ban and not
+a matching-quality problem on their own — every request from the unpatched
+`aiohttp.ClientSession()` here was failing the handshake before ever reaching
+the matcher. Once given the same trusted CA, two further gaps showed up in the
+184 still-missing names: (1) hyphens in the query vs spaces in the station name
+or vice versa — "Комсомольск-на-Амуре" only ever appears as "КОМСОМОЛЬСК НА
+АМУРЕ П" — so hyphens/spaces are now collapsed to a single space on both sides
+before comparing; (2) a trailing "(...)" qualifier Travelpayouts' own city name
+sometimes carries ("Набережные Челны (Нижнекамск)", "Кировск (Апатиты)") is not
+part of any real RZD station name, so it is stripped before the query is even
+sent. A third, lower-confidence tier was added for adjectival station names
+that extend the city name with no separator at all ("Волгодонская" for
+"Волгодонск") — ranked below both the exact and separator-qualified tiers, and
+gated on a minimum target length to keep short names from matching unrelated
+stations by coincidence. Even with all three fixes, most of the 184 remain
+unmatched — spot checks (Магадан, Норильск, Геленджик, Стрежевой, Нарьян-Мар)
+found no RZD station under any spelling: real cities with no rail connection at
+all, not a matcher gap. Re-verified against Moscow/SPb/Sochi/Ekaterinburg to
+confirm none of this changes their existing codes.
+
 Run: python -m aviapars.db.migrate && python data/seed_places.py
 """
 
 from __future__ import annotations
 
 import asyncio
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -53,6 +78,7 @@ import aiosqlite
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from aviapars.adapters.rzd_direct import _ssl_context  # noqa: E402
 from aviapars.config import settings  # noqa: E402
 from aviapars.db.engine import connect  # noqa: E402
 
@@ -62,10 +88,28 @@ YANDEX_STATIONS_URL = "https://api.rasp.yandex-net.ru/v3.0/stations_list/"
 RZD_SUGGESTER_URL = "https://pass.rzd.ru/suggester"
 RZD_REQUEST_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; aviapars-seed/1.0)"}
 RZD_PACE_S = 0.4  # gentler than the original 0.15s — a leading suspect for pass.rzd.ru IP-banning the seeder
+RZD_MIN_LOOSE_MATCH_LEN = 5  # floor for the separator-less adjectival tier — short names false-match too easily
 
 
 def _normalize(name: str) -> str:
     return name.strip().lower().replace("ё", "е")
+
+
+def _normalize_for_rzd_match(name: str) -> str:
+    """RZD spells the same qualifier with a hyphen in one station and a space in
+    another ("Комсомольск-на-Амуре" only appears as "КОМСОМОЛЬСК НА АМУРЕ П") —
+    collapsing both to a single space makes the two sides comparable.
+    """
+    return re.sub(r"[-\s]+", " ", _normalize(name)).strip()
+
+
+def _strip_trailing_qualifier(name: str) -> str:
+    """Drop a trailing "(...)" our own city name sometimes carries (a
+    Travelpayouts city-merge annotation, e.g. "Набережные Челны (Нижнекамск)")
+    — it is metadata about our city grouping, not part of any real RZD station
+    name, so searching with it attached finds nothing.
+    """
+    return re.sub(r"\s*\([^)]*\)\s*$", "", name).strip()
 
 
 async def _fetch_json(session: aiohttp.ClientSession, url: str) -> list[dict[str, Any]]:
@@ -212,7 +256,8 @@ async def _backfill_yandex_codes(db: aiosqlite.Connection) -> None:
 
 
 async def _rzd_city_code(session: aiohttp.ClientSession, name_ru: str) -> str | None:
-    params = {"stationNamePart": name_ru.upper(), "lang": "ru", "lat": "0", "compactMode": "y"}
+    query_name = _strip_trailing_qualifier(name_ru)
+    params = {"stationNamePart": query_name.upper(), "lang": "ru", "lat": "0", "compactMode": "y"}
     try:
         async with session.get(
             RZD_SUGGESTER_URL, params=params, timeout=aiohttp.ClientTimeout(total=10)
@@ -225,18 +270,23 @@ async def _rzd_city_code(session: aiohttp.ClientSession, name_ru: str) -> str | 
     if not candidates:
         return None
 
-    target = _normalize(name_ru)
+    target = _normalize_for_rzd_match(query_name)
     # RZD rarely returns a bare city-name node — station names carry a
     # qualifier ("ЕКАТЕРИНБУРГ-ПАССАЖИРС", "ПЕНЗА 1", "НИЖНИЙ НОВГОРОД (ВСЕ
     # ВОКЗАЛЫ)") — so match on the head before the first comma, preferring an
-    # exact head match over a suffixed one, tiebreaking on RZD's own `S` score.
+    # exact head match over a suffixed one (both normalized so a hyphen on one
+    # side and a space on the other still line up), then a lower-confidence
+    # tier for adjectival station names glued on with no separator at all
+    # ("ВОЛГОДОНСКАЯ" for "Волгодонск") — tiebreaking on RZD's own `S` score.
     scored: list[tuple[int, int, dict[str, Any]]] = []
     for c in candidates:
-        head = _normalize(c.get("n", "").split(",")[0].strip())
+        head = _normalize_for_rzd_match(c.get("n", "").split(",")[0].strip())
         if head == target:
             scored.append((2, c.get("S", 0), c))
-        elif head.startswith(target + "-") or head.startswith(target + " ") or head.startswith(target + "("):
+        elif head.startswith(target + " ") or head.startswith(target + "("):
             scored.append((1, c.get("S", 0), c))
+        elif len(target) >= RZD_MIN_LOOSE_MATCH_LEN and head.startswith(target):
+            scored.append((0, c.get("S", 0), c))
     if not scored:
         return None
     scored.sort(key=lambda t: (-t[0], -t[1]))
@@ -248,7 +298,8 @@ async def _backfill_rzd_codes(db: aiosqlite.Connection) -> None:
         city_rows = await cur.fetchall()
 
     matched = 0
-    async with aiohttp.ClientSession(headers=RZD_REQUEST_HEADERS) as session:
+    connector = aiohttp.TCPConnector(ssl=_ssl_context)
+    async with aiohttp.ClientSession(headers=RZD_REQUEST_HEADERS, connector=connector) as session:
         for place_id, name_ru in city_rows:
             code = await _rzd_city_code(session, name_ru)
             if code:
