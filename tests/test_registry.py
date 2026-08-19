@@ -94,30 +94,33 @@ class _SlowCeilingAdapter(AlwaysEmptyAdapter):
     total_timeout_s = 270  # e.g. s7_direct: 7 probe dates + 2 lookups + one browser solve
 
 
-def test_scheduler_deadline_cannot_starve_an_adapter_below_its_own_ceiling() -> None:
+def test_deadline_cannot_starve_an_adapter_below_its_own_ceiling() -> None:
     # regression: `deadline_s or adapter.total_timeout_s` let any truthy caller deadline win
-    # outright, so the scheduler's flat 90s silently discarded the ceiling the adapter itself
-    # declared and killed multi-date searches that were working, mid-flight.
+    # outright, so a flat 90s silently discarded the ceiling the adapter itself declared and
+    # killed multi-date searches that were working, mid-flight. Applies to both lanes now —
+    # interactive used to be a hard ceiling instead (see test_interactive_deadline_no_longer_
+    # truncates below), but the egress pool made a source's honest worst case routinely exceed
+    # a short interactive deadline, so the floor behaviour is the same in both lanes.
     adapter = _SlowCeilingAdapter()
-    assert _resolve_timeout_s(adapter, 90.0, "scheduler") == 270.0
+    assert _resolve_timeout_s(adapter, 90.0) == 270.0
 
 
-def test_scheduler_deadline_still_wins_when_it_is_more_generous() -> None:
+def test_deadline_still_wins_when_it_is_more_generous() -> None:
     adapter = _SlowCeilingAdapter()
-    assert _resolve_timeout_s(adapter, 400.0, "scheduler") == 400.0
+    assert _resolve_timeout_s(adapter, 400.0) == 400.0
 
 
-def test_interactive_deadline_is_a_hard_ceiling() -> None:
-    # /search has a human waiting under interactive_l1_deadline_s and confirmation-tier
-    # adapters are reachable from it — raising them to their own ceiling would turn a 12s
-    # search into a multi-minute one.
+def test_interactive_deadline_no_longer_truncates_below_the_ceiling() -> None:
+    # 2026-08-19: interactive used to hard-cap at deadline_s regardless of the adapter's own
+    # total_timeout_s — this asserts that's gone. The `lane` argument itself is gone from
+    # _resolve_timeout_s (it no longer affects this decision either way).
     adapter = _SlowCeilingAdapter()
-    assert _resolve_timeout_s(adapter, 12.0, "interactive") == 12.0
+    assert _resolve_timeout_s(adapter, 12.0) == 270.0
 
 
 def test_no_deadline_falls_back_to_the_adapters_own_ceiling() -> None:
     adapter = _SlowCeilingAdapter()
-    assert _resolve_timeout_s(adapter, None, "scheduler") == 270.0
+    assert _resolve_timeout_s(adapter, None) == 270.0
 
 
 def test_probe_dates_ceiling_tracks_the_configured_cycle_width() -> None:

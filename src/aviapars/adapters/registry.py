@@ -107,7 +107,7 @@ class AdapterRegistry:
 
         http_sem = self._interactive_sem if lane == "interactive" else self._global_sem
         source_sem = self._per_source_sems[adapter.id]
-        timeout_s = _resolve_timeout_s(adapter, deadline_s, lane)
+        timeout_s = _resolve_timeout_s(adapter, deadline_s)
 
         result: SearchResult
         async with http_sem, source_sem:
@@ -162,7 +162,7 @@ class AdapterRegistry:
         return f"{source_id}:{query.origin.place_id}:{query.dest.place_id}:{query.mode.value}:{dates}:{query.pax}"
 
 
-def _resolve_timeout_s(adapter: SourceAdapter, deadline_s: float | None, lane: Lane) -> float:
+def _resolve_timeout_s(adapter: SourceAdapter, deadline_s: float | None) -> float:
     """How long one adapter call is allowed to take.
 
     This used to be `deadline_s or adapter.total_timeout_s`, i.e. any truthy caller deadline
@@ -172,20 +172,21 @@ def _resolve_timeout_s(adapter: SourceAdapter, deadline_s: float | None, lane: L
     regularly had its already-collected offers thrown away by the outer asyncio.timeout —
     not because anything failed, just because the clock ran out.
 
-    Scheduler lane: a caller's deadline can only *raise* an adapter's ceiling, never push it
-    below what the adapter says its own worst case costs. Nobody is waiting on a background
-    poll, so truncating one is pure loss.
-
-    Interactive lane: the exact opposite, deliberately. /search runs with a user watching the
-    chat under `interactive_l1_deadline_s` (12s), where the deadline is a hard budget and a
-    truncated answer beats a slow one. Confirmation-tier adapters *are* reachable from that
-    path (`SearchOpts.tiers` includes CONFIRMATION there), so applying the floor to it would
-    turn a 12-second search into a multi-minute one.
+    A caller's deadline can only *raise* an adapter's ceiling, never push it below what the
+    adapter says its own worst case costs — in either lane, now. Interactive used to be the
+    exact opposite on purpose: /search under a hard `interactive_l1_deadline_s`, truncated
+    answer beats a slow one, because a user is watching the chat. That stopped being true the
+    moment the egress pool (§ ARCHITECTURE.md "Пул egress") made a source's honest worst case
+    routinely exceed what a hard 12s budget could ever fit — a search that needed one rotated
+    attempt would get cut off *because* it was trying the fix, not despite it. The user
+    confirmed directly they'd rather wait (a couple of minutes, even) than get a result that
+    silently dropped a source that was seconds from answering. `interactive_l1_deadline_s`
+    itself moved to a generous default for the same reason (see config.py) — this function no
+    longer needs to know which lane it's in to decide the floor, only `lane` still matters
+    elsewhere (which semaphore to wait on, and the rate-limit-bucket cap in combiner.py).
     """
     if deadline_s is None:
         return float(adapter.total_timeout_s)
-    if lane == "interactive":
-        return deadline_s
     return max(deadline_s, float(adapter.total_timeout_s))
 
 

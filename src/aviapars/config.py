@@ -70,12 +70,28 @@ class Settings(BaseSettings):
     # full window; these caps only bound sources that spend one request per date.
     flex_probe_dates_per_cycle: int = 7
     flex_hub_probe_dates: int = 1
-    flex_search_probe_dates: int = 3  # /search is synchronous under a ~12s budget — much tighter
+    # /search still only probes a slice of a wide flexible window live, not the full thing —
+    # unrelated to interactive_l1_deadline_s below (that's per-adapter wall-clock time; this is
+    # request *volume*, N one-request-per-date sources x this many dates, kept small so a
+    # flexible-window /search doesn't fan out into dozens of requests). Full-window coverage is
+    # what the background poller is for.
+    flex_search_probe_dates: int = 3
 
     search_session_ttl_min: int = 30
     search_sessions_per_user_cap: int = 5
 
-    interactive_l1_deadline_s: float = 12
+    # Per-adapter wall-clock ceiling for a live /search call — no longer a hard truncation
+    # point (registry._resolve_timeout_s floors at the adapter's own honest total_timeout_s
+    # regardless of this value now, same as the scheduler lane always did). What this still
+    # controls: it's the value that can *raise* the effective ceiling above an adapter's
+    # declared worst case if an operator wants /search to wait even longer than that, and it
+    # caps how long /search waits for a busy rate-limit bucket (combiner.py's bucket_wait_s).
+    # Raised from the original 12s once the egress pool (ARCHITECTURE.md "Пул egress") made a
+    # source's honest worst case routinely exceed 12s — the old hard cap was cutting off a
+    # search right as a rotated attempt was about to pay off. 240s comfortably covers every
+    # adapter's total_timeout_s in the current roster (s7_direct's 270s is the outlier, and
+    # s7 is BLOCKED regardless of wait right now — see ARCHITECTURE.md).
+    interactive_l1_deadline_s: float = 240
     interactive_l0_deadline_s: float = 1
     interactive_bucket_wait_s: float = 2
 

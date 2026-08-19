@@ -220,11 +220,12 @@ async def _run_search(
 ) -> None:
     """One synchronous pass under the interactive budget (§6 L1).
 
-    A flexible window is deliberately NOT scanned in full here: one-request-
-    per-date sources can't cover 30 days inside ~12 seconds, so only
-    `flex_search_probe_dates` of them are probed and the reply says exactly
-    which — the full window is what background tracking is for. Batch sources
-    still return the whole window, so wide-window results do show up.
+    A flexible window is deliberately NOT scanned in full here regardless of how
+    long `interactive_l1_deadline_s` allows a single call to run: one-request-
+    per-date sources would fan out into dozens of requests for a 30-day window,
+    so only `flex_search_probe_dates` of them are probed and the reply says
+    exactly which — the full window is what background tracking is for. Batch
+    sources still return the whole window, so wide-window results do show up.
     """
     today = date.today()
     data = await state.get_data()
