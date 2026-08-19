@@ -120,6 +120,34 @@ def test_parse_date_accepts_only_the_documented_format() -> None:
     assert parse_date("чушь") is None
 
 
+def test_parse_date_accepts_a_two_digit_year() -> None:
+    assert parse_date("18.09.26") == date(2026, 9, 18)
+    assert parse_date("18.09.99") == date(2099, 9, 18)
+    assert parse_date("18.09.00") == date(2000, 9, 18)
+
+
+def test_parse_date_rejects_a_bare_number() -> None:
+    # The owner's actual report: typed just the day/year digits with no dots while
+    # picking a flexible date. Must fail cleanly, not get misread as a year.
+    assert parse_date("26") is None
+    assert parse_date("18092026") is None
+
+
+def test_parse_date_rejects_nonsense_calendar_values() -> None:
+    assert parse_date("30.02.2026") is None  # Feb 30 doesn't exist
+    assert parse_date("31.04.2026") is None  # April has 30 days
+    assert parse_date("00.09.2026") is None
+    assert parse_date("18.13.2026") is None
+
+
+def test_parse_date_rejects_three_digit_year() -> None:
+    assert parse_date("18.09.202") is None
+
+
+def test_parse_date_range_accepts_two_digit_years() -> None:
+    assert parse_date_range("10.09.26 20.09.26") == (date(2026, 9, 10), date(2026, 9, 20))
+
+
 def test_parse_date_range_accepts_common_separators() -> None:
     expected = (date(2026, 9, 10), date(2026, 9, 20))
     assert parse_date_range("10.09.2026 20.09.2026") == expected

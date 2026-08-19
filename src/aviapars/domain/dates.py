@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from aviapars.db.models import Route
 
@@ -10,7 +10,11 @@ AROUND_DAYS = 3
 ANY_WINDOW_DAYS = 30
 MAX_WINDOW_DAYS = 180
 
-DATE_INPUT_FORMAT = "%d.%m.%Y"
+# ГГ or ГГГГ — a bare 2-digit year maps to 2000+YY (no plausible date in this app
+# falls outside 2000-2099). Deliberately not strptime's %Y: that parses "26" as
+# literal year 26 AD instead of rejecting it, so a mistyped year would silently
+# fall into the "date already in the past" branch instead of erroring.
+_DATE_INPUT_RE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})$")
 _RANGE_SPLIT = re.compile(r"\s*(?:\.\.|—|–|-|\s)\s*")
 
 
@@ -146,8 +150,13 @@ def selection_from_route(route: Route) -> DateSelection:
 
 
 def parse_date(text: str) -> date | None:
+    match = _DATE_INPUT_RE.match(text.strip())
+    if match is None:
+        return None
+    day, month, year = match.groups()
+    year_num = int(year) + 2000 if len(year) == 2 else int(year)
     try:
-        return datetime.strptime(text.strip(), DATE_INPUT_FORMAT).date()
+        return date(year_num, int(month), int(day))
     except ValueError:
         return None
 

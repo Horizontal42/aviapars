@@ -36,3 +36,37 @@ def test_parse_any_window_length_accepts_boundaries() -> None:
     hi = date_picker.parse_selection("any", str(MAX_WINDOW_DAYS), date(2026, 1, 1))
     assert not isinstance(lo, str) and lo.window_length_days == 7
     assert not isinstance(hi, str) and hi.window_length_days == MAX_WINDOW_DAYS
+
+
+def test_parse_any_window_length_rejects_negative() -> None:
+    assert isinstance(date_picker.parse_selection("any", "-5", date(2026, 1, 1)), str)
+
+
+def test_parse_around_accepts_a_two_digit_year() -> None:
+    # The owner's ±3 days mode with a same-format-but-shorter date.
+    sel = date_picker.parse_selection("around", "18.09.26", date(2026, 1, 1))
+    assert not isinstance(sel, str)
+    assert sel.window_start == date(2026, 9, 15)
+
+
+def test_parse_around_rejects_a_bare_number_with_a_friendly_error() -> None:
+    # The owner's actual report: typed a bare number, no dots, while in "around" mode.
+    result = date_picker.parse_selection("around", "26", date(2026, 1, 1))
+    assert isinstance(result, str)
+
+
+def test_parse_around_rejects_empty_and_whitespace_only_input() -> None:
+    assert isinstance(date_picker.parse_selection("around", "", date(2026, 1, 1)), str)
+    assert isinstance(date_picker.parse_selection("around", "   ", date(2026, 1, 1)), str)
+
+
+def test_parse_exact_accepts_a_two_digit_year() -> None:
+    sel = date_picker.parse_selection("exact", "18.09.26", date(2026, 1, 1))
+    assert not isinstance(sel, str)
+    assert sel.fixed_dates == (date(2026, 9, 18),)
+
+
+def test_parse_range_accepts_two_digit_years() -> None:
+    sel = date_picker.parse_selection("range", "10.09.26 20.09.26", date(2026, 1, 1))
+    assert not isinstance(sel, str)
+    assert sel.window_start == date(2026, 9, 10)
