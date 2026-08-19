@@ -173,6 +173,52 @@ async def test_multiple_dates_each_get_their_own_request(monkeypatch: Any) -> No
     assert result.status == ResultStatus.EMPTY  # each date legitimately empty, not a failure
 
 
+async def test_city_ids_sent_as_json_integers_not_strings(monkeypatch: Any) -> None:
+    # regression: Tutu's backend now rejects (instant empty-body 500) routes[].
+    # departureCityId/arrivalCityId sent as JSON strings - verified live that casting
+    # them to int is the only change needed to get a 200 with real offers back.
+    seen_bodies: list[dict[str, Any]] = []
+
+    class FakeSuggestResp:
+        status_code = 200
+
+        def __init__(self, iata: str) -> None:
+            self._iata = iata
+
+        def json(self) -> Any:
+            return {"suggestions": [{"city": {"id": "491", "code": self._iata}}]}
+
+    class FakeOffersResp:
+        status_code = 200
+
+        def json(self) -> Any:
+            return [{"dictionary": {"common": {}}, "offers": {"actual": {}}}]
+
+    class FakeSession:
+        async def __aenter__(self) -> "FakeSession":
+            return self
+
+        async def __aexit__(self, *exc: object) -> None:
+            return None
+
+        async def get(self, *args: Any, **kwargs: Any) -> FakeSuggestResp:
+            return FakeSuggestResp(kwargs["params"]["name"])
+
+        async def post(self, *args: Any, **kwargs: Any) -> FakeOffersResp:
+            seen_bodies.append(json.loads(kwargs["data"]))
+            return FakeOffersResp()
+
+    monkeypatch.setattr("aviapars.adapters.tutu_avia_direct.AsyncSession", lambda **kw: FakeSession())
+
+    adapter = TutuAviaDirectAdapter()
+    await adapter.search(_query())
+
+    assert len(seen_bodies) == 1
+    route = seen_bodies[0]["routes"][0]
+    assert route["departureCityId"] == 491 and isinstance(route["departureCityId"], int)
+    assert route["arrivalCityId"] == 491 and isinstance(route["arrivalCityId"], int)
+
+
 async def test_blocked_status_on_403(monkeypatch: Any) -> None:
     class FakeSuggestResp:
         status_code = 200

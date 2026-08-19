@@ -63,6 +63,14 @@ class TutuAviaDirectAdapter:
     Auth: none — verified live with fresh random searchId/sessionId/pageId
     and no cookies, 200 OK with real fares.
 
+    2026-08: endpoint started returning an instant empty-body 500 on every request.
+    Root cause (found by reverse-engineering avia.tutu.ru's current Next.js results
+    app bundles, then bisecting the POST body live): Tutu tightened `routes[].
+    departureCityId`/`arrivalCityId` to require JSON integers - the adapter was
+    sending the suggester's city id as a string. URL, headers, auth, and the whole
+    response shape are unchanged; only the two ids need `int(...)` at the POST
+    body's construction site (see `_search_day`).
+
     City resolution: unlike rail (which reuses `places.rzd_code` directly),
     avia routes need Tutu's own numeric city id. `suggester-avia.tutu.ru`
     resolves IATA -> city id with a plain text query (verified live:
@@ -168,7 +176,16 @@ class TutuAviaDirectAdapter:
             "passengers": {"child": 0, "infant": 0, "full": q.pax},
             "serviceClass": "Y",
             "routes": [
-                {"departureCityId": origin_id, "arrivalCityId": dest_id, "departureDate": depart_date.isoformat()}
+                {
+                    # Tutu's backend now rejects (empty-body 500) city ids sent as JSON
+                    # strings - verified live: identical body with these two fields as ints
+                    # instead of strings is the only change needed to get a 200. `origin_id`/
+                    # `dest_id` stay strings everywhere else (cache key, `_deep_link`'s query
+                    # string) - only this POST body needs the numeric form.
+                    "departureCityId": int(origin_id),
+                    "arrivalCityId": int(dest_id),
+                    "departureDate": depart_date.isoformat(),
+                }
             ],
             "searchId": str(uuid.uuid4()),
             "sessionId": str(uuid.uuid4()),
