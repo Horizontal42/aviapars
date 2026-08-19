@@ -55,11 +55,17 @@ async def main() -> None:
                 cache_ttl_s=settings.cache_ttl_s.yandex_rasp_price,
             )
         )
-        registry.register(RzdDirectAdapter(cache_ttl_s=settings.cache_ttl_s.rzd_direct))
+        registry.register(
+            RzdDirectAdapter(
+                fallback_proxy_url=settings.rzd_fallback_proxy_url, cache_ttl_s=settings.cache_ttl_s.rzd_direct
+            )
+        )
         registry.register(TutuRailDirectAdapter(cache_ttl_s=settings.cache_ttl_s.rzd_direct))
         registry.register(
             AeroflotDirectAdapter(
-                proxy_url=settings.aeroflot_proxy_url, cache_ttl_s=settings.cache_ttl_s.airline_direct
+                proxy_url=settings.aeroflot_proxy_url,
+                fallback_proxy_url=settings.aeroflot_fallback_proxy_url,
+                cache_ttl_s=settings.cache_ttl_s.airline_direct,
             )
         )
         registry.register(AzimuthDirectAdapter(cache_ttl_s=settings.cache_ttl_s.airline_direct))

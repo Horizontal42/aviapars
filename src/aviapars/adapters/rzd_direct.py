@@ -8,6 +8,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import aiohttp
+from aiohttp_socks import ProxyConnector
 
 from aviapars.adapters.base import (
     HealthStatus,
@@ -20,6 +21,7 @@ from aviapars.adapters.base import (
     SearchResult,
     Tier,
     probe_dates_total_timeout_s,
+    with_proxy_fallback,
 )
 
 BASE_URL = "https://pass.rzd.ru/timetable/public/ru"
@@ -73,11 +75,18 @@ class RzdDirectAdapter:
     # plus one request timeout, and only then multiplied by the dates in a cycle.
     total_timeout_s = probe_dates_total_timeout_s(_POLL_TRIES * _POLL_INTERVAL_S + request_timeout_s)
 
-    def __init__(self, *, rate_limit: RateLimitPolicy | None = None, cache_ttl_s: int = 2700) -> None:
+    def __init__(
+        self,
+        *,
+        fallback_proxy_url: str | None = None,
+        rate_limit: RateLimitPolicy | None = None,
+        cache_ttl_s: int = 2700,
+    ) -> None:
         # §6: RZD gets the most conservative pacing in the roster — the RID flow is the
         # least documented adapter here and the easiest to get rate-limited or captcha'd.
         self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=20.0)
         self.default_cache_ttl_s = cache_ttl_s
+        self._fallback_proxy_url = fallback_proxy_url
 
     async def search(self, q: SearchQuery) -> SearchResult:
         if q.mode != Mode.TRAIN:
@@ -85,11 +94,22 @@ class RzdDirectAdapter:
         if not q.origin.rzd_code or not q.dest.rzd_code:
             return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="missing rzd_code")
 
+        return await with_proxy_fallback(
+            lambda proxy_url: self._search_via(q, proxy_url),
+            primary=None,  # direct first — no dependency, recovers on its own if the ban lifts
+            fallback=self._fallback_proxy_url,
+        )
+
+    async def _search_via(self, q: SearchQuery, proxy_url: str | None) -> SearchResult:
+        # search() already rejected the query if either rzd_code was missing, so these
+        # are never None here — same pattern as travelpayouts._row_to_offer.
+        assert q.origin.rzd_code is not None and q.dest.rzd_code is not None
         dates = q.dates or (date.today(),)
         offers: list[Offer] = []
         partial = False
         blocked = False
-        async with aiohttp.ClientSession(headers=_HEADERS) as session:
+        connector = ProxyConnector.from_url(proxy_url) if proxy_url else None
+        async with aiohttp.ClientSession(headers=_HEADERS, connector=connector) as session:
             for d in dates:
                 trains, outcome = await self._search_day(session, q.origin.rzd_code, q.dest.rzd_code, d)
                 if outcome == "blocked":

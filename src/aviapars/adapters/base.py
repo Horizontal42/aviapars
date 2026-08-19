@@ -174,6 +174,33 @@ async def with_dns_retry(call: Callable[[], Awaitable[_T]], *, retries: int = 1)
         return await call()
 
 
+async def with_proxy_fallback(
+    attempt: Callable[[str | None], Awaitable[SearchResult]],
+    *,
+    primary: str | None,
+    fallback: str | None,
+) -> SearchResult:
+    """Tries `primary` egress (may be None = direct) first; only escalates to
+    `fallback` if the primary attempt came back BLOCKED specifically — not on
+    EMPTY (genuinely no offers, retrying through a different IP won't change
+    that) or any other status, so this never doubles a source's real request
+    volume for a non-blocking reason.
+
+    Exists because carrier WAFs in this roster (aeroflot_direct, rzd_direct)
+    block by IP *class* (datacenter/hosting), not permanently or by exact
+    address — a cheaper egress with no external dependency (direct, or a
+    Russian xray outbound already running on the VDS) is worth trying first,
+    falling back to a genuinely residential IP (the admin's home relay) only
+    when that cheaper path is actually blocked right now. Keeps the roster
+    from depending on the admin's home machine being reachable except when
+    the cheaper path has actually failed.
+    """
+    result = await attempt(primary)
+    if result.status == ResultStatus.BLOCKED and fallback and fallback != primary:
+        result = await attempt(fallback)
+    return result
+
+
 class SourceAdapter(Protocol):
     """See plans/squishy-scribbling-dawn.md §5 for the full contract rationale.
 

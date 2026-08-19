@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     notification_dedupe_cooldown_h: int = 12
 
     # SOCKS5/HTTP proxy for the bot's Telegram session only — adapters (travelpayouts,
-    # yandex_rasp, rzd_direct, s7_direct) stay direct. None = no proxy (default, local dev).
+    # yandex_rasp, s7_direct) stay direct. None = no proxy (default, local dev).
     telegram_proxy_url: str | None = None
 
     # SOCKS5 proxy for pobeda_direct only — Pobeda's WAF blocks every datacenter/VPN IP
@@ -92,11 +92,26 @@ class Settings(BaseSettings):
     # telegram_proxy_url — different egress, different reason. None = no proxy (direct).
     pobeda_proxy_url: str | None = None
 
-    # SOCKS5 proxy for aeroflot_direct only — verified live: the VDS's own (datacenter) IP
-    # gets a 200 OK WAF block page instead of JSON from this endpoint; the same request
-    # through a Russian xray outbound already running on this box (see ARCHITECTURE.md
-    # "Прокси") gets a real API response. None = no proxy (direct, will come back BLOCKED).
+    # aeroflot_direct tries two egresses in order (see ARCHITECTURE.md "Прокси"):
+    # 1. aeroflot_proxy_url — a Russian xray outbound already running on the VDS itself
+    #    (`ru-bridge`), no dependency on the admin's home machine, but it's still a
+    #    hosting-provider IP and the WAF blocks it intermittently (verified live — same
+    #    class of block as the VDS's own IP, just with a Russian ASN instead).
+    # 2. aeroflot_fallback_proxy_url — only tried if the first came back BLOCKED. Same
+    #    residential relay as pobeda_proxy_url (a genuinely different-class IP the WAF
+    #    doesn't block) — can point at the exact same address, the relay just forwards TCP
+    #    and doesn't care which adapter it's for.
+    # Both None = no proxy at all (direct, will come back BLOCKED — this endpoint worked
+    # unproxied only briefly, see aeroflot_direct.py's docstring).
     aeroflot_proxy_url: str | None = None
+    aeroflot_fallback_proxy_url: str | None = None
+
+    # rzd_direct tries direct first (no config needed — recovers on its own the moment
+    # RZD's VDS-IP ban lifts, see ARCHITECTURE.md), and only falls back to this residential
+    # relay (verified live: unblocks it same as pobeda/aeroflot) if direct comes back
+    # BLOCKED. `ru-bridge` was tried and does NOT help here (still datacenter-class, just a
+    # different one) — no separate "primary proxy" setting for RZD, unlike aeroflot.
+    rzd_fallback_proxy_url: str | None = None
 
     @classmethod
     def settings_customise_sources(
