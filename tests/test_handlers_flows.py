@@ -11,12 +11,14 @@ from aiogram.fsm.storage.base import StorageKey
 from aiogram.types import CallbackQuery, Chat, Update
 from aiogram.types import User as TgUser
 
-from aviapars.adapters.base import Mode
+from aviapars.adapters.base import Leg, Mode, Offer, PlaceRef, Tier
 from aviapars.config import settings
 from aviapars.db.models import Place
 from aviapars.db.repo_places import PlacesRepo
 from aviapars.db.repo_routes import RoutesRepo
 from aviapars.db.repo_users import UsersRepo
+from aviapars.domain.combiner import Itinerary
+from aviapars.domain.dates import exact_date
 from aviapars.notify.dedupe import DedupeGate
 from aviapars.notify.notifier import Notifier
 from aviapars.db.repo_jobs import JobsRepo
@@ -24,14 +26,15 @@ from aviapars.db.repo_notifications import NotificationsRepo
 from aviapars.telegram.handlers import admin as admin_handlers
 from aviapars.telegram.handlers import menu as menu_handlers
 from aviapars.telegram.handlers import routes as routes_handlers
+from aviapars.telegram.handlers import search as search_handlers
 from aviapars.telegram.handlers import start as start_handlers
 from aviapars.telegram.handlers import status as status_handlers
 from aviapars.telegram.handlers.add import on_origin_text as add_on_origin_text
 from aviapars.telegram.handlers.add import on_threshold_text
 from aviapars.telegram.bot import create_dispatcher
-from aviapars.telegram.keyboards import MenuAction, RouteAction
+from aviapars.telegram.keyboards import MenuAction, RouteAction, SearchShowAll, SearchTrack
 from aviapars.telegram.screen import Screen, screen_for
-from aviapars.telegram.states import AddRoute, EditRoute
+from aviapars.telegram.states import AddRoute, EditRoute, SearchFlow
 
 from tests.conftest import DummyRegistry, FakeScreenBot, make_state, make_text_message
 
@@ -527,3 +530,89 @@ async def test_dispatcher_prefers_wizard_state_over_the_fallback(db: aiosqlite.C
     # State stayed inside the wizard (origin lookup found nothing in this empty test db and
     # re-prompted) — the proof this needs is that on_origin_text ran at all, not the fallback.
     assert await fsm.get_state() == AddRoute.origin.state
+
+
+# --- /search results: "show all" pagination and the "💾 Следить за" bridge --------
+
+
+def _make_itinerary(price_minor: int = 500000) -> Itinerary:
+    origin = PlaceRef(place_id=1, iata="PEZ", yandex_code=None, rzd_code=None, city_id=None)
+    dest = PlaceRef(place_id=2, iata="LED", yandex_code=None, rzd_code=None, city_id=None)
+    now = datetime(2026, 9, 18, 8, 0, tzinfo=timezone.utc)
+    leg = Leg(mode=Mode.PLANE, from_place=origin, to_place=dest, depart_utc=now, depart_local=now, carrier="Победа")
+    offer = Offer(
+        legs=(leg,),
+        price_minor=price_minor,
+        currency="RUB",
+        deep_link=None,
+        source_id="pobeda_direct",
+        tier=Tier.CONFIRMATION,
+        observed_at=now,
+        source_cached_at=now,
+        expires_at=None,
+        confidence=1.0,
+        itinerary_hash=f"hash{price_minor}",
+    )
+    return Itinerary(offers=(offer,), price_minor=price_minor, currency="RUB")
+
+
+async def _seeded_search_results_state(bot: FakeScreenBot, n: int = 8) -> FSMContext:
+    """Mimics what `_run_search` stashes in state right before rendering results — enough
+    for `on_search_show_all`/`on_search_track` to run without actually calling a real adapter."""
+    state = make_state(bot)
+    await state.set_state(SearchFlow.results)
+    itineraries = [_make_itinerary(500000 + i * 1000) for i in range(n)]
+    await state.update_data(
+        origin_place_id=1,
+        origin_title="Пенза",
+        dest_place_id=2,
+        dest_title="Сочи",
+        mode_pref="plane",
+        results_all_itineraries=itineraries,
+        results_found_total=n,
+        results_route_title="Пенза → Сочи",
+        results_title="🔎 Пенза → Сочи",
+        results_selection=exact_date(datetime(2026, 9, 18).date()),
+        results_checked="проверено: 18.09.26",
+        results_source_names={"pobeda_direct": "Победа"},
+        results_itineraries=itineraries[:5],
+    )
+    return state
+
+
+async def test_search_show_all_expands_and_stale_state_shows_alert() -> None:
+    bot = FakeScreenBot()
+    state = await _seeded_search_results_state(bot, n=8)
+    query = make_query(bot, "sall")
+
+    await search_handlers.on_search_show_all(query, state)
+
+    assert any("Показываю" in t for t in bot.all_shown)
+    assert "8" in bot.all_shown[-1]
+
+    # A stale/cleared search (state.clear() ran, or the bot restarted) must alert, not crash.
+    bot2 = FakeScreenBot()
+    state2 = make_state(bot2)
+    query2 = make_query(bot2, "sall")
+    await search_handlers.on_search_show_all(query2, state2)  # must not raise
+    assert bot2.all_shown == []
+
+
+async def test_search_track_bridges_into_add_threshold_step() -> None:
+    bot = FakeScreenBot()
+    state = await _seeded_search_results_state(bot, n=3)
+    query = make_query(bot, "st:0")
+
+    await search_handlers.on_search_track(query, SearchTrack(idx=0), state)
+
+    assert await state.get_state() == AddRoute.threshold.state
+    assert any("Ниже какой цены" in t for t in bot.all_shown)
+
+
+async def test_search_track_stale_index_shows_alert_not_crash() -> None:
+    bot = FakeScreenBot()
+    state = await _seeded_search_results_state(bot, n=3)
+    query = make_query(bot, "st:99")
+
+    await search_handlers.on_search_track(query, SearchTrack(idx=99), state)  # must not raise
+    assert await state.get_state() == SearchFlow.results.state  # untouched — the bridge refused
