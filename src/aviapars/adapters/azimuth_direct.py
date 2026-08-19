@@ -19,6 +19,7 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    build_search_result,
     probe_dates_total_timeout_s,
     with_dns_retry,
 )
@@ -101,15 +102,7 @@ class AzimuthDirectAdapter:
             # from the others in this same batch.
             return SearchResult(status=ResultStatus.UPSTREAM_ERROR, offers=[], partial=False, error="request failed")
 
-        if offers:
-            status = ResultStatus.OK
-        elif blocked:
-            status = ResultStatus.BLOCKED
-        elif partial:
-            status = ResultStatus.UPSTREAM_ERROR
-        else:
-            status = ResultStatus.EMPTY
-        return SearchResult(status=status, offers=offers, partial=partial)
+        return build_search_result(offers, blocked=blocked, partial=partial)
 
     async def _search_day(
         self, session: Any, q: SearchQuery, token: str, depart_date: date

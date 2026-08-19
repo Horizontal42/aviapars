@@ -110,6 +110,20 @@ class SearchResult:
     error: str | None = None
 
 
+def build_search_result(
+    offers: list[Offer], *, blocked: bool = False, partial: bool = False
+) -> SearchResult:
+    if offers:
+        status = ResultStatus.OK
+    elif blocked:
+        status = ResultStatus.BLOCKED
+    elif partial:
+        status = ResultStatus.UPSTREAM_ERROR
+    else:
+        status = ResultStatus.EMPTY
+    return SearchResult(status=status, offers=offers, partial=partial)
+
+
 @dataclass(frozen=True, slots=True)
 class HealthStatus:
     ok: bool

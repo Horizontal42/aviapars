@@ -22,6 +22,7 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    build_search_result,
     probe_dates_total_timeout_s,
 )
 
@@ -123,15 +124,7 @@ class RzdDirectAdapter:
                     if offer is not None:
                         offers.append(offer)
 
-        if offers:
-            status = ResultStatus.OK
-        elif blocked:
-            status = ResultStatus.BLOCKED
-        elif partial:
-            status = ResultStatus.UPSTREAM_ERROR
-        else:
-            status = ResultStatus.EMPTY
-        return SearchResult(status=status, offers=offers, partial=partial)
+        return build_search_result(offers, blocked=blocked, partial=partial)
 
     async def _post(
         self, session: aiohttp.ClientSession, src: str, dst: str, day: date, rid: int | None
