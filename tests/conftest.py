@@ -11,6 +11,8 @@ from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Chat, InlineKeyboardMarkup, Message
 
+from aviapars.db.engine import normalize_place_query
+
 MIGRATIONS_DIR = Path(__file__).parent.parent / "data" / "migrations"
 
 
@@ -18,6 +20,11 @@ MIGRATIONS_DIR = Path(__file__).parent.parent / "data" / "migrations"
 async def db(tmp_path: Path) -> aiosqlite.Connection:
     path = tmp_path / "test.db"
     conn = await aiosqlite.connect(path)
+    # Production connect() (db/engine.py) always registers this — PlacesRepo.search_by_name's
+    # `normalize(name_ru) LIKE ...` needs it. Most existing tests avoid the real PlacesRepo (they
+    # monkeypatch it), so this gap went unnoticed until a handler test called it through the
+    # real db connection.
+    await conn.create_function("normalize", 1, normalize_place_query, deterministic=True)
     for migration in sorted(MIGRATIONS_DIR.glob("*.sql")):
         await conn.executescript(migration.read_text(encoding="utf-8"))
     yield conn
@@ -84,9 +91,17 @@ def make_text_message(chat_id: int, text: str | None, bot: FakeScreenBot, messag
 
 
 class DummyRegistry:
-    """Stands in for AdapterRegistry in handler tests that never reach the
-    search itself (error-path tests) — the real registry needs a live db
-    connection and adapters, neither of which those paths ever touch."""
+    """Stands in for AdapterRegistry in handler tests that never reach a real
+    search — the real registry needs a live db connection and adapters,
+    neither of which those paths touch. `for_query` always returning []
+    means any handler-level test that *does* end up inside
+    domain.combiner.search_itineraries (e.g. "🔍 Проверить сейчас", the
+    /search bridge) degrades to zero offers instead of crashing on a
+    missing method, same as a real registry with nothing registered for
+    that mode/country pair."""
 
     def all(self) -> list[Any]:
+        return []
+
+    def for_query(self, mode: Any, origin_country: str, dest_country: str) -> list[Any]:
         return []
