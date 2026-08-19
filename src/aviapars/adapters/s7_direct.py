@@ -274,6 +274,7 @@ class S7DirectAdapter:
     ) -> list[Offer]:
         offers: list[Offer] = []
         now = datetime.now(timezone.utc)
+        tz_cache: dict[str, timezone | ZoneInfo] = {}
 
         for option_set in payload.get("optionSets") or []:
             for flight_option in option_set.get("flightOptions") or []:
@@ -302,13 +303,23 @@ class S7DirectAdapter:
                     dep_tz_name = seg.get("departureTimeZone")
                     arr_tz_name = seg.get("arrivalTimeZone")
                     dep_local = datetime.fromisoformat(seg["departureDate"])
-                    dep_utc = dep_local.replace(tzinfo=ZoneInfo(dep_tz_name) if dep_tz_name else timezone.utc)
-                    dep_utc = dep_utc.astimezone(timezone.utc)
+
+                    dep_tz: timezone | ZoneInfo = timezone.utc
+                    if dep_tz_name:
+                        if dep_tz_name not in tz_cache:
+                            tz_cache[dep_tz_name] = ZoneInfo(dep_tz_name)
+                        dep_tz = tz_cache[dep_tz_name]
+                    dep_utc = dep_local.replace(tzinfo=dep_tz).astimezone(timezone.utc)
+
                     arr_utc = None
                     if seg.get("arrivalDate"):
                         arr_local = datetime.fromisoformat(seg["arrivalDate"])
-                        arr_utc = arr_local.replace(tzinfo=ZoneInfo(arr_tz_name) if arr_tz_name else timezone.utc)
-                        arr_utc = arr_utc.astimezone(timezone.utc)
+                        arr_tz: timezone | ZoneInfo = timezone.utc
+                        if arr_tz_name:
+                            if arr_tz_name not in tz_cache:
+                                tz_cache[arr_tz_name] = ZoneInfo(arr_tz_name)
+                            arr_tz = tz_cache[arr_tz_name]
+                        arr_utc = arr_local.replace(tzinfo=arr_tz).astimezone(timezone.utc)
                     airline = seg.get("operatingAirline") or {}
                     legs.append(
                         Leg(
