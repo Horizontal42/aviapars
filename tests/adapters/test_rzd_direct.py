@@ -119,7 +119,7 @@ async def test_blocked_direct_egress_falls_back_to_the_relay(monkeypatch: pytest
         egresses_tried.append(proxy_url)
         return await real_search_via(self, q, proxy_url)
 
-    def fake_from_url(url: str) -> Any:
+    def fake_from_url(url: str, **kwargs: Any) -> Any:
         connectors.append(url)
         return None
 
@@ -139,7 +139,8 @@ async def test_blocked_direct_egress_falls_back_to_the_relay(monkeypatch: pytest
     result = await a.search(q)
 
     assert egresses_tried == [None, "socks5h://100.84.46.36:11080"]
-    assert connectors == ["socks5h://100.84.46.36:11080"]  # only the proxied leg builds one
+    # scheme is normalized to plain socks5 before from_url — see rzd_direct._proxy_connector.
+    assert connectors == ["socks5://100.84.46.36:11080"]  # only the proxied leg builds one
     assert result.status == ResultStatus.OK
 
     # sticky: the 403'd direct egress is not re-probed on the next call
