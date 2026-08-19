@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import aiosqlite
 import pytest
-from aiogram.types import CallbackQuery, Chat
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.base import StorageKey
+from aiogram.types import CallbackQuery, Chat, Update
 from aiogram.types import User as TgUser
 
 from aviapars.adapters.base import Mode
@@ -25,6 +28,7 @@ from aviapars.telegram.handlers import start as start_handlers
 from aviapars.telegram.handlers import status as status_handlers
 from aviapars.telegram.handlers.add import on_origin_text as add_on_origin_text
 from aviapars.telegram.handlers.add import on_threshold_text
+from aviapars.telegram.bot import create_dispatcher
 from aviapars.telegram.keyboards import MenuAction, RouteAction
 from aviapars.telegram.screen import Screen, screen_for
 from aviapars.telegram.states import AddRoute, EditRoute
@@ -461,3 +465,65 @@ async def test_threshold_text_edge_cases(text: str, should_pass: bool) -> None:
     else:
         assert await state.get_state() == AddRoute.threshold.state
         assert any("⚠️" in t for t in bot.all_shown)
+
+
+# --- unmatched free text: no wizard open, or FSM state lost to a restart --------
+
+
+async def test_unmatched_message_shows_a_reply_instead_of_dying_silently() -> None:
+    bot = FakeScreenBot()
+    state = make_state(bot)
+    await state.set_state(AddRoute.mode)  # leftover state, e.g. from a crashed/aborted flow
+    message = make_text_message(CHAT_ID, "прив", bot)
+
+    await menu_handlers.on_unmatched_message(message, state)
+
+    assert any("Не понял" in t for t in bot.all_shown)
+    assert await state.get_state() is None
+
+
+class _IdBot(FakeScreenBot):
+    """feed_update() derives the FSM StorageKey from `bot.id` — a real aiogram Bot always
+    has one, FakeScreenBot doesn't need it for direct handler calls but the dispatcher-level
+    test below has to line up with the same key aiogram computes internally."""
+
+    id = 1
+
+
+async def test_dispatcher_prefers_wizard_state_over_the_fallback(db: aiosqlite.Connection) -> None:
+    """The routing-order regression this fix could introduce: fallback_router is included
+    last precisely so it never wins over an in-progress wizard's own state-specific handler.
+    Verified through the real Dispatcher, not by calling handlers directly, because the bug
+    this guards against is about *registration order*, which only the real router chain can
+    prove."""
+    dp = create_dispatcher()
+    bot = _IdBot()
+
+    def feed(bot_: _IdBot, text: str, update_id: int) -> Update:
+        message = make_text_message(CHAT_ID, text, bot_)
+        object.__setattr__(message, "from_user", TgUser(id=USER_ID, is_bot=False, first_name="U"))
+        return Update(update_id=update_id, message=message)
+
+    # No state: the fallback must catch it.
+    await dp.feed_update(
+        bot, feed(bot, "нет активного шага", 1), db=db, registry=DummyRegistry(), notifier=None, shutdown_event=asyncio.Event()
+    )
+    assert any("Не понял" in t for t in bot.all_shown)
+
+    # Now seed AddRoute.origin for the same chat/user and feed another text message —
+    # the wizard's own on_origin_text must win, not the fallback.
+    bot2 = _IdBot()
+    fsm = FSMContext(storage=dp.storage, key=StorageKey(bot_id=bot2.id, chat_id=CHAT_ID, user_id=USER_ID))
+    await fsm.set_state(AddRoute.origin)
+    await dp.feed_update(
+        bot2,
+        feed(bot2, "Пенза", 2),
+        db=db,
+        registry=DummyRegistry(),
+        notifier=None,
+        shutdown_event=asyncio.Event(),
+    )
+    assert not any("Не понял" in t for t in bot2.all_shown)
+    # State stayed inside the wizard (origin lookup found nothing in this empty test db and
+    # re-prompted) — the proof this needs is that on_origin_text ran at all, not the fallback.
+    assert await fsm.get_state() == AddRoute.origin.state

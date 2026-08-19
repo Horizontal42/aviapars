@@ -70,4 +70,7 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(search.router)
     dp.include_router(routes.router)
     dp.include_router(status.router)
+    # Last on purpose — see menu.fallback_router's own docstring: every state-specific
+    # handler above gets first refusal, this only fires once nothing else claimed the update.
+    dp.include_router(menu.fallback_router)
     return dp

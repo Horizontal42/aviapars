@@ -15,6 +15,17 @@ from aviapars.telegram.screen import Screen, screen_for
 
 router = Router(name="menu")
 
+# Separate from `router` on purpose: `create_dispatcher()` includes `menu.router` FIRST so its
+# state-agnostic MenuAction callback stays reachable mid-wizard (see its own docstring below) —
+# a catch-all *message* handler in that same router would win that same first-refusal and
+# swallow every wizard's typed steps before they ever saw the message. `fallback_router` is
+# included LAST instead, so every state-specific handler gets first try and this only fires
+# once nothing else claimed the update — e.g. free text with no wizard open (a plain "привет"),
+# or a wizard's FSM state lost to a bot restart (in-memory storage, no persistence — see
+# ARCHITECTURE.md). Before this, that update matched no filter at all and aiogram dropped it
+# with no reply and no trace — from the user's side, the bot looked dead.
+fallback_router = Router(name="fallback")
+
 MENU_TEXT = screen_text(
     "☰ Главное меню",
     "Слежу за ценами на авиа- и жд-билеты и пишу, когда цена опускается ниже вашего порога.",
@@ -31,6 +42,12 @@ HELP_TEXT = screen_text(
     "<b>Цены.</b> Часть источников отдаёт кэш агрегатора — такие варианты помечены «⚠️ не подтверждено». "
     "Остальные спрашивают перевозчика напрямую, это «✅ подтверждено».",
     "То же самое командами: /add, /routes, /search, /status, /menu.",
+)
+
+_UNMATCHED_TEXT = screen_text(
+    "🤔 Не понял",
+    "Так текстом не отвечу — я слежу за маршрутом по шагам через кнопки и команды. Если был "
+    "на середине шага — попробуйте начать заново.",
 )
 
 
@@ -86,3 +103,13 @@ async def on_menu_action(
     else:
         await show_menu(screen)
     await query.answer()
+
+
+@fallback_router.message()
+async def on_unmatched_message(message: Message, state: FSMContext) -> None:
+    """Registered last (see `fallback_router`'s own docstring above) — catches whatever no
+    wizard step and no command claimed. Same screen anchor as every other reply (`screen_for`
+    re-anchors on the stored message if one exists), so this doesn't spray a new message into
+    the chat on top of whatever was already on screen."""
+    await state.clear()
+    await (await screen_for(message, state)).show(_UNMATCHED_TEXT, reply_markup=main_menu_kb())
