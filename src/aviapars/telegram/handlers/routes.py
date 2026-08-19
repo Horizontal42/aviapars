@@ -168,12 +168,19 @@ async def _rerender(screen: Screen, routes_repo: RoutesRepo, route_id: int, *, n
 
 @router.message(EditRoute.interval)
 async def on_interval_edit_text(message: Message, state: FSMContext, db: aiosqlite.Connection) -> None:
-    assert message.text is not None
     screen = await screen_for(message, state)
     data = await state.get_data()
     route_id = data.get("edit_route_id")
     if route_id is None:
         await state.clear()
+        return
+    if message.text is None:
+        # Same class of bug as handlers/add.py/search.py: no content-type filter here, so a
+        # sticker/photo mid-edit used to hit an unguarded assert and silently kill the update.
+        await screen.show(
+            screen_text("⏱ Интервал проверки", "⚠️ Не понял. Пришлите ответ текстом."),
+            reply_markup=menu_only_kb(),
+        )
         return
     try:
         minutes = int(message.text.strip())

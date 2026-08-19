@@ -59,6 +59,11 @@ _RESULTS_SHOWN = 5
 # vs shown, same honesty rule as `describe_checked_dates` for probed dates.
 _RESULTS_MAX = 25
 
+# Same reasoning as handlers/add.py's constant of the same name — these handlers have no
+# content-type filter, so a sticker/photo/voice message mid-wizard used to hit an unguarded
+# assert and crash the update silently instead of getting a friendly re-prompt.
+_NON_TEXT_ERROR = "⚠️ Не понял. Пришлите ответ текстом."
+
 
 async def step(screen: Screen, state: FSMContext, prompt: str, *, reply_markup: InlineKeyboardMarkup | None) -> None:
     """Same one-screen shape as the /add wizard (handlers/add.step) — title,
@@ -119,8 +124,10 @@ async def _destination_picked(screen: Screen, state: FSMContext, place: Place) -
 
 @router.message(SearchFlow.origin)
 async def on_search_origin_text(message: Message, state: FSMContext, db: aiosqlite.Connection) -> None:
-    assert message.text is not None
     screen = await screen_for(message, state)
+    if message.text is None:
+        await step(screen, state, _NON_TEXT_ERROR, reply_markup=menu_only_kb())
+        return
     await ask_place_pick(
         screen,
         state,
@@ -146,8 +153,10 @@ async def on_search_origin_pick(query: CallbackQuery, callback_data: PlacePick, 
 
 @router.message(SearchFlow.destination)
 async def on_search_destination_text(message: Message, state: FSMContext, db: aiosqlite.Connection) -> None:
-    assert message.text is not None
     screen = await screen_for(message, state)
+    if message.text is None:
+        await step(screen, state, _NON_TEXT_ERROR, reply_markup=menu_only_kb())
+        return
     await ask_place_pick(
         screen,
         state,
@@ -201,8 +210,10 @@ async def on_search_date_mode_pick(
 async def on_search_date_value_text(
     message: Message, state: FSMContext, db: aiosqlite.Connection, registry: AdapterRegistry
 ) -> None:
-    assert message.text is not None
     screen = await screen_for(message, state)
+    if message.text is None:
+        await step(screen, state, _NON_TEXT_ERROR, reply_markup=menu_only_kb())
+        return
     data = await state.get_data()
     parsed = date_picker.parse_selection(data["date_kind"], message.text, date.today())
     if isinstance(parsed, str):

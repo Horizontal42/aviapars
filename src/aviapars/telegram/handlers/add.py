@@ -42,6 +42,13 @@ TITLE = "➕ Новый маршрут"
 _MAX_PRICE_RUB = 100_000_000
 _MAX_INTERVAL_MIN = 43_200  # 30 days
 
+# Every @router.message(SomeState) handler below accepts any content type, not just text
+# (there's no content-type filter) — a sticker/photo/voice message sent mid-wizard used to
+# hit `assert message.text is not None` and crash the update with no reply at all, stranding
+# the user in the wizard with no visible error. This degrades it to the same friendly
+# re-prompt every other parse failure already gets.
+_NON_TEXT_ERROR = "⚠️ Не понял. Пришлите ответ текстом."
+
 
 async def step(screen: Screen, state: FSMContext, prompt: str, *, reply_markup: InlineKeyboardMarkup | None) -> None:
     """One wizard step = the same message rewritten. Each step therefore repeats
@@ -77,8 +84,10 @@ async def _destination_picked(screen: Screen, state: FSMContext, place: Place) -
 
 @router.message(AddRoute.origin)
 async def on_origin_text(message: Message, state: FSMContext, db: aiosqlite.Connection) -> None:
-    assert message.text is not None
     screen = await screen_for(message, state)
+    if message.text is None:
+        await step(screen, state, _NON_TEXT_ERROR, reply_markup=menu_only_kb())
+        return
     await ask_place_pick(
         screen,
         state,
@@ -104,8 +113,10 @@ async def on_origin_pick(query: CallbackQuery, callback_data: PlacePick, state: 
 
 @router.message(AddRoute.destination)
 async def on_destination_text(message: Message, state: FSMContext, db: aiosqlite.Connection) -> None:
-    assert message.text is not None
     screen = await screen_for(message, state)
+    if message.text is None:
+        await step(screen, state, _NON_TEXT_ERROR, reply_markup=menu_only_kb())
+        return
     await ask_place_pick(
         screen,
         state,
@@ -155,8 +166,10 @@ async def on_date_mode_pick(query: CallbackQuery, callback_data: DatePick, state
 
 @router.message(AddRoute.date_value)
 async def on_date_value_text(message: Message, state: FSMContext) -> None:
-    assert message.text is not None
     screen = await screen_for(message, state)
+    if message.text is None:
+        await step(screen, state, _NON_TEXT_ERROR, reply_markup=menu_only_kb())
+        return
     data = await state.get_data()
     parsed = date_picker.parse_selection(data["date_kind"], message.text, date.today())
     if isinstance(parsed, str):
@@ -217,8 +230,10 @@ def _parse_price_minor(text: str) -> int | str:
 
 @router.message(AddRoute.threshold)
 async def on_threshold_text(message: Message, state: FSMContext) -> None:
-    assert message.text is not None
     screen = await screen_for(message, state)
+    if message.text is None:
+        await step(screen, state, _NON_TEXT_ERROR, reply_markup=menu_only_kb())
+        return
     parsed = _parse_price_minor(message.text)
     if isinstance(parsed, str):
         await step(screen, state, parsed, reply_markup=menu_only_kb())
@@ -229,8 +244,10 @@ async def on_threshold_text(message: Message, state: FSMContext) -> None:
 
 @router.message(AddRoute.threshold_plane)
 async def on_threshold_plane_text(message: Message, state: FSMContext) -> None:
-    assert message.text is not None
     screen = await screen_for(message, state)
+    if message.text is None:
+        await step(screen, state, _NON_TEXT_ERROR, reply_markup=menu_only_kb())
+        return
     parsed = _parse_price_minor(message.text)
     if isinstance(parsed, str):
         await step(screen, state, parsed, reply_markup=menu_only_kb())
@@ -242,8 +259,10 @@ async def on_threshold_plane_text(message: Message, state: FSMContext) -> None:
 
 @router.message(AddRoute.threshold_train)
 async def on_threshold_train_text(message: Message, state: FSMContext) -> None:
-    assert message.text is not None
     screen = await screen_for(message, state)
+    if message.text is None:
+        await step(screen, state, _NON_TEXT_ERROR, reply_markup=menu_only_kb())
+        return
     parsed = _parse_price_minor(message.text)
     if isinstance(parsed, str):
         await step(screen, state, parsed, reply_markup=menu_only_kb())
@@ -274,8 +293,10 @@ async def _ask_interval(screen: Screen, state: FSMContext) -> None:
 
 @router.message(AddRoute.interval)
 async def on_interval_text(message: Message, state: FSMContext) -> None:
-    assert message.text is not None
     screen = await screen_for(message, state)
+    if message.text is None:
+        await step(screen, state, _NON_TEXT_ERROR, reply_markup=menu_only_kb())
+        return
     try:
         minutes = int(message.text.strip())
     except ValueError:
