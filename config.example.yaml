@@ -135,7 +135,8 @@ tutu_egress_pool: []
 # появился именно из-за этого), либо просто не нужен прямо сейчас. По умолчанию включено всё,
 # кроме S7.
 travelpayouts_enabled: true  # Aviasales Data API, discovery-тир, официальный — выключать незачем
-yandex_rasp_enabled: true    # Яндекс.Расписания — официальный API, цены и расписания
+yandex_rasp_enabled: false   # Яндекс.Расписания — выключен: бесплатный ключ не отдаёт цены вообще (0 из
+                              # проверенных сегментов), реальные жд-цены закрывают rzd_direct+tutu_rail_direct
 rzd_enabled: true            # pass.rzd.ru — реальные ЖД-цены, неофициальный скрейп
 tutu_rail_enabled: true      # tutu.ru ЖД — реальные цены, неофициальный скрейп
 aeroflot_enabled: true       # aeroflot.ru — реальные цены группы «Аэрофлот» (SU/FV/A4/...)

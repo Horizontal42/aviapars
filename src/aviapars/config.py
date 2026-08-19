@@ -151,7 +151,13 @@ class Settings(BaseSettings):
     # broken, mid-migration, or just not worth its timeout budget right now, and "comment out
     # the registration" doesn't survive the next deploy/merge the way a named field does.
     travelpayouts_enabled: bool = True
-    yandex_rasp_enabled: bool = True
+    # yandex_rasp_enabled — off by default: the free API key never returns `tickets_info` on
+    # any segment (confirmed live across every route tested this session — 0 of N segments
+    # ever carry a price), so this adapter contributes zero offers, ever, as things stand. Real
+    # train prices already come from rzd_direct + tutu_rail_direct. Flip back on only if S7-style
+    # legitimate access (a paid/partner Yandex Rasp tier that actually includes ticket prices)
+    # is obtained — see ARCHITECTURE.md "yandex_rasp".
+    yandex_rasp_enabled: bool = False
     rzd_enabled: bool = True
     tutu_rail_enabled: bool = True
     aeroflot_enabled: bool = True
