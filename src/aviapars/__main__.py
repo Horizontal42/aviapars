@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+import aiosqlite
+
+from aiogram import Bot
 
 from aviapars.adapters.aeroflot_direct import AeroflotDirectAdapter
 from aviapars.adapters.azimuth_direct import AzimuthDirectAdapter
@@ -31,86 +36,101 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger("aviapars")
 
 
+def setup_registry(db: aiosqlite.Connection) -> AdapterRegistry:
+    registry = AdapterRegistry(
+        db,
+        http_concurrency_global=settings.http_concurrency_global,
+        http_concurrency_interactive=settings.http_concurrency_interactive,
+        http_concurrency_per_source=settings.http_concurrency_per_source,
+    )
+    registry.register(
+        TravelpayoutsAdapter(
+            token=settings.travelpayouts_token,
+            marker=settings.travelpayouts_marker,
+            cache_ttl_s=settings.cache_ttl_s.travelpayouts,
+        )
+    )
+    registry.register(
+        YandexRaspAdapter(
+            api_key=settings.yandex_rasp_api_key,
+            cache_ttl_s=settings.cache_ttl_s.yandex_rasp_price,
+        )
+    )
+    registry.register(
+        RzdDirectAdapter(
+            egress_pool=settings.rzd_egress_pool, cache_ttl_s=settings.cache_ttl_s.rzd_direct
+        )
+    )
+    # Both Tutu adapters read the same pool but each builds its own EgressPool: the
+    # config is one list because the two endpoints are banned together, the rotation
+    # state is per-adapter because everything else about them already is (rate limit,
+    # circuit breaker, cache).
+    registry.register(
+        TutuRailDirectAdapter(
+            egress_pool=settings.tutu_egress_pool, cache_ttl_s=settings.cache_ttl_s.rzd_direct
+        )
+    )
+    registry.register(
+        AeroflotDirectAdapter(
+            egress_pool=settings.aeroflot_egress_pool,
+            cache_ttl_s=settings.cache_ttl_s.airline_direct,
+        )
+    )
+    registry.register(AzimuthDirectAdapter(cache_ttl_s=settings.cache_ttl_s.airline_direct))
+    registry.register(
+        PobedaDirectAdapter(
+            egress_pool=settings.pobeda_egress_pool, cache_ttl_s=settings.cache_ttl_s.airline_direct
+        )
+    )
+    registry.register(
+        TutuAviaDirectAdapter(
+            egress_pool=settings.tutu_egress_pool, cache_ttl_s=settings.cache_ttl_s.airline_direct
+        )
+    )
+
+    sessions_repo = SessionsRepo(db)
+    registry.register(
+        S7DirectAdapter(
+            session_getter=lambda: sessions_repo.get("s7_direct"),
+            session_setter=lambda payload, expires_at: sessions_repo.save("s7_direct", payload, expires_at),
+            cache_ttl_s=settings.cache_ttl_s.airline_direct,
+        )
+    )
+    return registry
+
+
+def setup_notifier(db: aiosqlite.Connection, bot: Bot, registry: AdapterRegistry) -> Notifier:
+    notifications_repo = NotificationsRepo(db)
+    jobs_repo = JobsRepo(db)
+    dedupe = DedupeGate(notifications_repo)
+    return Notifier(
+        bot,
+        notifications_repo,
+        jobs_repo,
+        dedupe,
+        cooldown_h=settings.notification_dedupe_cooldown_h,
+        daily_cap=settings.notifications_per_route_per_day,
+        source_names={a.id: a.display_name for a in registry.all()},
+    )
+
+
+@asynccontextmanager
+async def init_bot() -> AsyncIterator[Bot]:
+    bot = create_bot(settings.telegram_bot_token, proxy_url=settings.telegram_proxy_url)
+    try:
+        yield bot
+    finally:
+        await bot.session.close()
+
+
 async def main() -> None:
     log.info("aviapars starting up (db=%s)", settings.db_path)
     await migrate()
 
-    async with connect() as db:
-        registry = AdapterRegistry(
-            db,
-            http_concurrency_global=settings.http_concurrency_global,
-            http_concurrency_interactive=settings.http_concurrency_interactive,
-            http_concurrency_per_source=settings.http_concurrency_per_source,
-        )
-        registry.register(
-            TravelpayoutsAdapter(
-                token=settings.travelpayouts_token,
-                marker=settings.travelpayouts_marker,
-                cache_ttl_s=settings.cache_ttl_s.travelpayouts,
-            )
-        )
-        registry.register(
-            YandexRaspAdapter(
-                api_key=settings.yandex_rasp_api_key,
-                cache_ttl_s=settings.cache_ttl_s.yandex_rasp_price,
-            )
-        )
-        registry.register(
-            RzdDirectAdapter(
-                egress_pool=settings.rzd_egress_pool, cache_ttl_s=settings.cache_ttl_s.rzd_direct
-            )
-        )
-        # Both Tutu adapters read the same pool but each builds its own EgressPool: the
-        # config is one list because the two endpoints are banned together, the rotation
-        # state is per-adapter because everything else about them already is (rate limit,
-        # circuit breaker, cache).
-        registry.register(
-            TutuRailDirectAdapter(
-                egress_pool=settings.tutu_egress_pool, cache_ttl_s=settings.cache_ttl_s.rzd_direct
-            )
-        )
-        registry.register(
-            AeroflotDirectAdapter(
-                egress_pool=settings.aeroflot_egress_pool,
-                cache_ttl_s=settings.cache_ttl_s.airline_direct,
-            )
-        )
-        registry.register(AzimuthDirectAdapter(cache_ttl_s=settings.cache_ttl_s.airline_direct))
-        registry.register(
-            PobedaDirectAdapter(
-                egress_pool=settings.pobeda_egress_pool, cache_ttl_s=settings.cache_ttl_s.airline_direct
-            )
-        )
-        registry.register(
-            TutuAviaDirectAdapter(
-                egress_pool=settings.tutu_egress_pool, cache_ttl_s=settings.cache_ttl_s.airline_direct
-            )
-        )
-
-        sessions_repo = SessionsRepo(db)
-        registry.register(
-            S7DirectAdapter(
-                session_getter=lambda: sessions_repo.get("s7_direct"),
-                session_setter=lambda payload, expires_at: sessions_repo.save("s7_direct", payload, expires_at),
-                cache_ttl_s=settings.cache_ttl_s.airline_direct,
-            )
-        )
-
-        bot = create_bot(settings.telegram_bot_token, proxy_url=settings.telegram_proxy_url)
+    async with connect() as db, init_bot() as bot:
+        registry = setup_registry(db)
         dp = create_dispatcher()
-
-        notifications_repo = NotificationsRepo(db)
-        jobs_repo = JobsRepo(db)
-        dedupe = DedupeGate(notifications_repo)
-        notifier = Notifier(
-            bot,
-            notifications_repo,
-            jobs_repo,
-            dedupe,
-            cooldown_h=settings.notification_dedupe_cooldown_h,
-            daily_cap=settings.notifications_per_route_per_day,
-            source_names={a.id: a.display_name for a in registry.all()},
-        )
+        notifier = setup_notifier(db, bot, registry)
 
         shutdown_event = asyncio.Event()
 
@@ -148,7 +168,6 @@ async def main() -> None:
         finally:
             scheduler_task.cancel()
             watchdog_task.cancel()
-            await bot.session.close()
 
 
 if __name__ == "__main__":
