@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 from typing import Protocol
 from zoneinfo import ZoneInfo
@@ -17,6 +18,15 @@ from aviapars.notify.dedupe import DedupeGate
 from aviapars.telegram.format import format_deal_card
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class _DealMeta:
+    itinerary_hash: str
+    dedupe_key: str
+    mode: str
+    depart_date: str
+    tier: str
 
 
 class TelegramSender(Protocol):
@@ -51,6 +61,86 @@ class Notifier:
         self._daily_cap = daily_cap
         self._source_names = source_names or {}
 
+    def _build_metadata(self, route: Route, itinerary: Itinerary, confirmed: bool, now: datetime) -> _DealMeta:
+        all_legs = [leg for offer in itinerary.offers for leg in offer.legs]
+        depart_date = all_legs[0].depart_local.date().isoformat()
+        mode = "+".join(dict.fromkeys(leg.mode.value for leg in all_legs))
+        itinerary_hash = _combined_hash(itinerary)
+        dedupe_key = f"{route.id}:{itinerary_hash}:{now.date().isoformat()}"
+        tier = "confirmation" if confirmed else "discovery"
+        return _DealMeta(
+            itinerary_hash=itinerary_hash,
+            dedupe_key=dedupe_key,
+            mode=mode,
+            depart_date=depart_date,
+            tier=tier,
+        )
+
+    async def _defer_deal(self, user: User, route: Route, itinerary: Itinerary, meta: _DealMeta, text: str, now: datetime) -> bool:
+        # Record now, not at delivery — can_send() above reads notifications_sent, and
+        # without this the dedupe gate can't see a deferred deal at all: the same price
+        # would be re-enqueued on every poll cycle for the rest of the night instead of
+        # being suppressed by the cooldown it's supposed to respect. Same reasoning
+        # covers digest mode: without recording at enqueue time, a route polled again
+        # before its digest fires could queue the same qualifying price twice.
+        try:
+            await self._repo.record(
+                route_id=route.id,
+                dedupe_key=meta.dedupe_key,
+                itinerary_hash=meta.itinerary_hash,
+                price_minor=itinerary.price_minor,
+                mode=meta.mode,
+                depart_date=meta.depart_date,
+                tier_at_send=meta.tier,
+            )
+        except aiosqlite.IntegrityError:
+            # route_id's FK — the route was deleted between crosses_threshold() finding
+            # this deal and getting here (a slow multi-adapter search leaves a wide window
+            # for that race). Nothing to defer for a route that no longer exists.
+            log.warning("route %s vanished before its deferred deal could be recorded", route.id)
+            return False
+        await self._jobs.enqueue(
+            "notify",
+            route_id=route.id,
+            run_after=next_quiet_hours_end(user, now),
+            payload={
+                "chat_id": user.tg_user_id,
+                "text": text,
+            },
+        )
+        log.info(
+            "deferred deal for route %s: %s %s on %s (hash %s)",
+            route.id, meta.mode, itinerary.price_minor, meta.depart_date, meta.itinerary_hash,
+        )
+        return False
+
+    async def _send_immediate(self, user: User, route: Route, itinerary: Itinerary, meta: _DealMeta, text: str) -> bool:
+        await self._bot.send_message(user.tg_user_id, text)
+        try:
+            await self._repo.record(
+                route_id=route.id,
+                dedupe_key=meta.dedupe_key,
+                itinerary_hash=meta.itinerary_hash,
+                price_minor=itinerary.price_minor,
+                mode=meta.mode,
+                depart_date=meta.depart_date,
+                tier_at_send=meta.tier,
+            )
+        except aiosqlite.IntegrityError:
+            # Same race as above, but the message is already sent by this point — recording
+            # is bookkeeping for dedupe/history, not a precondition for delivery, so a route
+            # deleted out from under us here is a log line, not a reason to report failure.
+            log.warning("route %s vanished right after its deal was sent (dedupe row not recorded)", route.id)
+        # No log line here before this fix — the only way to answer "why did I get notified
+        # three times tonight" was to guess from notifications_sent, which doesn't record
+        # *why* a poll considered something new (a different depart_date within a flexible
+        # window is a legitimately distinct itinerary_hash, not a duplicate).
+        log.info(
+            "sent deal for route %s: %s %s on %s (hash %s)",
+            route.id, meta.mode, itinerary.price_minor, meta.depart_date, meta.itinerary_hash,
+        )
+        return True
+
     async def send_deal(
         self, *, user: User, route: Route, itinerary: Itinerary, confirmed: bool, now: datetime | None = None
     ) -> bool:
@@ -71,16 +161,11 @@ class Notifier:
         distinct qualifying prices found the same day should read as two
         notifications, not collapse into one."""
         now = now or datetime.now(timezone.utc)
-        all_legs = [leg for offer in itinerary.offers for leg in offer.legs]
-        # local, not UTC — see telegram/format.py's format_deal_card for why.
-        depart_date = all_legs[0].depart_local.date().isoformat()
-        mode = "+".join(dict.fromkeys(leg.mode.value for leg in all_legs))
-        itinerary_hash = _combined_hash(itinerary)
-        dedupe_key = f"{route.id}:{itinerary_hash}:{now.date().isoformat()}"
+        meta = self._build_metadata(route, itinerary, confirmed, now)
 
         allowed = await self._dedupe.can_send(
             route_id=route.id,
-            itinerary_hash=itinerary_hash,
+            itinerary_hash=meta.itinerary_hash,
             now=now,
             cooldown_h=self._cooldown_h,
             daily_cap=self._daily_cap,
@@ -98,71 +183,11 @@ class Notifier:
             confirmed=confirmed,
             source_names=self._source_names,
         )
-        tier = "confirmation" if confirmed else "discovery"
 
         if is_quiet_hours(user, now) or route.notification_mode == "digest":
-            # Record now, not at delivery — can_send() above reads notifications_sent, and
-            # without this the dedupe gate can't see a deferred deal at all: the same price
-            # would be re-enqueued on every poll cycle for the rest of the night instead of
-            # being suppressed by the cooldown it's supposed to respect. Same reasoning
-            # covers digest mode: without recording at enqueue time, a route polled again
-            # before its digest fires could queue the same qualifying price twice.
-            try:
-                await self._repo.record(
-                    route_id=route.id,
-                    dedupe_key=dedupe_key,
-                    itinerary_hash=itinerary_hash,
-                    price_minor=itinerary.price_minor,
-                    mode=mode,
-                    depart_date=depart_date,
-                    tier_at_send=tier,
-                )
-            except aiosqlite.IntegrityError:
-                # route_id's FK — the route was deleted between crosses_threshold() finding
-                # this deal and getting here (a slow multi-adapter search leaves a wide window
-                # for that race). Nothing to defer for a route that no longer exists.
-                log.warning("route %s vanished before its deferred deal could be recorded", route.id)
-                return False
-            await self._jobs.enqueue(
-                "notify",
-                route_id=route.id,
-                run_after=next_quiet_hours_end(user, now),
-                payload={
-                    "chat_id": user.tg_user_id,
-                    "text": text,
-                },
-            )
-            log.info(
-                "deferred deal for route %s: %s %s on %s (hash %s)",
-                route.id, mode, itinerary.price_minor, depart_date, itinerary_hash,
-            )
-            return False
+            return await self._defer_deal(user, route, itinerary, meta, text, now)
 
-        await self._bot.send_message(user.tg_user_id, text)
-        try:
-            await self._repo.record(
-                route_id=route.id,
-                dedupe_key=dedupe_key,
-                itinerary_hash=itinerary_hash,
-                price_minor=itinerary.price_minor,
-                mode=mode,
-                depart_date=depart_date,
-                tier_at_send=tier,
-            )
-        except aiosqlite.IntegrityError:
-            # Same race as above, but the message is already sent by this point — recording
-            # is bookkeeping for dedupe/history, not a precondition for delivery, so a route
-            # deleted out from under us here is a log line, not a reason to report failure.
-            log.warning("route %s vanished right after its deal was sent (dedupe row not recorded)", route.id)
-        # No log line here before this fix — the only way to answer "why did I get notified
-        # three times tonight" was to guess from notifications_sent, which doesn't record
-        # *why* a poll considered something new (a different depart_date within a flexible
-        # window is a legitimately distinct itinerary_hash, not a duplicate).
-        log.info(
-            "sent deal for route %s: %s %s on %s (hash %s)",
-            route.id, mode, itinerary.price_minor, depart_date, itinerary_hash,
-        )
-        return True
+        return await self._send_immediate(user, route, itinerary, meta, text)
 
     async def deliver_pending(self, job: Job) -> None:
         """Called by the scheduler for due kind='notify' jobs — the delivery
