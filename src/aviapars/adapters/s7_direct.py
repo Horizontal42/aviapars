@@ -22,6 +22,7 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    build_search_result,
     probe_dates_total_timeout_s,
     with_dns_retry,
 )
@@ -138,13 +139,7 @@ class S7DirectAdapter:
                 break
             offers.extend(day_offers)
 
-        if offers:
-            status = ResultStatus.OK
-        elif blocked:
-            status = ResultStatus.BLOCKED
-        else:
-            status = ResultStatus.EMPTY
-        return SearchResult(status=status, offers=offers, partial=False)
+        return build_search_result(offers, blocked=blocked)
 
     async def _get_cached_cookies(self) -> dict[str, str] | None:
         if self._session_getter is None:

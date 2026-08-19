@@ -4,7 +4,7 @@ import asyncio
 import json
 from collections import defaultdict
 from dataclasses import asdict
-from datetime import date, datetime
+from datetime import datetime
 from typing import Any, Literal
 
 import aiosqlite

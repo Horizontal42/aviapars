@@ -16,6 +16,7 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    build_search_result,
 )
 
 BASE_URL = "https://api.travelpayouts.com/v2/prices/month-matrix"
@@ -80,13 +81,7 @@ class TravelpayoutsAdapter:
                         continue
                     offers.append(self._row_to_offer(row, q))
 
-        if offers:
-            status = ResultStatus.OK
-        elif partial:
-            status = ResultStatus.UPSTREAM_ERROR
-        else:
-            status = ResultStatus.EMPTY
-        return SearchResult(status=status, offers=offers, partial=partial)
+        return build_search_result(offers, partial=partial)
 
     async def _fetch_month(
         self, session: aiohttp.ClientSession, origin: str, dest: str, month: date, currency: str

@@ -16,6 +16,7 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    build_search_result,
     probe_dates_total_timeout_s,
 )
 
@@ -70,13 +71,7 @@ class YandexRaspAdapter:
                     if offer is not None:
                         offers.append(offer)
 
-        if offers:
-            status = ResultStatus.OK
-        elif partial:
-            status = ResultStatus.UPSTREAM_ERROR
-        else:
-            status = ResultStatus.EMPTY
-        return SearchResult(status=status, offers=offers, partial=partial)
+        return build_search_result(offers, partial=partial)
 
     async def _fetch_day(
         self, session: aiohttp.ClientSession, origin_code: str, dest_code: str, day: date
