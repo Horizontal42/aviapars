@@ -17,6 +17,7 @@ from aviapars.adapters.base import (
     SearchResult,
     Tier,
     probe_dates_total_timeout_s,
+    resolve_status,
 )
 
 BASE_URL = "https://api.rasp.yandex-net.ru/v3.0/search/"
@@ -70,12 +71,7 @@ class YandexRaspAdapter:
                     if offer is not None:
                         offers.append(offer)
 
-        if offers:
-            status = ResultStatus.OK
-        elif partial:
-            status = ResultStatus.UPSTREAM_ERROR
-        else:
-            status = ResultStatus.EMPTY
+        status = resolve_status(offers, blocked=False, partial=partial)
         return SearchResult(status=status, offers=offers, partial=partial)
 
     async def _fetch_day(

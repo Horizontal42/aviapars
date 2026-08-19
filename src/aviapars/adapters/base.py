@@ -110,6 +110,16 @@ class SearchResult:
     error: str | None = None
 
 
+def resolve_status(offers: list[Offer], *, blocked: bool = False, partial: bool = False) -> ResultStatus:
+    if offers:
+        return ResultStatus.OK
+    if blocked:
+        return ResultStatus.BLOCKED
+    if partial:
+        return ResultStatus.UPSTREAM_ERROR
+    return ResultStatus.EMPTY
+
+
 @dataclass(frozen=True, slots=True)
 class HealthStatus:
     ok: bool

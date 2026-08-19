@@ -23,6 +23,7 @@ from aviapars.adapters.base import (
     SearchResult,
     Tier,
     probe_dates_total_timeout_s,
+    resolve_status,
 )
 
 BASE_URL = "https://pass.rzd.ru/timetable/public/ru"
@@ -123,14 +124,7 @@ class RzdDirectAdapter:
                     if offer is not None:
                         offers.append(offer)
 
-        if offers:
-            status = ResultStatus.OK
-        elif blocked:
-            status = ResultStatus.BLOCKED
-        elif partial:
-            status = ResultStatus.UPSTREAM_ERROR
-        else:
-            status = ResultStatus.EMPTY
+        status = resolve_status(offers, blocked=blocked, partial=partial)
         return SearchResult(status=status, offers=offers, partial=partial)
 
     async def _post(

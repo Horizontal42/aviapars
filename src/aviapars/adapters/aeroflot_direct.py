@@ -24,6 +24,7 @@ from aviapars.adapters.base import (
     Tier,
     is_egress_failure,
     probe_dates_total_timeout_s,
+    resolve_status,
     with_dns_retry,
 )
 
@@ -129,14 +130,7 @@ class AeroflotDirectAdapter:
                     continue
                 offers.extend(day_offers)
 
-        if offers:
-            status = ResultStatus.OK
-        elif blocked:
-            status = ResultStatus.BLOCKED
-        elif partial:
-            status = ResultStatus.UPSTREAM_ERROR
-        else:
-            status = ResultStatus.EMPTY
+        status = resolve_status(offers, blocked=blocked, partial=partial)
         return SearchResult(status=status, offers=offers, partial=partial)
 
     async def _search_day(self, session: Any, q: SearchQuery, depart_date: date) -> tuple[list[Offer], str]:

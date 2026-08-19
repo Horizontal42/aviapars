@@ -23,6 +23,7 @@ from aviapars.adapters.base import (
     SearchResult,
     Tier,
     probe_dates_total_timeout_s,
+    resolve_status,
     with_dns_retry,
 )
 from aviapars.solver.client import BrowserSolverClient
@@ -138,12 +139,7 @@ class S7DirectAdapter:
                 break
             offers.extend(day_offers)
 
-        if offers:
-            status = ResultStatus.OK
-        elif blocked:
-            status = ResultStatus.BLOCKED
-        else:
-            status = ResultStatus.EMPTY
+        status = resolve_status(offers, blocked=blocked, partial=False)
         return SearchResult(status=status, offers=offers, partial=False)
 
     async def _get_cached_cookies(self) -> dict[str, str] | None:
