@@ -78,6 +78,83 @@ class ObservationsRepo:
         )
         await self._db.commit()
 
+
+    async def record_many(self, route_id: int, offers: list[Offer]) -> None:
+        if not offers:
+            return
+
+        obs_params = []
+        best_known_params = []
+
+        for offer in offers:
+            depart_date = offer.legs[0].depart_local.date().isoformat()
+            return_date = None
+            legs_json = json.dumps(
+                [
+                    {
+                        "mode": leg.mode.value,
+                        "carrier": leg.carrier,
+                        "number": leg.number,
+                        "depart_utc": leg.depart_utc.isoformat(),
+                        "arrive_utc": leg.arrive_utc.isoformat() if leg.arrive_utc else None,
+                        "time_precision": leg.time_precision,
+                    }
+                    for leg in offer.legs
+                ]
+            )
+
+            obs_params.append((
+                route_id,
+                offer.source_id,
+                offer.legs[0].mode.value,
+                depart_date,
+                return_date,
+                offer.price_minor,
+                offer.currency,
+                offer.itinerary_hash,
+                legs_json,
+                offer.deep_link,
+                offer.observed_at.isoformat(),
+                offer.source_cached_at.isoformat() if offer.source_cached_at else None,
+                offer.expires_at.isoformat() if offer.expires_at else None,
+                offer.tier.value,
+                offer.confidence,
+            ))
+
+            best_known_params.append((
+                route_id,
+                offer.source_id,
+                offer.legs[0].mode.value,
+                depart_date,
+                offer.price_minor,
+                offer.itinerary_hash,
+                offer.observed_at.isoformat(),
+            ))
+
+        await self._db.executemany(
+            """
+            INSERT INTO price_observations (
+                route_id, source_id, mode, depart_date, return_date, price_minor, currency,
+                itinerary_hash, legs_json, deep_link, observed_at, source_cached_at, expires_at,
+                tier, confidence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            obs_params,
+        )
+        await self._db.executemany(
+            """
+            INSERT INTO best_known (route_id, source_id, mode, depart_date, price_minor, itinerary_hash, observed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(route_id, source_id, mode, depart_date) DO UPDATE SET
+                price_minor = excluded.price_minor,
+                itinerary_hash = excluded.itinerary_hash,
+                observed_at = excluded.observed_at
+            WHERE excluded.price_minor <= best_known.price_minor
+            """,
+            best_known_params,
+        )
+        await self._db.commit()
+
     async def stats(self, route_id: int, mode: str, *, window_days: int = 30) -> dict[str, float | int | None]:
         """Powers the pre-threshold "typical prices" screen (§9). Computed on
         read rather than kept in route_stats incrementally — simplest thing

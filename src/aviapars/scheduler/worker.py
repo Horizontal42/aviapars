@@ -89,20 +89,24 @@ async def process_route(
     # at once — a leg shared across hub combinations — so recording every occurrence would
     # insert the identical row once per combination it happens to be part of.
     recorded_hashes: set[str] = set()
+    unique_offers = []
     for itinerary in outcome.itineraries:
         for offer in itinerary.offers:
             if offer.itinerary_hash in recorded_hashes:
                 continue
             recorded_hashes.add(offer.itinerary_hash)
-            try:
-                await observations_repo.record(route.id, offer)
-            except aiosqlite.IntegrityError:
-                # Observed live: "🔍 Проверить сейчас" on a route the user deletes mid-search
-                # (a slow cycle against several confirmation adapters can run minutes) leaves
-                # `route.id` gone by the time this INSERT runs — a FOREIGN KEY failure that,
-                # unhandled, used to crash the whole update and skip the notify step below for
-                # every other offer in this same cycle, not just the doomed one.
-                log.warning("observation insert for route %s failed (route likely deleted mid-cycle)", route.id)
+            unique_offers.append(offer)
+
+    if unique_offers:
+        try:
+            await observations_repo.record_many(route.id, unique_offers)
+        except aiosqlite.IntegrityError:
+            # Observed live: "🔍 Проверить сейчас" on a route the user deletes mid-search
+            # (a slow cycle against several confirmation adapters can run minutes) leaves
+            # `route.id` gone by the time this INSERT runs — a FOREIGN KEY failure that,
+            # unhandled, used to crash the whole update and skip the notify step below for
+            # every other offer in this same cycle, not just the doomed one.
+            log.warning("observation insert for route %s failed (route likely deleted mid-cycle)", route.id)
 
     for deal in _deals_to_send(route, outcome.itineraries):
         confirmed = all(offer.tier == Tier.CONFIRMATION for offer in deal.offers)
