@@ -5,6 +5,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from curl_cffi.requests.exceptions import Timeout
+
 from aviapars.adapters.base import Mode, PlaceRef, ResultStatus, SearchQuery, Tier
 from aviapars.adapters.tutu_rail_direct import TutuRailDirectAdapter
 
@@ -223,3 +225,90 @@ async def test_blocked_status_on_403(monkeypatch: Any) -> None:
     adapter = TutuRailDirectAdapter()
     result = await adapter.search(_query())
     assert result.status == ResultStatus.BLOCKED
+
+
+async def test_connection_timeout_maps_to_blocked_not_upstream_error(monkeypatch: Any) -> None:
+    # tutu.ru's network-level ban drops the SYN silently — there is no 403 to read
+    # (verified live 2026-08-19 from the VDS). Classifying that as UPSTREAM_ERROR left
+    # the egress pool with no signal that the way out, not the site, was the problem.
+    class FakeSession:
+        async def __aenter__(self) -> "FakeSession":
+            return self
+
+        async def __aexit__(self, *exc: object) -> None:
+            return None
+
+        async def post(self, *args: Any, **kwargs: Any) -> Any:
+            raise Timeout("Failed to perform, curl: (28) Connection timed out after 20001 ms")
+
+    monkeypatch.setattr("aviapars.adapters.tutu_rail_direct.AsyncSession", lambda **kw: FakeSession())
+
+    adapter = TutuRailDirectAdapter()
+    result = await adapter.search(_query())
+    assert result.status == ResultStatus.BLOCKED
+
+
+async def test_parse_failure_stays_an_upstream_error(monkeypatch: Any) -> None:
+    # The counterpart: the egress worked and the payload changed. Rotating IPs for that
+    # would burn a second request on the same bug.
+    class FakeResp:
+        status_code = 200
+
+        def json(self) -> Any:
+            raise ValueError("Expecting value: line 1 column 1")
+
+    class FakeSession:
+        async def __aenter__(self) -> "FakeSession":
+            return self
+
+        async def __aexit__(self, *exc: object) -> None:
+            return None
+
+        async def post(self, *args: Any, **kwargs: Any) -> FakeResp:
+            return FakeResp()
+
+    monkeypatch.setattr("aviapars.adapters.tutu_rail_direct.AsyncSession", lambda **kw: FakeSession())
+
+    adapter = TutuRailDirectAdapter()
+    result = await adapter.search(_query())
+    assert result.status == ResultStatus.UPSTREAM_ERROR
+
+
+async def test_blocked_egress_rotates_to_the_next_one(monkeypatch: Any) -> None:
+    proxies_tried: list[str | None] = []
+
+    class FakeResp:
+        def __init__(self, status_code: int) -> None:
+            self.status_code = status_code
+
+        def json(self) -> Any:
+            return [{"dictionary": {"common": {}, "train": {}}, "offers": {"actual": {}}}]
+
+    def fake_session(**kwargs: Any) -> Any:
+        proxy = kwargs.get("proxy")
+        proxies_tried.append(proxy)
+
+        class FakeSession:
+            async def __aenter__(self) -> "FakeSession":
+                return self
+
+            async def __aexit__(self, *exc: object) -> None:
+                return None
+
+            async def post(self, *args: Any, **kw: Any) -> FakeResp:
+                return FakeResp(200 if proxy == "socks5://127.0.0.1:10808" else 403)
+
+        return FakeSession()
+
+    monkeypatch.setattr("aviapars.adapters.tutu_rail_direct.AsyncSession", fake_session)
+
+    adapter = TutuRailDirectAdapter(egress_pool=[None, "socks5://127.0.0.1:10808"])
+    result = await adapter.search(_query())
+
+    assert proxies_tried == [None, "socks5://127.0.0.1:10808"]
+    assert result.status == ResultStatus.EMPTY  # the second egress answered, just with nothing
+
+    # and the block is remembered: the next search skips the direct egress entirely
+    proxies_tried.clear()
+    await adapter.search(_query())
+    assert proxies_tried == ["socks5://127.0.0.1:10808"]

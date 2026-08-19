@@ -4,13 +4,15 @@ import asyncio
 import hashlib
 import json
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, Iterable
 from zoneinfo import ZoneInfo
 
 import aiohttp
 from aiohttp_socks import ProxyConnector
 
 from aviapars.adapters.base import (
+    MAX_EGRESS_ATTEMPTS_PER_CALL,
+    EgressPool,
     HealthStatus,
     Leg,
     Mode,
@@ -21,7 +23,6 @@ from aviapars.adapters.base import (
     SearchResult,
     Tier,
     probe_dates_total_timeout_s,
-    with_proxy_fallback,
 )
 
 BASE_URL = "https://pass.rzd.ru/timetable/public/ru"
@@ -72,13 +73,16 @@ class RzdDirectAdapter:
     request_timeout_s = 15
     # a date here is not one request: the RID flow is a POST plus up to _POLL_TRIES polls
     # paced _POLL_INTERVAL_S apart, so the per-date ceiling is the poll loop's own bound
-    # plus one request timeout, and only then multiplied by the dates in a cycle.
-    total_timeout_s = probe_dates_total_timeout_s(_POLL_TRIES * _POLL_INTERVAL_S + request_timeout_s)
+    # plus one request timeout, and only then multiplied by the dates in a cycle — and by
+    # the egress attempts one call may spend replaying that loop through the pool.
+    total_timeout_s = probe_dates_total_timeout_s(
+        _POLL_TRIES * _POLL_INTERVAL_S + request_timeout_s, egress_attempts=MAX_EGRESS_ATTEMPTS_PER_CALL
+    )
 
     def __init__(
         self,
         *,
-        fallback_proxy_url: str | None = None,
+        egress_pool: Iterable[str | None] = (),
         rate_limit: RateLimitPolicy | None = None,
         cache_ttl_s: int = 2700,
     ) -> None:
@@ -86,7 +90,7 @@ class RzdDirectAdapter:
         # least documented adapter here and the easiest to get rate-limited or captcha'd.
         self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=20.0)
         self.default_cache_ttl_s = cache_ttl_s
-        self._fallback_proxy_url = fallback_proxy_url
+        self._egress = EgressPool(egress_pool)
 
     async def search(self, q: SearchQuery) -> SearchResult:
         if q.mode != Mode.TRAIN:
@@ -94,11 +98,7 @@ class RzdDirectAdapter:
         if not q.origin.rzd_code or not q.dest.rzd_code:
             return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="missing rzd_code")
 
-        return await with_proxy_fallback(
-            lambda proxy_url: self._search_via(q, proxy_url),
-            primary=None,  # direct first — no dependency, recovers on its own if the ban lifts
-            fallback=self._fallback_proxy_url,
-        )
+        return await self._egress.run(lambda proxy_url: self._search_via(q, proxy_url))
 
     async def _search_via(self, q: SearchQuery, proxy_url: str | None) -> SearchResult:
         # search() already rejected the query if either rzd_code was missing, so these

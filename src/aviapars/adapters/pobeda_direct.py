@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, Iterable
 from urllib.parse import urlencode
 
 from zoneinfo import ZoneInfo
@@ -12,6 +12,8 @@ from curl_cffi.requests import AsyncSession
 
 from aviapars.adapters.base import (
     CURL_FORCE_IPV4,
+    MAX_EGRESS_ATTEMPTS_PER_CALL,
+    EgressPool,
     HealthStatus,
     Leg,
     Mode,
@@ -22,6 +24,7 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    is_egress_failure,
     probe_dates_total_timeout_s,
     with_dns_retry,
 )
@@ -88,10 +91,17 @@ class PobedaDirectAdapter:
     identically blocked. What actually gets through is a residential IP: routing this
     one adapter's traffic over a SOCKS5 relay reachable through the admin's own home
     Tailscale connection (see ARCHITECTURE.md) — a real residential ISP address, not a
-    VPN/hosting range, so it doesn't trip the same detector. `proxy_url` is this
-    adapter's own optional egress override; every other adapter in the roster stays
-    direct, same as the bot's Telegram-only `telegram_proxy_url` — the two proxies
-    exist for unrelated reasons and are not the same connection.
+    VPN/hosting range, so it doesn't trip the same detector.
+
+    It shares the roster's `EgressPool` machinery, but its pool is expected to hold
+    exactly one entry and never rotate — and that is the point rather than an
+    oversight. Pobeda's gate is a reputation check on the address *class*, so the
+    other egresses in this project (`ru-bridge`, the Paris xray outbound) are
+    hosting-range addresses and known-useless here by construction, not merely
+    untested; there is nothing for a longer pool to rotate onto. It joins the shared
+    mechanism anyway because a one-entry pool costs nothing, keeps one config shape
+    across every proxied adapter, and means a second residential relay becomes a
+    config line instead of a code change.
 
     Once past that gate the API itself has no further antibot: no cookies, no
     session, a single stateless POST returns real fares.
@@ -104,19 +114,22 @@ class PobedaDirectAdapter:
     countries: frozenset[str] | None = None
     supports_batch_dates = False
     request_timeout_s = 20
-    # one POST per probe date, nothing before the loop
-    total_timeout_s = probe_dates_total_timeout_s(request_timeout_s)
+    # one POST per probe date, nothing before the loop — doubled because a blocked egress
+    # makes the pool replay the whole loop through the next one
+    total_timeout_s = probe_dates_total_timeout_s(
+        request_timeout_s, egress_attempts=MAX_EGRESS_ATTEMPTS_PER_CALL
+    )
 
     def __init__(
         self,
         *,
-        proxy_url: str | None = None,
+        egress_pool: Iterable[str | None] = (),
         rate_limit: RateLimitPolicy | None = None,
         cache_ttl_s: int = 1800,
     ) -> None:
         self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=15.0)
         self.default_cache_ttl_s = cache_ttl_s
-        self._proxy_url = proxy_url
+        self._egress = EgressPool(egress_pool)
 
     async def search(self, q: SearchQuery) -> SearchResult:
         if q.mode != Mode.PLANE:
@@ -124,13 +137,16 @@ class PobedaDirectAdapter:
         if not q.origin.iata or not q.dest.iata or not q.dates:
             return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="missing iata/date")
 
+        return await self._egress.run(lambda proxy_url: self._search_via(q, proxy_url))
+
+    async def _search_via(self, q: SearchQuery, proxy_url: str | None) -> SearchResult:
         session_kwargs: dict[str, Any] = {
             "impersonate": "chrome",
             "timeout": self.request_timeout_s,
             "curl_options": CURL_FORCE_IPV4,
         }
-        if self._proxy_url:
-            session_kwargs["proxy"] = self._proxy_url
+        if proxy_url:
+            session_kwargs["proxy"] = proxy_url
 
         offers: list[Offer] = []
         blocked = False
@@ -158,8 +174,9 @@ class PobedaDirectAdapter:
 
     async def _search_day(self, session: Any, q: SearchQuery, depart_date: date) -> tuple[list[Offer], str]:
         """Returns (offers, outcome) where outcome is "ok" (incl. legitimately empty),
-        "blocked" (403), or "error" (network/parse failure) — mirrors rzd_direct's per-day
-        result so one bad date in the window doesn't sink the whole cycle."""
+        "blocked" (403 or a connection that never completed), or "error" (parse/other
+        failure) — mirrors rzd_direct's per-day result so one bad date in the window
+        doesn't sink the whole cycle."""
         body = {
             "searchGroupId": "standard",
             "segmentsCount": "1",
@@ -174,8 +191,8 @@ class PobedaDirectAdapter:
         }
         try:
             resp = await with_dns_retry(lambda: session.post(SEARCH_URL, headers=_HEADERS, data=body))
-        except Exception:
-            return [], "error"
+        except Exception as exc:
+            return [], "blocked" if is_egress_failure(exc) else "error"
 
         if resp.status_code == 403:
             return [], "blocked"

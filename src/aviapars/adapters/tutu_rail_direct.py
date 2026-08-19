@@ -3,13 +3,15 @@ from __future__ import annotations
 import hashlib
 import uuid
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, Iterable
 
 from curl_cffi.requests import AsyncSession
 
 from aviapars.adapters._tutu_common import select_price_variant
 from aviapars.adapters.base import (
     CURL_FORCE_IPV4,
+    MAX_EGRESS_ATTEMPTS_PER_CALL,
+    EgressPool,
     HealthStatus,
     Leg,
     Mode,
@@ -20,6 +22,7 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    is_egress_failure,
     probe_dates_total_timeout_s,
     with_dns_retry,
 )
@@ -86,12 +89,22 @@ class TutuRailDirectAdapter:
     countries: frozenset[str] | None = frozenset({"RU"})
     supports_batch_dates = False
     request_timeout_s = 20
-    # one POST per probe date; station codes come from places.rzd_code, no lookup needed
-    total_timeout_s = probe_dates_total_timeout_s(request_timeout_s)
+    # one POST per probe date (station codes come from places.rzd_code, no lookup needed),
+    # doubled because a blocked egress makes the pool replay the whole loop through the next
+    total_timeout_s = probe_dates_total_timeout_s(
+        request_timeout_s, egress_attempts=MAX_EGRESS_ATTEMPTS_PER_CALL
+    )
 
-    def __init__(self, *, rate_limit: RateLimitPolicy | None = None, cache_ttl_s: int = 2700) -> None:
+    def __init__(
+        self,
+        *,
+        egress_pool: Iterable[str | None] = (),
+        rate_limit: RateLimitPolicy | None = None,
+        cache_ttl_s: int = 2700,
+    ) -> None:
         self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=15.0)
         self.default_cache_ttl_s = cache_ttl_s
+        self._egress = EgressPool(egress_pool)
 
     async def search(self, q: SearchQuery) -> SearchResult:
         if q.mode != Mode.TRAIN:
@@ -99,12 +112,21 @@ class TutuRailDirectAdapter:
         if not q.origin.rzd_code or not q.dest.rzd_code or not q.dates:
             return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="missing rzd_code/date")
 
+        return await self._egress.run(lambda proxy_url: self._search_via(q, proxy_url))
+
+    async def _search_via(self, q: SearchQuery, proxy_url: str | None) -> SearchResult:
+        session_kwargs: dict[str, Any] = {
+            "impersonate": "chrome",
+            "timeout": self.request_timeout_s,
+            "curl_options": CURL_FORCE_IPV4,
+        }
+        if proxy_url:
+            session_kwargs["proxy"] = proxy_url
+
         offers: list[Offer] = []
         blocked = False
         partial = False
-        async with AsyncSession(
-            impersonate="chrome", timeout=self.request_timeout_s, curl_options=CURL_FORCE_IPV4
-        ) as session:
+        async with AsyncSession(**session_kwargs) as session:
             for depart_date in q.dates:
                 day_offers, outcome = await self._search_day(session, q, depart_date)
                 if outcome == "blocked":
@@ -129,8 +151,14 @@ class TutuRailDirectAdapter:
         self, session: Any, q: SearchQuery, depart_date: date
     ) -> tuple[list[Offer], str]:
         """Returns (offers, outcome) where outcome is "ok" (incl. legitimately empty),
-        "blocked" (403), or "error" (network/parse failure) — mirrors rzd_direct's
-        per-day result so one bad date in the window doesn't sink the whole cycle."""
+        "blocked", or "error" (parse/other failure) — mirrors rzd_direct's per-day
+        result so one bad date in the window doesn't sink the whole cycle.
+
+        "blocked" here is mostly *not* a 403: tutu.ru's network-level ban drops the
+        connection silently with no HTTP response at all, so `is_egress_failure`
+        (which reads that off curl's exception type) is what actually feeds the
+        egress pool for this adapter. The 403 branch stays for the ordinary WAF
+        answer the endpoint can also give."""
         body = {
             "routes": [
                 {
@@ -153,8 +181,8 @@ class TutuRailDirectAdapter:
 
         try:
             resp = await with_dns_retry(lambda: session.post(OFFERS_URL, headers=_HEADERS, json=body))
-        except Exception:
-            return [], "error"
+        except Exception as exc:
+            return [], "blocked" if is_egress_failure(exc) else "error"
 
         if resp.status_code == 403:
             return [], "blocked"

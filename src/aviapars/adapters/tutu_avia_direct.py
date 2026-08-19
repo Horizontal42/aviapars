@@ -4,7 +4,7 @@ import hashlib
 import json
 import uuid
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, Iterable
 from urllib.parse import urlencode
 
 from curl_cffi.requests import AsyncSession
@@ -12,6 +12,8 @@ from curl_cffi.requests import AsyncSession
 from aviapars.adapters._tutu_common import select_price_variant
 from aviapars.adapters.base import (
     CURL_FORCE_IPV4,
+    MAX_EGRESS_ATTEMPTS_PER_CALL,
+    EgressPool,
     HealthStatus,
     Leg,
     Mode,
@@ -21,6 +23,7 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    is_egress_failure,
     probe_dates_total_timeout_s,
     with_dns_retry,
 )
@@ -83,13 +86,23 @@ class TutuAviaDirectAdapter:
     supports_batch_dates = False
     request_timeout_s = 20
     # one offers POST per probe date, preceded by 2 suggester GETs (origin + dest city id,
-    # memoised after the first call — the ceiling has to cover the cold one)
-    total_timeout_s = probe_dates_total_timeout_s(request_timeout_s, setup_s=2 * request_timeout_s)
+    # memoised after the first call — the ceiling has to cover the cold one), all of it
+    # doubled because a blocked egress makes the pool replay the whole thing through the next
+    total_timeout_s = probe_dates_total_timeout_s(
+        request_timeout_s, setup_s=2 * request_timeout_s, egress_attempts=MAX_EGRESS_ATTEMPTS_PER_CALL
+    )
 
-    def __init__(self, *, rate_limit: RateLimitPolicy | None = None, cache_ttl_s: int = 1800) -> None:
+    def __init__(
+        self,
+        *,
+        egress_pool: Iterable[str | None] = (),
+        rate_limit: RateLimitPolicy | None = None,
+        cache_ttl_s: int = 1800,
+    ) -> None:
         self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=12.0)
         self.default_cache_ttl_s = cache_ttl_s
         self._city_id_cache: dict[str, str] = {}
+        self._egress = EgressPool(egress_pool)
 
     async def search(self, q: SearchQuery) -> SearchResult:
         if q.mode != Mode.PLANE:
@@ -97,15 +110,33 @@ class TutuAviaDirectAdapter:
         if not q.origin.iata or not q.dest.iata or not q.dates:
             return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="missing iata/date")
 
+        return await self._egress.run(lambda proxy_url: self._search_via(q, proxy_url))
+
+    async def _search_via(self, q: SearchQuery, proxy_url: str | None) -> SearchResult:
+        # search() already rejected the query if either iata was missing.
+        assert q.origin.iata is not None and q.dest.iata is not None
+        session_kwargs: dict[str, Any] = {
+            "impersonate": "chrome",
+            "timeout": self.request_timeout_s,
+            "curl_options": CURL_FORCE_IPV4,
+        }
+        if proxy_url:
+            session_kwargs["proxy"] = proxy_url
+
         offers: list[Offer] = []
         blocked = False
         partial = False
-        async with AsyncSession(
-            impersonate="chrome", timeout=self.request_timeout_s, curl_options=CURL_FORCE_IPV4
-        ) as session:
-            origin_id = await self._resolve_city_id(session, q.origin.iata)
-            dest_id = await self._resolve_city_id(session, q.dest.iata)
+        async with AsyncSession(**session_kwargs) as session:
+            origin_id, origin_outcome = await self._resolve_city_id(session, q.origin.iata)
+            dest_id, dest_outcome = await self._resolve_city_id(session, q.dest.iata)
             if origin_id is None or dest_id is None:
+                # A suggester call that never completed is the egress failing, not Tutu
+                # saying the city doesn't exist — reporting EMPTY there would tell the pool
+                # this egress works and leave the adapter pinned to a dead one.
+                if "blocked" in (origin_outcome, dest_outcome):
+                    return SearchResult(status=ResultStatus.BLOCKED, offers=[], partial=True)
+                if "error" in (origin_outcome, dest_outcome):
+                    return SearchResult(status=ResultStatus.UPSTREAM_ERROR, offers=[], partial=True)
                 return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="city not found")
 
             for depart_date in q.dates:
@@ -132,8 +163,14 @@ class TutuAviaDirectAdapter:
         self, session: Any, q: SearchQuery, origin_id: str, dest_id: str, depart_date: date
     ) -> tuple[list[Offer], str]:
         """Returns (offers, outcome) where outcome is "ok" (incl. legitimately empty),
-        "blocked" (403), or "error" (network/parse failure) — mirrors rzd_direct's
-        per-day result so one bad date in the window doesn't sink the whole cycle."""
+        "blocked", or "error" (parse/other failure) — mirrors rzd_direct's per-day
+        result so one bad date in the window doesn't sink the whole cycle.
+
+        "blocked" here is mostly *not* a 403: tutu.ru's network-level ban drops the
+        connection silently with no HTTP response at all, so `is_egress_failure`
+        (which reads that off curl's exception type) is what actually feeds the
+        egress pool for this adapter. The 403 branch stays for the ordinary WAF
+        answer the endpoint can also give."""
         body = {
             "passengers": {"child": 0, "infant": 0, "full": q.pax},
             "serviceClass": "Y",
@@ -159,8 +196,8 @@ class TutuAviaDirectAdapter:
             resp = await with_dns_retry(
                 lambda: session.post(OFFERS_URL, headers=_OFFERS_HEADERS, data=json.dumps(body))
             )
-        except Exception:
-            return [], "error"
+        except Exception as exc:
+            return [], "blocked" if is_egress_failure(exc) else "error"
 
         if resp.status_code == 403:
             return [], "blocked"
@@ -176,29 +213,36 @@ class TutuAviaDirectAdapter:
         deep_link = _deep_link(q, origin_id, dest_id, depart_date)
         return self._parse_offers(payload, q, depart_date, deep_link), "ok"
 
-    async def _resolve_city_id(self, session: Any, iata: str) -> str | None:
+    async def _resolve_city_id(self, session: Any, iata: str) -> tuple[str | None, str]:
+        """Returns (city_id, outcome) with the same "ok"/"blocked"/"error" vocabulary as
+        `_search_day`. The outcome is not decoration: the suggester lives on the same
+        tutu.ru infrastructure as the offers endpoint and gets banned with it, so a
+        failure here has to be distinguishable from a genuine "no such city" — those
+        two used to collapse into the same bare `None`."""
         cached = self._city_id_cache.get(iata)
         if cached is not None:
-            return cached
+            return cached, "ok"
         try:
             resp = await with_dns_retry(
                 lambda: session.get(SUGGEST_URL, headers=_SUGGEST_HEADERS, params={"name": iata})
             )
-        except Exception:
-            return None
+        except Exception as exc:
+            return None, "blocked" if is_egress_failure(exc) else "error"
+        if resp.status_code == 403:
+            return None, "blocked"
         if resp.status_code != 200:
-            return None
+            return None, "error"
         try:
             payload = resp.json()
         except ValueError:
-            return None
+            return None, "error"
         for suggestion in payload.get("suggestions") or []:
             city = suggestion.get("city") or {}
             if city.get("code") == iata:
                 city_id: str = city["id"]
                 self._city_id_cache[iata] = city_id
-                return city_id
-        return None
+                return city_id, "ok"
+        return None, "ok"
 
     def _merge_chunks(self, payload: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
         merged_offers: dict[str, Any] = {}
@@ -307,7 +351,7 @@ class TutuAviaDirectAdapter:
             async with AsyncSession(
                 impersonate="chrome", timeout=self.request_timeout_s, curl_options=CURL_FORCE_IPV4
             ) as session:
-                city_id = await self._resolve_city_id(session, "MOW")
+                city_id, _ = await self._resolve_city_id(session, "MOW")
             return HealthStatus(ok=city_id is not None)
         except Exception as exc:  # health_check should never crash the caller (§5 rule 1 spirit)
             return HealthStatus(ok=False, detail=str(exc))

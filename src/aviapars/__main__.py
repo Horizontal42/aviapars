@@ -57,22 +57,35 @@ async def main() -> None:
         )
         registry.register(
             RzdDirectAdapter(
-                fallback_proxy_url=settings.rzd_fallback_proxy_url, cache_ttl_s=settings.cache_ttl_s.rzd_direct
+                egress_pool=settings.rzd_egress_pool, cache_ttl_s=settings.cache_ttl_s.rzd_direct
             )
         )
-        registry.register(TutuRailDirectAdapter(cache_ttl_s=settings.cache_ttl_s.rzd_direct))
+        # Both Tutu adapters read the same pool but each builds its own EgressPool: the
+        # config is one list because the two endpoints are banned together, the rotation
+        # state is per-adapter because everything else about them already is (rate limit,
+        # circuit breaker, cache).
+        registry.register(
+            TutuRailDirectAdapter(
+                egress_pool=settings.tutu_egress_pool, cache_ttl_s=settings.cache_ttl_s.rzd_direct
+            )
+        )
         registry.register(
             AeroflotDirectAdapter(
-                proxy_url=settings.aeroflot_proxy_url,
-                fallback_proxy_url=settings.aeroflot_fallback_proxy_url,
+                egress_pool=settings.aeroflot_egress_pool,
                 cache_ttl_s=settings.cache_ttl_s.airline_direct,
             )
         )
         registry.register(AzimuthDirectAdapter(cache_ttl_s=settings.cache_ttl_s.airline_direct))
         registry.register(
-            PobedaDirectAdapter(proxy_url=settings.pobeda_proxy_url, cache_ttl_s=settings.cache_ttl_s.airline_direct)
+            PobedaDirectAdapter(
+                egress_pool=settings.pobeda_egress_pool, cache_ttl_s=settings.cache_ttl_s.airline_direct
+            )
         )
-        registry.register(TutuAviaDirectAdapter(cache_ttl_s=settings.cache_ttl_s.airline_direct))
+        registry.register(
+            TutuAviaDirectAdapter(
+                egress_pool=settings.tutu_egress_pool, cache_ttl_s=settings.cache_ttl_s.airline_direct
+            )
+        )
 
         sessions_repo = SessionsRepo(db)
         registry.register(

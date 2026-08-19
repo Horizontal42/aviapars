@@ -5,6 +5,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from curl_cffi.requests.exceptions import Timeout
+
 from aviapars.adapters.base import Mode, PlaceRef, ResultStatus, SearchQuery, Tier
 from aviapars.adapters.tutu_avia_direct import TutuAviaDirectAdapter, _deep_link
 
@@ -118,7 +120,7 @@ async def test_city_id_cache_avoids_repeat_suggest_calls() -> None:
     async with FakeSession() as session:  # type: ignore[misc]
         first = await adapter._resolve_city_id(session, "MOW")
         second = await adapter._resolve_city_id(session, "MOW")
-    assert first == second == "1"
+    assert first == second == ("1", "ok")
     assert calls["suggest"] == 1
 
 
@@ -196,6 +198,83 @@ async def test_blocked_status_on_403(monkeypatch: Any) -> None:
 
         async def post(self, *args: Any, **kwargs: Any) -> FakeBlockedResp:
             return FakeBlockedResp()
+
+    monkeypatch.setattr("aviapars.adapters.tutu_avia_direct.AsyncSession", lambda **kw: FakeSession())
+
+    adapter = TutuAviaDirectAdapter()
+    result = await adapter.search(_query())
+    assert result.status == ResultStatus.BLOCKED
+
+
+async def test_suggester_connection_failure_is_blocked_not_city_not_found(monkeypatch: Any) -> None:
+    # The suggester lives on the same banned tutu.ru infrastructure as the offers
+    # endpoint. Collapsing "the connection never completed" into the same bare None as
+    # "Tutu has no such city" reported EMPTY — which tells the egress pool this way out
+    # works and pins the adapter to a dead one.
+    class FakeSession:
+        async def __aenter__(self) -> "FakeSession":
+            return self
+
+        async def __aexit__(self, *exc: object) -> None:
+            return None
+
+        async def get(self, *args: Any, **kwargs: Any) -> Any:
+            raise Timeout("Failed to perform, curl: (28) Connection timed out after 20001 ms")
+
+    monkeypatch.setattr("aviapars.adapters.tutu_avia_direct.AsyncSession", lambda **kw: FakeSession())
+
+    adapter = TutuAviaDirectAdapter()
+    result = await adapter.search(_query())
+    assert result.status == ResultStatus.BLOCKED
+
+
+async def test_unknown_city_still_reports_empty(monkeypatch: Any) -> None:
+    class FakeSuggestResp:
+        status_code = 200
+
+        def json(self) -> Any:
+            return {"suggestions": []}
+
+    class FakeSession:
+        async def __aenter__(self) -> "FakeSession":
+            return self
+
+        async def __aexit__(self, *exc: object) -> None:
+            return None
+
+        async def get(self, *args: Any, **kwargs: Any) -> FakeSuggestResp:
+            return FakeSuggestResp()
+
+    monkeypatch.setattr("aviapars.adapters.tutu_avia_direct.AsyncSession", lambda **kw: FakeSession())
+
+    adapter = TutuAviaDirectAdapter()
+    result = await adapter.search(_query())
+    assert result.status == ResultStatus.EMPTY
+    assert result.error == "city not found"
+
+
+async def test_connection_timeout_on_offers_maps_to_blocked(monkeypatch: Any) -> None:
+    class FakeSuggestResp:
+        status_code = 200
+
+        def __init__(self, iata: str) -> None:
+            self._iata = iata
+
+        def json(self) -> Any:
+            return {"suggestions": [{"city": {"id": "1", "code": self._iata}}]}
+
+    class FakeSession:
+        async def __aenter__(self) -> "FakeSession":
+            return self
+
+        async def __aexit__(self, *exc: object) -> None:
+            return None
+
+        async def get(self, *args: Any, **kwargs: Any) -> FakeSuggestResp:
+            return FakeSuggestResp(kwargs["params"]["name"])
+
+        async def post(self, *args: Any, **kwargs: Any) -> Any:
+            raise Timeout("Failed to perform, curl: (28) Connection timed out after 20001 ms")
 
     monkeypatch.setattr("aviapars.adapters.tutu_avia_direct.AsyncSession", lambda **kw: FakeSession())
 

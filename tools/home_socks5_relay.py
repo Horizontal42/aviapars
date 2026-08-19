@@ -7,9 +7,10 @@ authenticated by Tailscale itself) — never exposed to the public internet.
 
 Why this exists: `pobeda_direct`'s carrier WAF blocks every datacenter/VPN-range
 IP tried (the VDS itself, three different commercial VPN exits) but not a genuine
-residential ISP address — see ARCHITECTURE.md. Point `pobeda_proxy_url` in
-config.yaml at `socks5://<this machine's tailscale ip>:<port>` to route just that
-one adapter's traffic through here; nothing else in the roster uses it.
+residential ISP address — see ARCHITECTURE.md. List
+`socks5://<this machine's tailscale ip>:<port>` in `pobeda_egress_pool` (and in
+any other adapter's `*_egress_pool` that wants a residential fallback) to route
+just those adapters' traffic through here; nothing else in the roster uses it.
 
 Usage: python tools/home_socks5_relay.py [--host IP] [--port PORT]
 Defaults to `tailscale ip -4` (auto-detected) and port 11080.

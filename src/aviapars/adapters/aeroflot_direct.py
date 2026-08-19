@@ -3,13 +3,15 @@ from __future__ import annotations
 import hashlib
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, Iterable
 from urllib.parse import urlencode
 
 from curl_cffi.requests import AsyncSession
 
 from aviapars.adapters.base import (
     CURL_FORCE_IPV4,
+    MAX_EGRESS_ATTEMPTS_PER_CALL,
+    EgressPool,
     HealthStatus,
     Leg,
     Mode,
@@ -20,9 +22,9 @@ from aviapars.adapters.base import (
     SearchQuery,
     SearchResult,
     Tier,
+    is_egress_failure,
     probe_dates_total_timeout_s,
     with_dns_retry,
-    with_proxy_fallback,
 )
 
 SEARCH_URL = "https://www.aeroflot.ru/sbe/flight-search/api/web/v1/flight/search"
@@ -65,21 +67,22 @@ class AeroflotDirectAdapter:
     countries: frozenset[str] | None = None  # group flies international routes too
     supports_batch_dates = False
     request_timeout_s = 20
-    # one POST per probe date, nothing before the loop
-    total_timeout_s = probe_dates_total_timeout_s(request_timeout_s)
+    # one POST per probe date, nothing before the loop — doubled because a blocked egress
+    # makes the pool replay the whole loop through the next one
+    total_timeout_s = probe_dates_total_timeout_s(
+        request_timeout_s, egress_attempts=MAX_EGRESS_ATTEMPTS_PER_CALL
+    )
 
     def __init__(
         self,
         *,
-        proxy_url: str | None = None,
-        fallback_proxy_url: str | None = None,
+        egress_pool: Iterable[str | None] = (),
         rate_limit: RateLimitPolicy | None = None,
         cache_ttl_s: int = 1800,
     ) -> None:
         self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=15.0)
         self.default_cache_ttl_s = cache_ttl_s
-        self._proxy_url = proxy_url
-        self._fallback_proxy_url = fallback_proxy_url
+        self._egress = EgressPool(egress_pool)
 
     def _deep_link(self, q: SearchQuery, depart_date: date) -> str:
         """Same query shape as a real user's search — captured verbatim from
@@ -101,11 +104,7 @@ class AeroflotDirectAdapter:
         if not q.origin.iata or not q.dest.iata or not q.dates:
             return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="missing iata/date")
 
-        return await with_proxy_fallback(
-            lambda proxy_url: self._search_via(q, proxy_url),
-            primary=self._proxy_url,
-            fallback=self._fallback_proxy_url,
-        )
+        return await self._egress.run(lambda proxy_url: self._search_via(q, proxy_url))
 
     async def _search_via(self, q: SearchQuery, proxy_url: str | None) -> SearchResult:
         session_kwargs: dict[str, Any] = {
@@ -142,8 +141,9 @@ class AeroflotDirectAdapter:
 
     async def _search_day(self, session: Any, q: SearchQuery, depart_date: date) -> tuple[list[Offer], str]:
         """Returns (offers, outcome) where outcome is "ok" (incl. legitimately empty),
-        "blocked" (503), or "error" (network/parse failure) — mirrors rzd_direct's per-day
-        result so one bad date in the window doesn't sink the whole cycle."""
+        "blocked" (503 or a connection that never completed), or "error" (parse/other
+        failure) — mirrors rzd_direct's per-day result so one bad date in the window
+        doesn't sink the whole cycle."""
         body = {
             "routes": [
                 {"origin": q.origin.iata, "destination": q.dest.iata, "departure_date": depart_date.isoformat()}
@@ -163,8 +163,8 @@ class AeroflotDirectAdapter:
 
         try:
             resp = await with_dns_retry(lambda: session.post(SEARCH_URL, headers=_HEADERS, json=body))
-        except Exception:
-            return [], "error"
+        except Exception as exc:
+            return [], "blocked" if is_egress_failure(exc) else "error"
 
         if resp.status_code == 503:
             return [], "blocked"

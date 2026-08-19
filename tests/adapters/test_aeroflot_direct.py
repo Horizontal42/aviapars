@@ -192,7 +192,7 @@ async def test_proxy_url_forwarded_to_session(monkeypatch: Any) -> None:
 
     monkeypatch.setattr("aviapars.adapters.aeroflot_direct.AsyncSession", fake_session)
 
-    adapter = AeroflotDirectAdapter(proxy_url="socks5://127.0.0.1:10809")
+    adapter = AeroflotDirectAdapter(egress_pool=["socks5://127.0.0.1:10809"])
     await adapter.search(_query())
     assert captured.get("proxy") == "socks5://127.0.0.1:10809"
 
@@ -207,3 +207,46 @@ def test_as_utc_converts_aware_instead_of_overwriting_offset() -> None:
     # offset instead of converting — this proves `_as_utc` converts, not overwrites.
     aware = datetime(2026, 9, 10, 15, 0, tzinfo=ZoneInfo("Europe/Moscow"))  # UTC+3
     assert _as_utc(aware) == datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
+
+
+async def test_blocked_egress_rotates_and_is_remembered(monkeypatch: Any) -> None:
+    # The WAF blocks `ru-bridge` intermittently (hosting ASN, Russian geolocation), so the
+    # first egress is the cheap one and the residential relay backs it up — and once the
+    # cheap one is blocked the next search must not spend a request re-proving it.
+    proxies_tried: list[str | None] = []
+
+    def fake_session(**kwargs: Any) -> Any:
+        proxy = kwargs.get("proxy")
+        proxies_tried.append(proxy)
+
+        class FakeResp:
+            status_code = 503 if proxy == "socks5h://127.0.0.1:10809" else 200
+
+            def json(self) -> Any:
+                return {"data": {"route_itineraries": []}}
+
+        class FakeSession:
+            async def __aenter__(self) -> "FakeSession":
+                return self
+
+            async def __aexit__(self, *exc: object) -> None:
+                return None
+
+            async def post(self, *args: Any, **kw: Any) -> FakeResp:
+                return FakeResp()
+
+        return FakeSession()
+
+    monkeypatch.setattr("aviapars.adapters.aeroflot_direct.AsyncSession", fake_session)
+
+    adapter = AeroflotDirectAdapter(
+        egress_pool=["socks5h://127.0.0.1:10809", "socks5h://100.84.46.36:11080"]
+    )
+    result = await adapter.search(_query())
+
+    assert proxies_tried == ["socks5h://127.0.0.1:10809", "socks5h://100.84.46.36:11080"]
+    assert result.status == ResultStatus.EMPTY
+
+    proxies_tried.clear()
+    await adapter.search(_query())
+    assert proxies_tried == ["socks5h://100.84.46.36:11080"]

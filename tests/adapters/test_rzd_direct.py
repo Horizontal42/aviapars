@@ -104,3 +104,45 @@ async def test_403_response_maps_to_blocked(monkeypatch: pytest.MonkeyPatch) -> 
     q = SearchQuery(origin=_origin(), dest=_dest(), dates=(date(2026, 8, 27),), pax=1, mode=Mode.TRAIN)
     result = await a.search(q)
     assert result.status == ResultStatus.BLOCKED
+
+
+async def test_blocked_direct_egress_falls_back_to_the_relay(monkeypatch: pytest.MonkeyPatch) -> None:
+    # RZD's pool starts direct on purpose: the VDS-IP ban recovers on its own and costs
+    # nothing to keep probing. `ru-bridge` is deliberately absent — it doesn't merely block
+    # RZD, it blackholes it, so a pool entry there would hang for the full timeout.
+    final = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    egresses_tried: list[str | None] = []
+    connectors: list[str] = []
+    real_search_via = RzdDirectAdapter._search_via
+
+    async def spy_search_via(self: RzdDirectAdapter, q: SearchQuery, proxy_url: str | None) -> Any:
+        egresses_tried.append(proxy_url)
+        return await real_search_via(self, q, proxy_url)
+
+    def fake_from_url(url: str) -> Any:
+        connectors.append(url)
+        return None
+
+    async def fake_post(
+        self: RzdDirectAdapter, session: Any, src: str, dst: str, day: date, rid: int | None
+    ) -> tuple[dict[str, Any] | None, int | None]:
+        if egresses_tried[-1] is None:
+            return None, 403
+        return final, 200  # type: ignore[no-any-return]
+
+    monkeypatch.setattr(RzdDirectAdapter, "_search_via", spy_search_via)
+    monkeypatch.setattr("aviapars.adapters.rzd_direct.ProxyConnector.from_url", fake_from_url)
+    monkeypatch.setattr(RzdDirectAdapter, "_post", fake_post)
+
+    a = RzdDirectAdapter(egress_pool=[None, "socks5h://100.84.46.36:11080"])
+    q = SearchQuery(origin=_origin(), dest=_dest(), dates=(date(2026, 8, 27),), pax=1, mode=Mode.TRAIN)
+    result = await a.search(q)
+
+    assert egresses_tried == [None, "socks5h://100.84.46.36:11080"]
+    assert connectors == ["socks5h://100.84.46.36:11080"]  # only the proxied leg builds one
+    assert result.status == ResultStatus.OK
+
+    # sticky: the 403'd direct egress is not re-probed on the next call
+    egresses_tried.clear()
+    await a.search(q)
+    assert egresses_tried == ["socks5h://100.84.46.36:11080"]

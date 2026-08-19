@@ -86,32 +86,47 @@ class Settings(BaseSettings):
     # yandex_rasp, s7_direct) stay direct. None = no proxy (default, local dev).
     telegram_proxy_url: str | None = None
 
-    # SOCKS5 proxy for pobeda_direct only — Pobeda's WAF blocks every datacenter/VPN IP
-    # tried (VDS itself, 3 VPN exits) but not a genuine residential one, so this points at
-    # a relay reachable over the admin's own home Tailscale connection. Unrelated to
-    # telegram_proxy_url — different egress, different reason. None = no proxy (direct).
-    pobeda_proxy_url: str | None = None
+    # Egress pools (see ARCHITECTURE.md "Прокси"). Each is an ordered list of SOCKS5/HTTP
+    # proxy URLs that one adapter rotates through as they get blocked; a `null` entry means
+    # the VDS's own IP with no proxy at all. Order is preference: cheapest and least
+    # dependent on anything external first, the admin's home residential relay last, since
+    # that one only works while a personal machine is switched on. An empty list means
+    # direct-only, which is the local-dev default. Every list is free to name the same relay
+    # — it just forwards TCP and doesn't care which adapter's traffic it carries.
+    #
+    # These are per-adapter rather than one shared pool because the blocks are not the same
+    # block: what unbans one site is verified useless (or actively harmful) for another, and
+    # the notes on each field are what keeps that knowledge from being re-learned by trial.
+    #
+    # aeroflot_egress_pool — the WAF blocks by address *class*, so a Russian geolocation
+    # doesn't help by itself: `ru-bridge` (the xray outbound on the VDS) is Moscow-located
+    # but hosting-ASN and gets blocked intermittently. Preferred anyway as the first entry
+    # because it depends on nothing outside the VDS; the residential relay backs it up.
+    # socks5h, not socks5: www.aeroflot.ru doesn't resolve from some VDS resolvers, so DNS
+    # has to go through the proxy too.
+    aeroflot_egress_pool: list[str | None] = Field(default_factory=list)
 
-    # aeroflot_direct tries two egresses in order (see ARCHITECTURE.md "Прокси"):
-    # 1. aeroflot_proxy_url — a Russian xray outbound already running on the VDS itself
-    #    (`ru-bridge`), no dependency on the admin's home machine, but it's still a
-    #    hosting-provider IP and the WAF blocks it intermittently (verified live — same
-    #    class of block as the VDS's own IP, just with a Russian ASN instead).
-    # 2. aeroflot_fallback_proxy_url — only tried if the first came back BLOCKED. Same
-    #    residential relay as pobeda_proxy_url (a genuinely different-class IP the WAF
-    #    doesn't block) — can point at the exact same address, the relay just forwards TCP
-    #    and doesn't care which adapter it's for.
-    # Both None = no proxy at all (direct, will come back BLOCKED — this endpoint worked
-    # unproxied only briefly, see aeroflot_direct.py's docstring).
-    aeroflot_proxy_url: str | None = None
-    aeroflot_fallback_proxy_url: str | None = None
+    # rzd_egress_pool — direct first (`null`): pass.rzd.ru bans this VDS's IP outright, but
+    # that recovers on its own the moment the ban lifts and costs nothing to keep probing.
+    # `ru-bridge` must NOT be listed here: verified live that RZD doesn't merely block that
+    # subnet, it blackholes it — the attempt hangs to the full timeout instead of answering,
+    # which is the most expensive possible way for a pool entry to fail.
+    rzd_egress_pool: list[str | None] = Field(default_factory=list)
 
-    # rzd_direct tries direct first (no config needed — recovers on its own the moment
-    # RZD's VDS-IP ban lifts, see ARCHITECTURE.md), and only falls back to this residential
-    # relay (verified live: unblocks it same as pobeda/aeroflot) if direct comes back
-    # BLOCKED. `ru-bridge` was tried and does NOT help here (still datacenter-class, just a
-    # different one) — no separate "primary proxy" setting for RZD, unlike aeroflot.
-    rzd_fallback_proxy_url: str | None = None
+    # pobeda_egress_pool — expected to hold exactly one entry, the residential relay.
+    # Pobeda's gate is an explicit VPN/datacenter detector ("выключите VPN"), so every
+    # hosting-range egress in this project is useless here by construction, not untested:
+    # the VDS itself and three VPN exits were all refused, a home ISP address passed.
+    pobeda_egress_pool: list[str | None] = Field(default_factory=list)
+
+    # tutu_egress_pool — shared by tutu_rail_direct and tutu_avia_direct: same platform,
+    # same infrastructure, banned together. Direct (`null`) first for the same reason as
+    # RZD; then the Paris xray outbound on the VDS (verified live to reach tutu.ru while the
+    # VDS's own IP was rate-limited, and unlike the home relay it needs nobody's PC to be
+    # on); the residential relay last. Tutu's block is a silent TCP drop with no HTTP status
+    # at all, which is why the two adapters classify a failed connection as BLOCKED rather
+    # than an upstream error — see adapters/base.is_egress_failure.
+    tutu_egress_pool: list[str | None] = Field(default_factory=list)
 
     @classmethod
     def settings_customise_sources(
