@@ -88,14 +88,15 @@ def setup_registry(db: aiosqlite.Connection) -> AdapterRegistry:
         )
     )
 
-    sessions_repo = SessionsRepo(db)
-    registry.register(
-        S7DirectAdapter(
-            session_getter=lambda: sessions_repo.get("s7_direct"),
-            session_setter=lambda payload, expires_at: sessions_repo.save("s7_direct", payload, expires_at),
-            cache_ttl_s=settings.cache_ttl_s.airline_direct,
+    if settings.s7_enabled:
+        sessions_repo = SessionsRepo(db)
+        registry.register(
+            S7DirectAdapter(
+                session_getter=lambda: sessions_repo.get("s7_direct"),
+                session_setter=lambda payload, expires_at: sessions_repo.save("s7_direct", payload, expires_at),
+                cache_ttl_s=settings.cache_ttl_s.airline_direct,
+            )
         )
-    )
     return registry
 
 

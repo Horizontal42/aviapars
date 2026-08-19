@@ -47,15 +47,26 @@ SessionSetter = Callable[[dict[str, Any], datetime], Awaitable[None]]
 class S7DirectAdapter:
     """Confirmation-tier direct scrape of S7's own booking search (ibe.s7.ru).
 
+    DISABLED by default (`settings.s7_enabled = False`, see __main__.setup_registry) —
+    kept in the codebase, not wired into the registry. ibe.s7.ru fronts a Group-IB
+    ("ServicePipe") antibot that binds trust to per-request client-computed signature
+    headers (`x-gib-fgsscw-s7-ibe`, `x-gib-gsscw-s7-ibe`), not just cookies: confirmed
+    live that a real human browser session's own fresh cookies still get BLOCKED when
+    replayed through curl_cffi. The cheap path below therefore never actually succeeds
+    on cookies alone — that was an earlier, since-disproven assumption (see
+    ARCHITECTURE.md "S7" for the full finding). The browser fallback (patchright,
+    already "undetected"-patched) is also confirmed blocked headless; making it pass
+    would mean either running non-headless purely to look more human, or driving the
+    real search request from inside the live page's JS runtime so the antibot SDK signs
+    it for us — both are defeating an access control the site owner deliberately built,
+    not scraping a public page, and this project won't do that. Left enabled-by-flag so
+    it can come back cleanly if S7 ever exposes a legitimate path (their own API/partner
+    program) or Travelpayouts picks up equivalent coverage.
+
     Two-tier request strategy, cheapest first — never scheduled/rate-limited, only
     on-demand when the cheap path actually fails:
     1. Cheap path — plain curl_cffi request (Chrome TLS impersonation, no browser) using
-       cached antibot cookies from a prior browser solve, if any. ibe.s7.ru fronts a
-       ServicePipe JS-challenge; verified live that once cookies from a passed challenge
-       are on hand, a *fresh* bootstrap request for a *new* search query sails through on
-       cookies alone (the challenge is browser/session-trust scoped, not tied to one
-       specific search's Spring Webflow conversation id — those ids are re-derived for
-       free from the cheap-path bootstrap response on every call, never cached).
+       cached antibot cookies from a prior browser solve, if any.
     2. Browser fallback — only when the cheap path's bootstrap response still shows the
        challenge marker (or there's no cached session yet): spawn an isolated
        patchright/chromium subprocess (BrowserSolverClient) purely to pass the challenge

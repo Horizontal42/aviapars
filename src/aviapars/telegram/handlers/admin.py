@@ -95,12 +95,12 @@ def _parse_cookie_payload(text: str) -> dict[str, str]:
 @router.message(Command("s7_session"))
 @admin_only
 async def cmd_s7_session(message: Message, command: CommandObject, db: aiosqlite.Connection) -> None:
-    """`s7_direct`'s cheap path needs cookies from a JS-challenge a real browser
-    already solved — ServicePipe (ibe.s7.ru's antibot) blocks CDP-driven Chromium
-    outright, verified live across three separate networks, so this can't be
-    automated. Admin pastes a cookie export after browsing S7 normally; the bot
-    reuses it until it's rejected (source_health/BLOCKED), at which point it's
-    worth asking the admin to refresh."""
+    """Currently inert: `s7_direct` is disabled (`settings.s7_enabled = False`, see
+    ARCHITECTURE.md "S7") because cookie replay alone doesn't work — confirmed live
+    that even a real human browser's fresh cookies get BLOCKED when replayed through a
+    different HTTP client, since ibe.s7.ru signs each request with per-call headers a
+    saved cookie jar can't reproduce. Command left in place for if S7 is ever re-enabled
+    through a legitimate path; saving a session here has no effect while it's off."""
     payload = (command.args or "").strip()
     if not payload:
         await message.answer(
