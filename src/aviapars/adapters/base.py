@@ -69,6 +69,11 @@ class Leg:
     carrier: str | None = None
     number: str | None = None
     arrive_utc: datetime | None = None
+    # Arrival in the *destination's* own local time, which `arrive_utc` + `tz` cannot
+    # reconstruct: `tz` is the departure offset, and a leg that crosses zones arrives on a
+    # different one. Only a source that states the local arrival itself can fill this, so
+    # rendering shows an arrival time exactly when it is present rather than deriving one.
+    arrive_local: datetime | None = None
     tz: str | None = None
     fare_class: str | None = None
     time_precision: str = "exact"  # "exact" | "date_only"

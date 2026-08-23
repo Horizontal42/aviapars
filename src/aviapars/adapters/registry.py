@@ -222,8 +222,9 @@ def _offer_to_dict(offer: Offer) -> dict[str, Any]:
         leg["mode"] = Mode(leg["mode"]).value if not isinstance(leg["mode"], str) else leg["mode"]
         leg["depart_utc"] = leg["depart_utc"] if isinstance(leg["depart_utc"], str) else leg["depart_utc"].isoformat()
         leg["depart_local"] = leg["depart_local"] if isinstance(leg["depart_local"], str) else leg["depart_local"].isoformat()
-        arrive = leg["arrive_utc"]
-        leg["arrive_utc"] = arrive if (arrive is None or isinstance(arrive, str)) else arrive.isoformat()
+        for field in ("arrive_utc", "arrive_local"):
+            value = leg[field]
+            leg[field] = value if (value is None or isinstance(value, str)) else value.isoformat()
     return d
 
 
@@ -238,6 +239,7 @@ def _offer_from_dict(d: dict[str, Any]) -> Offer:
             carrier=leg.get("carrier"),
             number=leg.get("number"),
             arrive_utc=datetime.fromisoformat(leg["arrive_utc"]) if leg.get("arrive_utc") else None,
+            arrive_local=datetime.fromisoformat(leg["arrive_local"]) if leg.get("arrive_local") else None,
             tz=leg.get("tz"),
             fare_class=leg.get("fare_class"),
             time_precision=leg.get("time_precision", "exact"),

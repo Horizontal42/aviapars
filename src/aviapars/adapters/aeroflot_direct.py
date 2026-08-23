@@ -210,6 +210,7 @@ class AeroflotDirectAdapter:
                     expires_at=None,
                     confidence=1.0,
                     itinerary_hash=itinerary_hash,
+                    duration_minutes=_total_duration_minutes(legs),
                 )
             )
         return offers
@@ -220,6 +221,7 @@ class AeroflotDirectAdapter:
         arr_utc = None
         if seg.get("arrival_utc"):
             arr_utc = _as_utc(datetime.fromisoformat(seg["arrival_utc"]))
+        arr_local = datetime.fromisoformat(seg["arrival"]) if seg.get("arrival") else None
         offset_min = seg.get("departure_offset")
         tz = _format_offset(offset_min) if offset_min is not None else None
 
@@ -232,6 +234,7 @@ class AeroflotDirectAdapter:
             carrier=seg.get("operating_airline_name") or seg.get("marketing_airline_name"),
             number=seg.get("operating_flight_number") or seg.get("marketing_flight_number"),
             arrive_utc=arr_utc,
+            arrive_local=arr_local,
             tz=tz,
             time_precision="exact",
         )
@@ -249,6 +252,21 @@ class AeroflotDirectAdapter:
             return HealthStatus(ok=result.status in (ResultStatus.OK, ResultStatus.EMPTY))
         except Exception as exc:  # health_check should never crash the caller (§5 rule 1 spirit)
             return HealthStatus(ok=False, detail=str(exc))
+
+
+def _total_duration_minutes(legs: list[Leg]) -> int | None:
+    """Gate-to-gate, layovers included — first departure to last arrival.
+
+    Every other adapter in the roster fills `duration_minutes` itself; this one used to
+    leave it None even though it has both timestamps, so its deals rendered as
+    «⏱ В пути: неизвестно» and had nothing for cross-source grouping to corroborate
+    against (see domain/grouping.py). Summing the segments' own `duration_minutes`
+    would have silently dropped the connection wait on a multi-segment itinerary.
+    """
+    arrive = legs[-1].arrive_utc
+    if arrive is None:
+        return None
+    return int((arrive - legs[0].depart_utc).total_seconds() // 60)
 
 
 def _format_offset(minutes: int) -> str:

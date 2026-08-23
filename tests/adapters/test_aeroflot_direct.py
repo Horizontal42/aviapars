@@ -52,6 +52,37 @@ def test_parse_offers_from_real_response() -> None:
     assert via_moscow.legs[1].carrier == "Аэрофлот"
 
 
+def test_offers_carry_duration_and_local_arrival() -> None:
+    # regression: this adapter filled arrive_utc but left duration_minutes None (every other
+    # adapter in the roster sets it), so its deals rendered as «⏱ В пути: неизвестно» and
+    # cross-source grouping had nothing to corroborate a discovery offer against.
+    adapter = AeroflotDirectAdapter()
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+
+    direct, via_moscow = adapter._parse_offers(payload, _query(), date(2026, 9, 10))
+
+    assert direct.duration_minutes == 290  # 14:50 -> 19:40 local, both +03:00
+    assert direct.legs[0].arrive_local == datetime(2026, 9, 10, 19, 40)
+    # gate to gate, layover included — not the sum of the segments' own durations
+    gate_to_gate = (via_moscow.legs[-1].arrive_utc - via_moscow.legs[0].depart_utc).total_seconds() // 60
+    assert via_moscow.duration_minutes == gate_to_gate
+    assert via_moscow.duration_minutes > sum(
+        (leg.arrive_utc - leg.depart_utc).total_seconds() // 60 for leg in via_moscow.legs
+    )
+
+
+def test_duration_is_none_when_arrival_is_missing() -> None:
+    adapter = AeroflotDirectAdapter()
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    for leg in payload["data"]["route_itineraries"][0][0]["legs"]:
+        for seg in leg["segments"]:
+            seg.pop("arrival_utc", None)
+
+    offers = adapter._parse_offers(payload, _query(), date(2026, 9, 10))
+
+    assert offers[0].duration_minutes is None  # not fabricated from a departure alone
+
+
 def test_parse_offers_picks_cheapest_fare_not_iteration_order() -> None:
     # `offers` deliberately lists the pricier fare first, so this only passes if the
     # parser actually compares prices instead of taking offers[0].
