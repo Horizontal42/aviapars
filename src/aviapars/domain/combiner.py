@@ -11,6 +11,7 @@ from aviapars.adapters.registry import AdapterRegistry, Lane
 from aviapars.db.models import Place
 from aviapars.db.repo_places import PlacesRepo
 from aviapars.domain.dates import DatePlan
+from aviapars.domain.grouping import Match, group_offers
 from aviapars.domain.transfers import transfer_policy
 from aviapars.domain.validator import freshness_gate
 
@@ -45,11 +46,38 @@ class SearchOpts:
 
 @dataclass(frozen=True, slots=True)
 class Itinerary:
+    """One way of making the trip.
+
+    `offers` are the *sequential legs* in travel order — one entry for a direct trip,
+    two for a hub-composed one (§8). `alternates` are a different relation entirely:
+    other sources' reports of this same (single-leg) trip, grouped by domain/grouping.py
+    so that two sources pricing one flight produce one notification instead of two.
+    A hub itinerary never carries alternates, and nothing may collapse the two tuples
+    together — duration/mode/price logic reads `offers` as legs.
+
+    `price_minor` is the cheapest member's price when alternates exist, so the
+    threshold check and the card headline both speak about what the trip actually costs.
+    """
+
     offers: tuple[Offer, ...]
     price_minor: int
     currency: str
     violations: tuple[str, ...] = ()
     duration_minutes: int | None = None
+    alternates: tuple[Offer, ...] = ()
+    match: Match | None = None
+    # Identity used for notification cooldown/dedupe — see grouping._group_key. None
+    # for hub itineraries, which fall back to hashing their legs' own offer hashes.
+    group_key: str | None = None
+
+
+def itinerary_offers(itinerary: Itinerary) -> tuple[Offer, ...]:
+    """Every offer behind an itinerary — its legs plus any cross-source alternates.
+
+    What callers that ask "which sources / tiers / links are involved" want; anything
+    reasoning about the journey's *structure* must keep using `.offers` alone.
+    """
+    return (*itinerary.offers, *itinerary.alternates)
 
 
 def itinerary_modes(itinerary: Itinerary) -> list[Mode]:
@@ -109,13 +137,20 @@ async def search_itineraries(
         oldest = _min_dt(oldest, meta.oldest)
         partial = partial or meta.partial
         leg_pool.setdefault(_pool_key(origin, dest, mode), []).extend(offers[: opts.leg_pool_size])
-        for offer in offers:
+        # Grouped, not one Itinerary per offer: several sources pricing the same flight
+        # are one thing to tell the user about (§9). Only the direct leg is grouped —
+        # hub composition below keeps working from the raw per-source offers, since a
+        # leg pool is about "which flights exist", not "who else sells this one".
+        for group in group_offers(offers):
             itineraries.append(
                 Itinerary(
-                    offers=(offer,),
-                    price_minor=offer.price_minor,
-                    currency=offer.currency,
-                    duration_minutes=offer.duration_minutes,
+                    offers=(group.anchor,),
+                    price_minor=group.price_minor,
+                    currency=group.currency,
+                    duration_minutes=group.duration_minutes,
+                    alternates=group.alternates,
+                    match=group.match,
+                    group_key=group.key,
                 )
             )
 

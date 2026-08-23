@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -12,6 +13,7 @@ from aviapars.db.models import Route, User
 from aviapars.db.repo_jobs import JobsRepo
 from aviapars.db.repo_notifications import NotificationsRepo
 from aviapars.domain.combiner import Itinerary
+from aviapars.domain.grouping import Match
 from aviapars.notify.dedupe import DedupeGate
 from aviapars.notify.notifier import Notifier, _local_day_start_utc, is_quiet_hours, next_quiet_hours_end
 
@@ -404,3 +406,126 @@ async def test_send_deal_retries_once_after_flood_control(db: aiosqlite.Connecti
     sent = await notifier.send_deal(user=user, route=route, itinerary=_itinerary(), confirmed=True, now=now)
     assert sent is True
     assert len(bot.sent) == 1
+
+
+def _grouped_itinerary(*, with_alternate: bool, price_minor: int = 500000) -> Itinerary:
+    """What the combiner now builds for one flight priced by two sources: Aeroflot's
+    offer as the rendered leg, Travelpayouts' as an alternate, one shared group key."""
+    place_a = PlaceRef(place_id=1, iata="LED", yandex_code=None, rzd_code=None, city_id=None)
+    place_b = PlaceRef(place_id=2, iata="MOW", yandex_code=None, rzd_code=None, city_id=None)
+    now = datetime(2026, 9, 18, 6, 0, tzinfo=timezone.utc)
+    leg = Leg(
+        mode=Mode.PLANE,
+        from_place=place_a,
+        to_place=place_b,
+        depart_utc=now,
+        depart_local=now,
+        carrier="Аэрофлот",
+        number="6321",
+        arrive_utc=now + timedelta(minutes=125),
+    )
+
+    def offer(source_id: str, tier: Tier, price: int) -> Offer:
+        return Offer(
+            legs=(leg,),
+            price_minor=price,
+            currency="RUB",
+            deep_link=None,
+            source_id=source_id,
+            tier=tier,
+            observed_at=now,
+            source_cached_at=now,
+            expires_at=None,
+            confidence=1.0,
+            itinerary_hash=f"{source_id}-hash",
+            duration_minutes=125,
+        )
+
+    anchor = offer("aeroflot_direct", Tier.CONFIRMATION, price_minor + 70000)
+    alternates = (offer("travelpayouts", Tier.DISCOVERY, price_minor),) if with_alternate else ()
+    return Itinerary(
+        offers=(anchor,),
+        price_minor=min([anchor.price_minor, *(a.price_minor for a in alternates)]),
+        currency="RUB",
+        duration_minutes=125,
+        alternates=alternates,
+        match=Match.LIKELY_SAME if alternates else None,
+        group_key="plane|1|2|2026-09-18|6321",
+    )
+
+
+async def test_grouped_deal_is_one_notification_carrying_every_source(db: aiosqlite.Connection) -> None:
+    repo = NotificationsRepo(db)
+    notifier = Notifier(
+        _FakeBot(),
+        repo,
+        JobsRepo(db),
+        DedupeGate(repo),
+        cooldown_h=12,
+        daily_cap=3,
+        source_names={"aeroflot_direct": "Аэрофлот", "travelpayouts": "Aviasales"},
+    )
+    bot = notifier._bot
+    user = _user(start="23:00", end="08:00")
+    now = datetime(2026, 9, 18, 9, 0, tzinfo=timezone.utc)
+
+    sent = await notifier.send_deal(
+        user=user, route=_route(), itinerary=_grouped_itinerary(with_alternate=True), confirmed=False, now=now
+    )
+
+    assert sent is True
+    assert len(bot.sent) == 1  # one message for what used to be two
+    text = bot.sent[0][1]
+    assert "Аэрофлот" in text and "Aviasales" in text
+    assert "Вероятно один и тот же рейс" in text
+
+
+async def test_cooldown_keys_on_the_trip_not_on_which_sources_reported_it(db: aiosqlite.Connection) -> None:
+    # The whole point of grouping: the next cycle finding only Aeroflot (Travelpayouts
+    # timed out, or its row aged out) is the same trip, not a new deal to announce.
+    repo = NotificationsRepo(db)
+    notifier = Notifier(_FakeBot(), repo, JobsRepo(db), DedupeGate(repo), cooldown_h=12, daily_cap=3)
+    bot = notifier._bot
+    # quiet hours disabled (start == end) so `now` can be the real clock, which is what
+    # the cooldown compares against — notifications_sent stamps rows with datetime.now().
+    user = _user(start="00:00", end="00:00")
+    route = _route()
+    now = datetime.now(timezone.utc)
+
+    first = await notifier.send_deal(
+        user=user, route=route, itinerary=_grouped_itinerary(with_alternate=True), confirmed=False, now=now
+    )
+    second = await notifier.send_deal(
+        user=user,
+        route=route,
+        itinerary=_grouped_itinerary(with_alternate=False),
+        confirmed=True,
+        now=now + timedelta(hours=2),
+    )
+
+    assert first is True
+    assert second is False
+    assert len(bot.sent) == 1
+
+
+async def test_a_different_flight_on_the_same_day_still_notifies(db: aiosqlite.Connection) -> None:
+    # Suppression is per trip, not per date — a genuinely different flight found later
+    # the same day must still get through the cooldown gate.
+    repo = NotificationsRepo(db)
+    notifier = Notifier(_FakeBot(), repo, JobsRepo(db), DedupeGate(repo), cooldown_h=12, daily_cap=3)
+    bot = notifier._bot
+    user = _user(start="00:00", end="00:00")
+    route = _route()
+    now = datetime.now(timezone.utc)
+
+    other_flight = replace(_grouped_itinerary(with_alternate=False), group_key="plane|1|2|2026-09-18|6777")
+
+    await notifier.send_deal(
+        user=user, route=route, itinerary=_grouped_itinerary(with_alternate=False), confirmed=True, now=now
+    )
+    sent = await notifier.send_deal(
+        user=user, route=route, itinerary=other_flight, confirmed=True, now=now + timedelta(hours=1)
+    )
+
+    assert sent is True
+    assert len(bot.sent) == 2

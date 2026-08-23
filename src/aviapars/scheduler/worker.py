@@ -12,7 +12,7 @@ from aviapars.db.models import Route, User
 from aviapars.db.repo_observations import ObservationsRepo
 from aviapars.db.repo_places import PlacesRepo
 from aviapars.db.repo_routes import RoutesRepo
-from aviapars.domain.combiner import Itinerary, SearchOpts, itinerary_modes, search_itineraries
+from aviapars.domain.combiner import Itinerary, SearchOpts, itinerary_modes, itinerary_offers, search_itineraries
 from aviapars.domain.dates import DatePlan, resolve_date_plan, selection_from_route
 from aviapars.domain.dealer import crosses_threshold
 from aviapars.domain.places import allowed_modes
@@ -91,7 +91,9 @@ async def process_route(
     recorded_hashes: set[str] = set()
     unique_offers = []
     for itinerary in outcome.itineraries:
-        for offer in itinerary.offers:
+        # alternates included: a grouped itinerary renders one source's legs, but every
+        # member is a real price another source quoted, and price history is per-source.
+        for offer in itinerary_offers(itinerary):
             if offer.itinerary_hash in recorded_hashes:
                 continue
             recorded_hashes.add(offer.itinerary_hash)
@@ -109,7 +111,11 @@ async def process_route(
             log.warning("observation insert for route %s failed (route likely deleted mid-cycle)", route.id)
 
     for deal in _deals_to_send(route, outcome.itineraries):
-        confirmed = all(offer.tier == Tier.CONFIRMATION for offer in deal.offers)
+        # Alternates count: the headline price on the card is the cheapest member's, so a
+        # group whose cheapest quote comes from a discovery source is not "подтверждено"
+        # even when the flight itself was confirmed by a carrier — the card marks the
+        # tier of each source separately.
+        confirmed = all(offer.tier == Tier.CONFIRMATION for offer in itinerary_offers(deal))
         # crosses_threshold() knows about modes but nothing about delivery — "is this cheap
         # enough" is a fact about the price, not about how the user wants to hear it.
         # send_deal() itself branches on route.notification_mode for instant vs digest.

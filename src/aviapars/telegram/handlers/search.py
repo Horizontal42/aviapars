@@ -13,7 +13,7 @@ from aviapars.adapters.registry import AdapterRegistry
 from aviapars.config import settings
 from aviapars.db.repo_places import PlacesRepo
 from aviapars.db.models import Place, Route
-from aviapars.domain.combiner import Itinerary, SearchOpts, itinerary_modes, search_itineraries
+from aviapars.domain.combiner import Itinerary, SearchOpts, itinerary_modes, itinerary_offers, search_itineraries
 from aviapars.domain.dates import DateSelection, resolve_date_plan, selection_from_route
 from aviapars.domain.places import modes_for_pref
 from aviapars.telegram import date_picker
@@ -413,7 +413,7 @@ def _carrier_or_source_label(itinerary: Itinerary, source_names: dict[str, str])
     carriers = list(dict.fromkeys(leg.carrier for leg in all_legs if leg.carrier))
     if carriers:
         return "/".join(carriers)
-    sources = list(dict.fromkeys(source_names.get(o.source_id, o.source_id) for o in itinerary.offers))
+    sources = list(dict.fromkeys(source_names.get(o.source_id, o.source_id) for o in itinerary_offers(itinerary)))
     return "/".join(sources)
 
 
@@ -431,7 +431,7 @@ def _render_itinerary_line(itinerary: Itinerary, source_names: dict[str, str]) -
         h, m = divmod(itinerary.duration_minutes, 60)
         parts.append(f"{h}ч{f' {m:02d}м' if m else ''}")
     parts.append(_carrier_or_source_label(itinerary, source_names))
-    confirmed_all = all(o.tier == Tier.CONFIRMATION for o in itinerary.offers)
+    confirmed_all = all(o.tier == Tier.CONFIRMATION for o in itinerary_offers(itinerary))
     return " · ".join(parts) + (" ✅" if confirmed_all else " ⚠️")
 
 

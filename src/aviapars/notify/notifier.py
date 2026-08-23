@@ -215,10 +215,18 @@ async def _send_with_retry(bot: TelegramSender, chat_id: int, text: str) -> None
 
 
 def _combined_hash(itinerary: Itinerary) -> str:
-    """Stable identity for dedupe across both a single offer and a
-    hub-composed pair — concatenates each leg-offer's own hash so the same
-    two-leg combination always produces the same key."""
-    joined = "|".join(o.itinerary_hash for o in itinerary.offers)
+    """Stable identity for dedupe (§9) — "have I already told them about this trip".
+
+    A direct itinerary uses its group key (domain/grouping._group_key): flight number
+    when any source knows one, route+date+stops when none does. Deliberately not the
+    per-offer `itinerary_hash`, which is source-scoped by construction (every adapter
+    mixes its own id into it) — that is precisely why one flight priced by Aeroflot and
+    by Travelpayouts used to pass the cooldown gate twice and arrive as two messages.
+
+    A hub itinerary has no group key and still hashes its legs' own offer hashes: it is
+    identified by the pair of legs it composes, and nothing groups those across sources.
+    """
+    joined = itinerary.group_key or "|".join(o.itinerary_hash for o in itinerary.offers)
     return hashlib.sha256(joined.encode()).hexdigest()[:16]
 
 

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 
 from aviapars.adapters.base import Leg, Mode, Offer, PlaceRef, Tier
 from aviapars.domain.combiner import Itinerary
 from aviapars.domain.dates import exact_date
+from aviapars.domain.grouping import Match
 from aviapars.telegram.format import (
     MIXED_GROUP,
     describe_age,
@@ -27,6 +29,9 @@ def _offer(
     confidence: float = 1.0,
     mode: Mode = Mode.PLANE,
     price_minor: int = 500000,
+    arrive_local: datetime | None = None,
+    tier: Tier = Tier.CONFIRMATION,
+    duration_minutes: int | None = None,
 ) -> Offer:
     now = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
     leg = Leg(
@@ -38,6 +43,7 @@ def _offer(
         carrier="Победа",
         number="515",
         arrive_utc=now,
+        arrive_local=arrive_local,
         time_precision="exact",
     )
     return Offer(
@@ -46,12 +52,13 @@ def _offer(
         currency="RUB",
         deep_link=deep_link,
         source_id=source_id,
-        tier=Tier.CONFIRMATION,
+        tier=tier,
         observed_at=now,
         source_cached_at=now,
         expires_at=None,
         confidence=confidence,
         itinerary_hash="abc123",
+        duration_minutes=duration_minutes,
     )
 
 
@@ -76,7 +83,7 @@ def test_missing_source_names_falls_back_to_raw_slug() -> None:
     assert "pobeda_direct" in card
 
 
-def test_deep_link_line_included_and_deduped() -> None:
+def test_deep_link_is_clickable_and_deduped() -> None:
     link = "https://ticket.flypobeda.ru/websky/?origin-city-code%5B0%5D=LED"
     offer_a = _offer(source_id="pobeda_direct", deep_link=link)
     offer_b = _offer(source_id="pobeda_direct", deep_link=link)  # same link, must not repeat
@@ -86,17 +93,19 @@ def test_deep_link_line_included_and_deduped() -> None:
         "LED → MOW", itinerary, threshold_minor=600000, confirmed=True, source_names={"pobeda_direct": "Победа"}
     )
 
-    assert card.count(link) == 1
-    assert "🔗 Купить у Победа" in card
+    # parse_mode=HTML is the bot's global default, so the URL belongs inside an anchor
+    # rather than sitting in the text as an unclickable string.
+    assert card.count(f'<a href="{link}">купить у Победа</a>') == 1
 
 
-def test_no_deep_link_line_when_offer_has_none() -> None:
+def test_no_link_still_names_the_source() -> None:
     offer = _offer(source_id="pobeda_direct", deep_link=None)
     itinerary = Itinerary(offers=(offer,), price_minor=500000, currency="RUB")
 
     card = format_deal_card("LED → MOW", itinerary, threshold_minor=600000, confirmed=True)
 
-    assert "🔗" not in card
+    assert "<a href" not in card
+    assert "pobeda_direct (без ссылки)" in card
 
 
 def test_departure_date_uses_local_not_utc() -> None:
@@ -202,6 +211,134 @@ def test_unconfirmed_card_shows_source_and_age() -> None:
 
     assert "⚠️ Не подтверждено" in card
     assert "Туту.ру (самолёты)" in card
+
+
+def test_card_shows_arrival_time_when_the_source_states_it() -> None:
+    offer = _offer(source_id="pobeda_direct", deep_link=None, arrive_local=datetime(2026, 9, 1, 14, 25))
+    itinerary = Itinerary(offers=(offer,), price_minor=500000, currency="RUB")
+
+    card = format_deal_card("LED → MOW", itinerary, threshold_minor=600000, confirmed=True)
+
+    assert "12:00 → 14:25" in card
+
+
+def test_card_omits_arrival_when_only_a_utc_stamp_is_known() -> None:
+    # arrive_utc alone can't be turned into a local arrival: `tz` on a Leg is the
+    # *departure* offset, and a leg that crosses zones lands on a different one.
+    offer = _offer(source_id="pobeda_direct", deep_link=None)
+    itinerary = Itinerary(offers=(offer,), price_minor=500000, currency="RUB")
+
+    card = format_deal_card("LED → MOW", itinerary, threshold_minor=600000, confirmed=True)
+
+    assert "12:00" in card
+    assert "→ 1" not in card.split("\n")[4]  # leg detail line carries a departure only
+
+
+def test_card_shows_the_layover_between_legs() -> None:
+    hub = PlaceRef(place_id=3, iata="SVO", yandex_code=None, rzd_code=None, city_id=None, name_ru="Москва")
+    dep_a = datetime(2026, 9, 1, 8, 0, tzinfo=timezone.utc)
+    dep_b = datetime(2026, 9, 1, 12, 30, tzinfo=timezone.utc)
+    leg_a = Leg(
+        mode=Mode.PLANE,
+        from_place=_ORIGIN,
+        to_place=hub,
+        depart_utc=dep_a,
+        depart_local=dep_a,
+        arrive_utc=datetime(2026, 9, 1, 9, 30, tzinfo=timezone.utc),
+    )
+    leg_b = Leg(mode=Mode.PLANE, from_place=hub, to_place=_DEST, depart_utc=dep_b, depart_local=dep_b)
+    offer_a = _offer(source_id="s1", deep_link="https://a.test")
+    offer_b = _offer(source_id="s2", deep_link="https://b.test")
+    itinerary = Itinerary(
+        offers=(
+            replace(offer_a, legs=(leg_a,)),
+            replace(offer_b, legs=(leg_b,)),
+        ),
+        price_minor=1000000,
+        currency="RUB",
+    )
+
+    card = format_deal_card("LED → MOW", itinerary, threshold_minor=1100000, confirmed=True)
+
+    assert "🔄 Пересадка 3ч · Москва (SVO)" in card
+    # each leg keeps its own purchase line when the two come from different sources
+    assert "Москва (SVO) → MOW: 5 000 ₽" in card
+
+
+def test_layover_states_the_place_without_inventing_a_gap() -> None:
+    hub = PlaceRef(place_id=3, iata="SVO", yandex_code=None, rzd_code=None, city_id=None, name_ru="Москва")
+    dep = datetime(2026, 9, 1, 8, 0, tzinfo=timezone.utc)
+    leg_a = Leg(mode=Mode.PLANE, from_place=_ORIGIN, to_place=hub, depart_utc=dep, depart_local=dep)  # no arrival
+    leg_b = Leg(mode=Mode.PLANE, from_place=hub, to_place=_DEST, depart_utc=dep, depart_local=dep)
+    base = _offer(source_id="s1", deep_link=None)
+    itinerary = Itinerary(
+        offers=(replace(base, legs=(leg_a,)), replace(base, legs=(leg_b,))),
+        price_minor=1000000,
+        currency="RUB",
+    )
+
+    card = format_deal_card("LED → MOW", itinerary, threshold_minor=1100000, confirmed=True)
+
+    assert "🔄 Пересадка · Москва (SVO)" in card
+
+
+def _grouped(match: Match, *, alternate_price: int = 490000) -> Itinerary:
+    anchor = _offer(source_id="aeroflot_direct", deep_link="https://af.test", duration_minutes=125)
+    alternate = _offer(
+        source_id="travelpayouts",
+        deep_link="https://ts.test",
+        price_minor=alternate_price,
+        tier=Tier.DISCOVERY,
+        duration_minutes=130,
+    )
+    return Itinerary(
+        offers=(anchor,),
+        price_minor=min(anchor.price_minor, alternate.price_minor),
+        currency="RUB",
+        duration_minutes=125,
+        alternates=(alternate,),
+        match=match,
+        group_key="plane|1|2|2026-09-01|515",
+    )
+
+
+def test_grouped_card_hedges_when_the_match_is_only_probable() -> None:
+    card = format_deal_card(
+        "LED → MOW",
+        _grouped(Match.LIKELY_SAME),
+        threshold_minor=600000,
+        confirmed=False,
+        source_names={"aeroflot_direct": "Аэрофлот", "travelpayouts": "Aviasales"},
+    )
+
+    assert "⚠️ Вероятно один и тот же рейс" in card
+    # one card, both sources, cheapest first, each marked with its own tier
+    assert "⚠️ 4 900 ₽ · <a href=\"https://ts.test\">купить у Aviasales</a>" in card
+    assert "✅ 5 000 ₽ · <a href=\"https://af.test\">купить у Аэрофлот</a>" in card
+    assert "💰 <b>4 900 ₽</b>" in card  # headline price is what the trip can be bought for
+
+
+def test_grouped_card_claims_nothing_when_there_is_no_evidence() -> None:
+    card = format_deal_card("LED → MOW", _grouped(Match.UNVERIFIED), threshold_minor=600000, confirmed=False)
+
+    assert "❔ Возможно, это разные рейсы" in card
+    assert "вероятно" not in card.lower()
+
+
+def test_confirmed_flight_number_match_does_not_hedge() -> None:
+    card = format_deal_card("LED → MOW", _grouped(Match.SAME_FLIGHT), threshold_minor=600000, confirmed=False)
+
+    assert "🔁 Один и тот же рейс" in card
+    assert "Вероятно" not in card
+
+
+def test_lone_itinerary_has_no_confidence_note_at_all() -> None:
+    offer = _offer(source_id="pobeda_direct", deep_link=None)
+    itinerary = Itinerary(offers=(offer,), price_minor=500000, currency="RUB")
+
+    card = format_deal_card("LED → MOW", itinerary, threshold_minor=600000, confirmed=True)
+
+    assert "рейс" not in card  # nothing was grouped, so there is nothing to hedge about
 
 
 def test_screen_text_skips_empty_blocks() -> None:

@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Mapping
 
-from aviapars.adapters.base import Mode, PlaceRef
+from aviapars.adapters.base import Leg, Mode, Offer, PlaceRef, Tier
 from aviapars.db.models import Route
-from aviapars.domain.combiner import Itinerary, itinerary_modes
+from aviapars.domain.combiner import Itinerary, itinerary_modes, itinerary_offers
+from aviapars.domain.grouping import Match
 from aviapars.domain.dates import DatePlan, DateSelection, selection_from_route, window
 from aviapars.telegram.keyboards import MODE_LABEL
 
@@ -221,6 +222,13 @@ def format_route_card(route: Route, today: date) -> str:
     )
 
 
+_MATCH_NOTE = {
+    Match.SAME_FLIGHT: "🔁 Один и тот же рейс у разных источников — совпал номер рейса",
+    Match.LIKELY_SAME: "⚠️ Вероятно один и тот же рейс — совпала длительность, номер рейса знает только один источник",
+    Match.UNVERIFIED: "❔ Возможно, это разные рейсы — сравнить нечего, совпадают только маршрут и дата",
+}
+
+
 def format_deal_card(
     route_title: str,
     itinerary: Itinerary,
@@ -231,10 +239,18 @@ def format_deal_card(
 ) -> str:
     """Deal notification card (§9/§10). Degrades gracefully when leg detail is
     missing (date_only/no-carrier discovery offers) rather than fabricating
-    a time or airline — see base.py Leg docstring. `itinerary.offers` has one
-    entry for a direct trip, two for a hub-composed one (§8) — each offer can
-    come from a different source with its own tier/confidence, so per-leg
-    price is shown whenever there's more than one.
+    a time or airline — see base.py Leg docstring.
+
+    Four blocks, blank-line separated: what/how much, the journey itself, how
+    sure we are it is one journey, where to buy it. Everything crammed onto
+    fewer lines wrapped mid-word in the Telegram client and read as a wall of
+    text — the owner's actual complaint about the old card.
+
+    `itinerary.offers` is the journey's legs (one direct, two hub-composed §8);
+    `itinerary.alternates` is a different thing entirely — other sources'
+    reports of that same trip, grouped by domain/grouping.py. The buy block
+    lists a line per source when they were grouped, and a line per leg when the
+    trip is hub-composed (the two never co-occur, see combiner.Itinerary).
 
     `source_names` maps adapter `id` -> `display_name` (built once from the
     live registry, see notify/notifier.py) so the card can say "Победа",
@@ -254,61 +270,129 @@ def format_deal_card(
     # day early off depart_utc.date() — the user needs the date they'd see on a ticket.
     depart_date = all_legs[0].depart_local.date()
 
-    # One blank-line-separated block per field instead of one cramped line — a route with a
-    # long title plus a carrier name plus a price used to wrap unpredictably mid-word in the
-    # Telegram client. Each leg gets its own two-line block (route, then carrier/time/price)
-    # for the same reason: three facts crammed onto one line read as a wall of text.
-    lines = [
+    header = [
         f"<b>🔥 {route_title}</b>",
-        "",
-        f"💰 {price} · порог {threshold}",
-        f"🗓 {depart_date.strftime('%d.%m.%Y')} · {mode_label}",
-        "",
+        f"💰 <b>{price}</b> · порог {threshold}",
+        f"🗓 {depart_date.strftime('%d.%m.%Y')} · {mode_label} · в пути {_describe_duration(itinerary.duration_minutes)}",
     ]
-    multi_leg = len(itinerary.offers) > 1
-    for offer in itinerary.offers:
-        for leg in offer.legs:
-            origin = place_label(leg.from_place)
-            dest = place_label(leg.to_place)
-            carrier_bits = " ".join(b for b in (leg.carrier, leg.number) if b)
-            time_str = leg.depart_local.strftime("%H:%M") if leg.time_precision == "exact" else "время неизвестно"
-            detail_bits = [b for b in (carrier_bits or None, time_str) if b]
-            if multi_leg:
-                detail_bits.append(format_money(offer.price_minor, offer.currency))
-            lines.append(f"{MODE_EMOJI[leg.mode]} {origin} → {dest}")
-            lines.append(" · ".join(detail_bits))
-    lines.append("")
 
-    # Always shown, even as "неизвестно" — a silently omitted line here previously read as
-    # "no duration data" and "adapter forgot to fill duration_minutes" identically; now the
-    # card says outright when a source (typically a date_only discovery offer) doesn't know.
-    if itinerary.duration_minutes is not None:
-        h, m = divmod(itinerary.duration_minutes, 60)
-        duration_str = f"{h}ч {m}м" if m else f"{h}ч"
-    else:
-        duration_str = "неизвестно"
-    lines.append(f"⏱ В пути: {duration_str}")
+    lines = [*header, "", *_journey_block(all_legs)]
 
-    source_str = ", ".join(sorted({source_names.get(o.source_id, o.source_id) for o in itinerary.offers}))
-    if confirmed:
-        lines.append(f"✅ Подтверждено у перевозчика · только что · {source_str}")
-    else:
-        cached_ats = [o.source_cached_at for o in itinerary.offers if o.source_cached_at is not None]
-        age_h = _age_hours(min(cached_ats)) if cached_ats else None
-        age_str = f"{age_h} ч назад" if age_h is not None else "возраст неизвестен"
-        lines.append(f"⚠️ Не подтверждено · данные {source_str}, {age_str}")
+    if itinerary.alternates and itinerary.match is not None:
+        lines += ["", _MATCH_NOTE[itinerary.match]]
 
-    seen_links: set[str] = set()
-    for offer in itinerary.offers:
-        if offer.deep_link and offer.deep_link not in seen_links:
-            seen_links.add(offer.deep_link)
-            name = source_names.get(offer.source_id, offer.source_id)
-            lines.append(f"🔗 Купить у {name}: {offer.deep_link}")
-
+    lines += ["", *_source_block(itinerary, confirmed=confirmed, source_names=source_names)]
     return "\n".join(lines)
+
+
+def _journey_block(legs: list[Leg]) -> list[str]:
+    """Two lines per leg — where, then when/who — with the layover in between.
+
+    The second line leads with times because that is what the reader is
+    scanning for; arrival is shown only when the source stated the arrival in
+    the destination's own local time (base.py Leg.arrive_local), never derived
+    from a UTC stamp plus the *departure* offset.
+    """
+    lines: list[str] = []
+    for i, leg in enumerate(legs):
+        if i:
+            lines.append(_layover_line(legs[i - 1], leg))
+        lines.append(f"{MODE_EMOJI[leg.mode]} {place_label(leg.from_place)} → {place_label(leg.to_place)}")
+        bits: list[str] = []
+        if leg.time_precision == "exact":
+            times = leg.depart_local.strftime("%H:%M")
+            if leg.arrive_local is not None:
+                times += f" → {leg.arrive_local.strftime('%H:%M')}"
+            bits.append(times)
+        else:
+            bits.append("время неизвестно")
+        carrier_bits = " ".join(b for b in (leg.carrier, leg.number) if b)
+        if carrier_bits:
+            bits.append(carrier_bits)
+        lines.append("      " + " · ".join(bits))
+    return lines
+
+
+def _layover_line(previous: Leg, following: Leg) -> str:
+    """«🔄 Пересадка 1ч 40м · Москва (SVO)» — both the wait and where you wait it
+    out, which is what decides whether a connection is worth taking. The gap needs a
+    real arrival stamp on the previous leg; a date_only offer has only a midnight
+    placeholder, so the place is stated on its own rather than an invented duration."""
+    place = place_label(previous.to_place)
+    if previous.arrive_utc is None or previous.time_precision != "exact" or following.time_precision != "exact":
+        return f"🔄 Пересадка · {place}"
+    gap = int((following.depart_utc - previous.arrive_utc).total_seconds() // 60)
+    if gap < 0:
+        return f"🔄 Пересадка · {place}"
+    return f"🔄 Пересадка {_describe_duration(gap)} · {place}"
+
+
+def _source_block(itinerary: Itinerary, *, confirmed: bool, source_names: dict[str, str]) -> list[str]:
+    """Freshness verdict, then where to actually buy this.
+
+    Two shapes, never both (see combiner.Itinerary): cross-source alternates are
+    competing prices for one trip, so they're listed cheapest-first with each source's
+    own tier marker; a hub itinerary's offers are legs, so they stay in travel order
+    and say which leg they sell.
+    """
+    offers = itinerary_offers(itinerary)
+    if confirmed:
+        lines = ["✅ Подтверждено у перевозчика · только что"]
+    else:
+        cached_ats = [o.source_cached_at for o in offers if o.source_cached_at is not None]
+        age_h = _age_hours(min(cached_ats)) if cached_ats else None
+        lines = [f"⚠️ Не подтверждено · данные {f'{age_h} ч назад' if age_h is not None else 'неизвестной свежести'}"]
+
+    if itinerary.alternates:
+        for offer in sorted(offers, key=lambda o: o.price_minor):
+            marker = "✅" if offer.tier == Tier.CONFIRMATION else "⚠️"
+            price = format_money(offer.price_minor, offer.currency)
+            lines.append(f"{marker} {price} · {_buy_link(offer, source_names)}")
+        return lines
+
+    # Deduped by link: both legs of a hub itinerary often come from one source with one
+    # search URL covering the whole trip, and printing it twice is pure noise.
+    seen: set[tuple[str, str | None]] = set()
+    legs_to_buy: list[Offer] = []
+    for offer in itinerary.offers:
+        if (offer.source_id, offer.deep_link) in seen:
+            continue
+        seen.add((offer.source_id, offer.deep_link))
+        legs_to_buy.append(offer)
+
+    for offer in legs_to_buy:
+        prefix = ""
+        if len(legs_to_buy) > 1:
+            legs = offer.legs
+            prefix = f"{place_label(legs[0].from_place)} → {place_label(legs[-1].to_place)}: "
+            prefix += f"{format_money(offer.price_minor, offer.currency)} · "
+        lines.append(f"💳 {prefix}{_buy_link(offer, source_names)}")
+    return lines
+
+
+def _buy_link(offer: Offer, source_names: dict[str, str]) -> str:
+    """HTML anchor — parse_mode=HTML is the bot's global default (telegram/bot.py), so a
+    bare URL in the text was just a long unclickable string wrapping across three lines."""
+    name = source_names.get(offer.source_id, offer.source_id)
+    if not offer.deep_link:
+        return f"{name} (без ссылки)"
+    return f'<a href="{offer.deep_link}">купить у {name}</a>'
+
+
+def _describe_duration(minutes: int | None) -> str:
+    """Always says something, even «неизвестно» — an omitted duration read as
+    "no data" and "adapter forgot to fill duration_minutes" identically."""
+    if minutes is None:
+        return "неизвестно"
+    h, m = divmod(minutes, 60)
+    if not h:
+        return f"{m}м"
+    return f"{h}ч {m:02d}м" if m else f"{h}ч"
 
 
 def _age_hours(cached_at: datetime | None) -> int | None:
     if cached_at is None:
         return None
-    return int((datetime.now(timezone.utc) - cached_at).total_seconds() // 3600)
+    # clamped like describe_age: a source_cached_at a hair in the future (clock skew
+    # between the source and this box) must not read as «-1 ч назад».
+    return max(0, int((datetime.now(timezone.utc) - cached_at).total_seconds() // 3600))

@@ -8,6 +8,17 @@ from pathlib import Path
 import aiosqlite
 import pytest
 
+from aviapars.adapters.base import (
+    HealthStatus,
+    Leg,
+    Mode,
+    Offer,
+    RateLimitPolicy,
+    ResultStatus,
+    SearchQuery,
+    SearchResult,
+    Tier,
+)
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.adapters.travelpayouts import TravelpayoutsAdapter
 from aviapars.config import settings
@@ -391,3 +402,152 @@ async def test_flexible_window_finds_a_date_the_user_never_named(
     after = await routes_repo.get(route.id)
     assert after is not None
     assert after.date_cursor == settings.flex_probe_dates_per_cycle
+
+
+class _FakeCarrierAdapter:
+    """Stands in for a confirmation-tier source (aeroflot_direct) answering the same
+    route+date as the Travelpayouts fixture: real times, carrier and flight number, and a
+    duration close enough to the aggregator's to corroborate it."""
+
+    id = "fake_carrier"
+    display_name = "Авиакомпания"
+    modes = frozenset({Mode.PLANE})
+    tier = Tier.CONFIRMATION
+    countries: frozenset[str] | None = None
+    supports_batch_dates = True
+    rate_limit = RateLimitPolicy(min_interval_s=0)
+    default_cache_ttl_s = 0
+    request_timeout_s = 5
+    total_timeout_s = 5
+
+    def __init__(self, *, duration_minutes: int, price_minor: int = 690000) -> None:
+        self._duration_minutes = duration_minutes
+        self._price_minor = price_minor
+
+    async def search(self, q: SearchQuery) -> SearchResult:
+        depart = datetime(2026, 9, 29, 7, 35, tzinfo=timezone.utc)
+        leg = Leg(
+            mode=Mode.PLANE,
+            from_place=q.origin,
+            to_place=q.dest,
+            depart_utc=depart,
+            depart_local=depart.replace(tzinfo=None),
+            carrier="Авиакомпания",
+            number="1234",
+            arrive_utc=depart + timedelta(minutes=self._duration_minutes),
+            arrive_local=(depart + timedelta(minutes=self._duration_minutes)).replace(tzinfo=None),
+        )
+        now = datetime.now(timezone.utc)
+        return SearchResult(
+            status=ResultStatus.OK,
+            offers=[
+                Offer(
+                    legs=(leg,),
+                    price_minor=self._price_minor,
+                    currency="RUB",
+                    deep_link="https://carrier.test/book",
+                    source_id=self.id,
+                    tier=Tier.CONFIRMATION,
+                    observed_at=now,
+                    source_cached_at=now,
+                    expires_at=None,
+                    confidence=1.0,
+                    itinerary_hash="fake-carrier-hash",
+                    duration_minutes=self._duration_minutes,
+                )
+            ],
+            partial=False,
+        )
+
+    async def health_check(self) -> HealthStatus:
+        return HealthStatus(ok=True)
+
+
+async def _run_two_source_cycle(
+    db: aiosqlite.Connection, monkeypatch: pytest.MonkeyPatch, *, carrier_duration_minutes: int
+) -> FakeBot:
+    origin_id, dest_id = await _seed_places(db)
+    users_repo = UsersRepo(db)
+    user = await _disable_quiet_hours(db, await users_repo.get_or_create(555, is_admin=True))
+    routes_repo = RoutesRepo(db)
+    route = await routes_repo.create(
+        user_id=user.tg_user_id,
+        title="Екатеринбург → Сочи",
+        origin_place_id=origin_id,
+        dest_place_id=dest_id,
+        mode_pref="plane",
+        date_mode="fixed",
+        fixed_dates=["2026-09-29"],
+        window_start_offset_days=None,
+        window_length_days=None,
+        max_price=700000,
+        max_price_currency="RUB",
+    )
+
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+
+    async def fake_fetch_month(self, session, origin, dest, month, currency):
+        return payload["data"], True
+
+    monkeypatch.setattr(TravelpayoutsAdapter, "_fetch_month", fake_fetch_month)
+
+    registry = AdapterRegistry(
+        db, http_concurrency_global=2, http_concurrency_interactive=1, http_concurrency_per_source=1
+    )
+    registry.register(TravelpayoutsAdapter(token="fake", marker="fake"))
+    registry.register(_FakeCarrierAdapter(duration_minutes=carrier_duration_minutes))
+
+    bot = FakeBot()
+    await process_route(
+        route,
+        user=user,
+        registry=registry,
+        places_repo=PlacesRepo(db),
+        routes_repo=routes_repo,
+        observations_repo=ObservationsRepo(db),
+        notifier=Notifier(
+            bot,
+            NotificationsRepo(db),
+            JobsRepo(db),
+            DedupeGate(NotificationsRepo(db)),
+            cooldown_h=12,
+            daily_cap=3,
+            source_names={"travelpayouts": "Aviasales", "fake_carrier": "Авиакомпания"},
+        ),
+    )
+    return bot
+
+
+async def test_two_sources_for_one_flight_produce_a_single_notification(
+    db: aiosqlite.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The owner's actual complaint: one Пенза→Питер trip arriving as two messages a day,
+    once from the carrier and once from the aggregator. The aggregator says 4ч, the carrier
+    4ч10м — close enough to corroborate, so it is one card that hedges honestly."""
+    bot = await _run_two_source_cycle(db, monkeypatch, carrier_duration_minutes=250)
+
+    assert len(bot.sent) == 1
+    text = bot.sent[0][1]
+    assert "Вероятно один и тот же рейс" in text
+    assert "купить у Aviasales" in text and "купить у Авиакомпания" in text
+    assert "6 101 ₽" in text  # cheapest of the two, and the headline price
+    assert "07:35 → 11:45" in text  # the carrier's real times, not the aggregator's midnight
+
+    # both sources' prices are still recorded — grouping is a delivery decision, not a
+    # reason to lose one source's price history
+    async with db.execute("SELECT DISTINCT source_id FROM price_observations") as cur:
+        sources = sorted(row[0] for row in await cur.fetchall())
+    assert sources == ["fake_carrier", "travelpayouts"]
+
+
+async def test_durations_that_disagree_are_not_merged_into_one_flight(
+    db: aiosqlite.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 4ч against 1ч30м on the same route and date is evidence of two different trips, so
+    # the cheapest one is reported on its own rather than dressed up as a two-source deal.
+    bot = await _run_two_source_cycle(db, monkeypatch, carrier_duration_minutes=90)
+
+    assert len(bot.sent) == 1
+    text = bot.sent[0][1]
+    assert "рейс" not in text  # no grouping claim of any kind
+    assert "купить у Авиакомпания" not in text  # cheapest qualifying deal is the aggregator's
