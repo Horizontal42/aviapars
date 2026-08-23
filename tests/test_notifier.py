@@ -15,7 +15,14 @@ from aviapars.db.repo_notifications import NotificationsRepo
 from aviapars.domain.combiner import Itinerary
 from aviapars.domain.grouping import Match
 from aviapars.notify.dedupe import DedupeGate
-from aviapars.notify.notifier import Notifier, _local_day_start_utc, is_quiet_hours, next_quiet_hours_end
+from aviapars.notify.notifier import (
+    Notifier,
+    _local_day_start_utc,
+    digest_messages,
+    is_quiet_hours,
+    next_digest_delivery,
+    next_quiet_hours_end,
+)
 
 JOBS_TABLE = """
 CREATE TABLE jobs (
@@ -124,13 +131,16 @@ CREATE TABLE notifications_sent (
 """
 
 
-def _user(*, tz: str = "Europe/Moscow", start: str = "23:00", end: str = "08:00") -> User:
+def _user(
+    *, tz: str = "Europe/Moscow", start: str = "23:00", end: str = "08:00", digest_time: str | None = None
+) -> User:
     return User(
         tg_user_id=1,
         tz=tz,
         currency="RUB",
         quiet_hours_start=start,
         quiet_hours_end=end,
+        digest_time=digest_time,
         is_admin=False,
         created_at="",
     )
@@ -329,15 +339,15 @@ async def test_deliver_pending_does_not_double_record(db: aiosqlite.Connection) 
     pending = await jobs.due(now=next_quiet_hours_end(user, now) + timedelta(minutes=1), limit=10)
     assert len(pending) == 1
 
-    await notifier.deliver_pending(pending[0])  # must not raise
+    await notifier.deliver_pending(pending)  # must not raise
 
     assert bot.sent == [(user.tg_user_id, bot.sent[0][1])]
 
 
 async def test_digest_mode_defers_every_qualifying_deal_not_just_the_cheapest(db: aiosqlite.Connection) -> None:
-    # A digest route must behave like instant mode in every way except delivery timing: two
-    # distinct qualifying prices found the same day are two notifications, not one collapsed
-    # "best of the day" — this is *not* delivered outside quiet hours by design.
+    # A digest route stages every qualifying price of the day, not just the cheapest — the
+    # collapsing happens at *delivery* (one message), never by dropping a deal. Deferral
+    # applies outside quiet hours too, by design.
     repo = NotificationsRepo(db)
     jobs = JobsRepo(db)
     gate = DedupeGate(repo)
@@ -361,10 +371,9 @@ async def test_digest_mode_defers_every_qualifying_deal_not_just_the_cheapest(db
     pending = await jobs.due(now=due_at, limit=10)
     assert len(pending) == 2  # both deals queued, neither dropped in favour of the cheaper one
 
-    for job in pending:
-        await notifier.deliver_pending(job)
-    assert len(bot.sent) == 2
-    delivered_text = "\n".join(text for _, text in bot.sent)
+    await notifier.deliver_pending(pending)
+    assert len(bot.sent) == 1  # one message a day, not one per deal
+    delivered_text = bot.sent[0][1]
     assert "5 500 ₽" in delivered_text
     assert "4 000 ₽" in delivered_text
 
@@ -561,3 +570,94 @@ async def test_second_send_the_same_day_advances_the_cooldown(db: aiosqlite.Conn
     assert len(bot.sent) == 2
     async with db.execute("SELECT COUNT(*) FROM notifications_sent WHERE route_id = ?", (route.id,)) as cur:
         assert (await cur.fetchone())[0] == 2  # both sends recorded, not one swallowed
+
+
+async def test_a_days_digest_arrives_as_one_message_across_routes(db: aiosqlite.Connection) -> None:
+    """The owner's ask: one Telegram message a day, not one per deal. Each deal keeps its
+    own dedupe/cooldown/cap accounting and its own job — combining happens at delivery."""
+    repo = NotificationsRepo(db)
+    jobs = JobsRepo(db)
+    notifier = Notifier(_FakeBot(), repo, jobs, DedupeGate(repo), cooldown_h=12, daily_cap=5)
+    bot = notifier._bot
+    user = _user(start="23:00", end="08:00")
+    now = datetime(2026, 9, 18, 9, 0, tzinfo=timezone.utc)
+
+    for route_id, (price, digest_hash) in enumerate(
+        [(550000, "a"), (400000, "b"), (300000, "c")], start=1
+    ):
+        await notifier.send_deal(
+            user=user,
+            route=_route(route_id=route_id if route_id < 3 else 2, notification_mode="digest"),
+            itinerary=_itinerary(price_minor=price, itinerary_hash=digest_hash),
+            confirmed=True,
+            now=now,
+        )
+    assert bot.sent == []
+
+    pending = await jobs.due(now=next_quiet_hours_end(user, now) + timedelta(minutes=1), limit=10)
+    assert len(pending) == 3
+
+    delivered = await notifier.deliver_pending(pending)
+
+    assert len(bot.sent) == 1  # three deals across two routes, one message
+    assert sorted(delivered) == sorted(job.id for job in pending)
+    text = bot.sent[0][1]
+    for price in ("5 500 ₽", "4 000 ₽", "3 000 ₽"):
+        assert price in text
+    assert "Дайджест" in text
+    assert text.count("🔥") == 3  # three separate cards, not one merged block
+
+
+async def test_quiet_hours_deferrals_stay_one_message_each(db: aiosqlite.Connection) -> None:
+    # An `instant` route only ever defers because of quiet hours, and instant has to keep
+    # meaning "one deal, one notification" — those must not be swept into a digest.
+    repo = NotificationsRepo(db)
+    jobs = JobsRepo(db)
+    notifier = Notifier(_FakeBot(), repo, jobs, DedupeGate(repo), cooldown_h=12, daily_cap=5)
+    bot = notifier._bot
+    user = _user(start="00:00", end="23:59")  # always quiet, so instant deals defer
+    route = _route(notification_mode="instant")
+    now = datetime.now(timezone.utc)
+
+    await notifier.send_deal(
+        user=user, route=route, itinerary=_itinerary(price_minor=550000, itinerary_hash="a"), confirmed=True, now=now
+    )
+    await notifier.send_deal(
+        user=user, route=route, itinerary=_itinerary(price_minor=400000, itinerary_hash="b"), confirmed=True, now=now
+    )
+    pending = await jobs.due(now=next_quiet_hours_end(user, now) + timedelta(minutes=1), limit=10)
+
+    await notifier.deliver_pending(pending)
+
+    assert len(bot.sent) == 2
+    assert all("Дайджест" not in text for _, text in bot.sent)
+
+
+async def test_digest_splits_only_when_telegram_would_reject_it(db: aiosqlite.Connection) -> None:
+    # Telegram refuses anything over 4096 characters, and a digest that grew past it would
+    # fail as a whole and lose every deal in it.
+    short = ["карточка"] * 3
+    assert len(digest_messages(short)) == 1
+
+    big = ["x" * 1500] * 4
+    messages = digest_messages(big)
+    assert len(messages) == 2  # two cards each, nothing dropped
+    assert sum(m.count("x" * 1500) for m in messages) == 4
+    assert all(len(m) <= 4096 for m in messages)
+    assert "продолжение" in messages[1]
+
+
+def test_digest_time_overrides_quiet_hours_end_but_never_wakes_the_user() -> None:
+    now = datetime(2026, 9, 18, 9, 0, tzinfo=timezone.utc)  # 12:00 Moscow
+
+    default = _user()
+    assert next_digest_delivery(default, now) == next_quiet_hours_end(default, now)
+
+    evening = _user(digest_time="20:00")
+    landed = next_digest_delivery(evening, now).astimezone(ZoneInfo("Europe/Moscow"))
+    assert (landed.day, landed.hour, landed.minute) == (18, 20, 0)
+
+    # 03:00 sits inside 23:00-08:00 — quiet hours are the stronger promise, so it waits
+    middle_of_night = _user(digest_time="03:00")
+    clamped = next_digest_delivery(middle_of_night, now).astimezone(ZoneInfo("Europe/Moscow"))
+    assert (clamped.hour, clamped.minute) == (8, 0)

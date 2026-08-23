@@ -31,7 +31,8 @@ class UsersRepo:
     async def get(self, tg_user_id: int) -> User | None:
         async with self._db.execute(
             """
-            SELECT tg_user_id, tz, currency, quiet_hours_start, quiet_hours_end, is_admin, created_at
+            SELECT tg_user_id, tz, currency, quiet_hours_start, quiet_hours_end, digest_time,
+                   is_admin, created_at
             FROM users WHERE tg_user_id = ?
             """,
             (tg_user_id,),
@@ -45,9 +46,24 @@ class UsersRepo:
             currency=row[2],
             quiet_hours_start=row[3],
             quiet_hours_end=row[4],
-            is_admin=bool(row[5]),
-            created_at=row[6],
+            digest_time=row[5],
+            is_admin=bool(row[6]),
+            created_at=row[7],
         )
+
+    async def set_quiet_hours(self, tg_user_id: int, *, start: str, end: str) -> None:
+        await self._db.execute(
+            "UPDATE users SET quiet_hours_start = ?, quiet_hours_end = ? WHERE tg_user_id = ?",
+            (start, end, tg_user_id),
+        )
+        await self._db.commit()
+
+    async def set_digest_time(self, tg_user_id: int, value: str | None) -> None:
+        """None puts the digest back on quiet_hours_end — see migration 009."""
+        await self._db.execute(
+            "UPDATE users SET digest_time = ? WHERE tg_user_id = ?", (value, tg_user_id)
+        )
+        await self._db.commit()
 
     async def is_admin(self, tg_user_id: int, admin_tg_id: int) -> bool:
         return tg_user_id == admin_tg_id

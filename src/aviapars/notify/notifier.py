@@ -5,7 +5,7 @@ import hashlib
 import logging
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
-from typing import Protocol
+from typing import Protocol, Sequence
 from zoneinfo import ZoneInfo
 
 import aiosqlite
@@ -110,13 +110,19 @@ class Notifier:
             # for that race). Nothing to defer for a route that no longer exists.
             log.warning("route %s vanished before its deferred deal could be recorded", route.id)
             return False
+        digest = route.notification_mode == "digest"
         await self._jobs.enqueue(
             "notify",
             route_id=route.id,
-            run_after=next_quiet_hours_end(user, now),
+            run_after=next_digest_delivery(user, now) if digest else next_quiet_hours_end(user, now),
             payload={
                 "chat_id": user.tg_user_id,
                 "text": text,
+                # Which kind of deferral this was, because delivery treats them differently:
+                # digest deals for one chat are combined into a single message, while a deal
+                # merely waiting out quiet hours belongs to an `instant` route and stays its
+                # own message — "instant" has to keep meaning one deal, one notification.
+                "digest": digest,
             },
         )
         log.info(
@@ -203,13 +209,49 @@ class Notifier:
 
         return await self._send_immediate(user, route, itinerary, meta, text, now)
 
-    async def deliver_pending(self, job: Job) -> None:
-        """Called by the scheduler for due kind='notify' jobs — the delivery
-        half of a quiet-hours deferral from send_deal above. The notifications_sent
-        row was already written when the job was enqueued (see send_deal) — writing
-        it again here would violate dedupe_key's UNIQUE constraint."""
-        p = job.payload
-        await _send_with_retry(self._bot, p["chat_id"], p["text"])
+    async def deliver_pending(self, jobs: Sequence[Job]) -> list[int]:
+        """Delivery half of a deferral — every due kind='notify' job at once (§9).
+
+        Takes the whole due batch rather than one job because that is the only point
+        where a digest can be assembled: each qualifying deal is staged as its own job,
+        with its own dedupe/cooldown/cap accounting (which stays per-deal and unchanged),
+        and "one message a day" is a statement about delivery, not about which deals
+        qualify. Digest jobs are therefore grouped by chat here and sent as one message;
+        quiet-hours deferrals of `instant` routes stay one message each.
+
+        One message *per user*, not per route: a user watching three routes wants one
+        roundup, and each card already names its own route in its header. Cards are
+        ordered by route so a multi-route digest reads in blocks.
+
+        Returns the ids of the jobs whose content actually went out, so the caller can
+        mark exactly those done. The notifications_sent rows were already written when
+        the jobs were enqueued (see send_deal) — writing them again here would violate
+        dedupe_key's UNIQUE constraint.
+        """
+        delivered: list[int] = []
+        digests: dict[int, list[Job]] = {}
+        for job in jobs:
+            if job.payload.get("digest"):
+                digests.setdefault(int(job.payload["chat_id"]), []).append(job)
+                continue
+            try:
+                await _send_with_retry(self._bot, job.payload["chat_id"], job.payload["text"])
+            except Exception:
+                log.exception("notify job %s: delivery failed", job.id)
+                continue
+            delivered.append(job.id)
+
+        for chat_id, group in digests.items():
+            ordered = sorted(group, key=lambda j: (j.route_id or 0, j.id))
+            try:
+                for text in digest_messages([str(j.payload["text"]) for j in ordered]):
+                    await _send_with_retry(self._bot, chat_id, text)
+            except Exception:
+                log.exception("digest delivery to chat %s failed (%d deal(s))", chat_id, len(ordered))
+                continue
+            delivered.extend(j.id for j in ordered)
+            log.info("delivered digest to chat %s: %d deal(s) in one message", chat_id, len(ordered))
+        return delivered
 
 
 async def _send_with_retry(bot: TelegramSender, chat_id: int, text: str) -> None:
@@ -224,6 +266,49 @@ async def _send_with_retry(bot: TelegramSender, chat_id: int, text: str) -> None
     except TelegramRetryAfter as exc:
         await asyncio.sleep(exc.retry_after)
         await bot.send_message(chat_id, text)
+
+
+# Telegram rejects a message over 4096 characters outright, so a digest that grew past it
+# would fail as a whole and lose every deal in it. Split below the limit instead, with room
+# for the continuation header.
+DIGEST_MESSAGE_LIMIT = 3800
+_DIGEST_DIVIDER = "\n\n———\n\n"
+
+
+def digest_messages(cards: Sequence[str], *, limit: int = DIGEST_MESSAGE_LIMIT) -> list[str]:
+    """One message carrying every card, split only if Telegram's size limit forces it.
+
+    Cards are kept whole and divided by a rule rather than run together — the day's finds
+    are separate deals, not one merged card, and each already renders as its own block.
+    """
+    if not cards:
+        return []
+    chunks: list[list[str]] = [[]]
+    length = 0
+    for card in cards:
+        addition = len(card) + len(_DIGEST_DIVIDER)
+        if chunks[-1] and length + addition > limit:
+            chunks.append([])
+            length = 0
+        chunks[-1].append(card)
+        length += addition
+
+    total = len(cards)
+    messages: list[str] = []
+    for i, chunk in enumerate(chunks):
+        header = f"<b>📬 Дайджест</b> · {total} {_plural(total, 'находка', 'находки', 'находок')}"
+        if i:
+            header = "<b>📬 Дайджест</b> · продолжение"
+        messages.append(header + "\n\n" + _DIGEST_DIVIDER.join(chunk))
+    return messages
+
+
+def _plural(n: int, one: str, few: str, many: str) -> str:
+    if n % 10 == 1 and n % 100 != 11:
+        return one
+    if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+        return few
+    return many
 
 
 def _combined_hash(itinerary: Itinerary) -> str:
@@ -260,6 +345,27 @@ def is_quiet_hours(user: User, now_utc: datetime) -> bool:
     if start <= end:
         return start <= t < end
     return t >= start or t < end  # wraps midnight, e.g. 23:00-08:00
+
+
+def next_digest_delivery(user: User, now_utc: datetime) -> datetime:
+    """When this user's daily roundup should land.
+
+    `user.digest_time` unset keeps the original behaviour exactly — the digest rides the
+    end of quiet hours. Set, it is the next occurrence of that local time, *unless* that
+    instant falls inside the quiet window, in which case quiet hours win and the digest
+    waits for their end. "Do not disturb" is the stronger of the two promises, and a
+    digest is precisely the kind of message that can wait a few hours.
+    """
+    if not user.digest_time:
+        return next_quiet_hours_end(user, now_utc)
+    local = now_utc.astimezone(ZoneInfo(user.tz))
+    candidate = datetime.combine(local.date(), _parse_hhmm(user.digest_time), tzinfo=local.tzinfo)
+    if candidate <= local:
+        candidate += timedelta(days=1)
+    candidate_utc = candidate.astimezone(timezone.utc)
+    if is_quiet_hours(user, candidate_utc):
+        return next_quiet_hours_end(user, candidate_utc)
+    return candidate_utc
 
 
 def next_quiet_hours_end(user: User, now_utc: datetime) -> datetime:

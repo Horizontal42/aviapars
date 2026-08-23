@@ -113,13 +113,17 @@ async def _run_due_routes(
 
 
 async def _run_due_notify_jobs(now: datetime, jobs_repo: JobsRepo, notifier: Notifier) -> None:
-    for job in await jobs_repo.due(now=now):
-        if job.kind != "notify":
-            continue
+    """The whole due batch goes to the notifier in one call, not job by job: several deals
+    deferred to the same digest slot have to become one message, and that can only be
+    decided while looking at all of them together (notifier.deliver_pending)."""
+    jobs = [job for job in await jobs_repo.due(now=now) if job.kind == "notify"]
+    if not jobs:
+        return
+    for job in jobs:
         await jobs_repo.mark_running(job.id)
-        try:
-            await notifier.deliver_pending(job)
+    delivered = set(await notifier.deliver_pending(jobs))
+    for job in jobs:
+        if job.id in delivered:
             await jobs_repo.mark_done(job.id)
-        except Exception:
-            log.exception("notify job %s delivery failed", job.id)
+        else:
             await jobs_repo.mark_failed(job.id)

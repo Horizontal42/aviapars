@@ -11,6 +11,9 @@ class User:
     currency: str
     quiet_hours_start: str
     quiet_hours_end: str
+    # None = deliver the daily digest when quiet hours end, which is what it always did
+    # before the field existed. See migration 009 for why this is not quiet_hours_end.
+    digest_time: str | None
     is_admin: bool
     created_at: str
 
