@@ -450,7 +450,7 @@ def _grouped_itinerary(*, with_alternate: bool, price_minor: int = 500000) -> It
         duration_minutes=125,
         alternates=alternates,
         match=Match.LIKELY_SAME if alternates else None,
-        group_key="plane|1|2|2026-09-18|6321",
+        group_key="plane|1|2|2026-09-18",
     )
 
 
@@ -508,9 +508,9 @@ async def test_cooldown_keys_on_the_trip_not_on_which_sources_reported_it(db: ai
     assert len(bot.sent) == 1
 
 
-async def test_a_different_flight_on_the_same_day_still_notifies(db: aiosqlite.Connection) -> None:
-    # Suppression is per trip, not per date — a genuinely different flight found later
-    # the same day must still get through the cooldown gate.
+async def test_a_different_departure_date_still_notifies(db: aiosqlite.Connection) -> None:
+    # Suppression is per identity, not per route — another date in the same flexible
+    # window is a different thing to buy and must still get through the cooldown gate.
     repo = NotificationsRepo(db)
     notifier = Notifier(_FakeBot(), repo, JobsRepo(db), DedupeGate(repo), cooldown_h=12, daily_cap=3)
     bot = notifier._bot
@@ -518,13 +518,13 @@ async def test_a_different_flight_on_the_same_day_still_notifies(db: aiosqlite.C
     route = _route()
     now = datetime.now(timezone.utc)
 
-    other_flight = replace(_grouped_itinerary(with_alternate=False), group_key="plane|1|2|2026-09-18|6777")
+    other_date = replace(_grouped_itinerary(with_alternate=False), group_key="plane|1|2|2026-09-19")
 
     await notifier.send_deal(
         user=user, route=route, itinerary=_grouped_itinerary(with_alternate=False), confirmed=True, now=now
     )
     sent = await notifier.send_deal(
-        user=user, route=route, itinerary=other_flight, confirmed=True, now=now + timedelta(hours=1)
+        user=user, route=route, itinerary=other_date, confirmed=True, now=now + timedelta(hours=1)
     )
 
     assert sent is True

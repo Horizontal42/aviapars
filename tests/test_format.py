@@ -298,7 +298,7 @@ def _grouped(match: Match, *, alternate_price: int = 490000) -> Itinerary:
         duration_minutes=125,
         alternates=(alternate,),
         match=match,
-        group_key="plane|1|2|2026-09-01|515",
+        group_key="plane|1|2|2026-09-01",
     )
 
 

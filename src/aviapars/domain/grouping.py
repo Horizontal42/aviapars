@@ -222,25 +222,28 @@ def _weakest(verdicts: Sequence[Match | None]) -> Match:
 
 
 def _group_key(anchor: Offer) -> str:
-    """Stable identity for the *trip*, used by the notifier for cooldown/dedupe.
+    """Identity the notifier's cooldown/dedupe keys off: route, mode, departure date.
 
-    Deliberately not derived from who is in the group. Membership churns between
-    cycles — a source times out, a price disappears — and keying on it would make the
-    dedupe gate treat "Aeroflot + Aviasales" and "Aeroflot alone" as two different
-    things to notify about, which is exactly the duplicate this whole module exists to
-    remove. Keying on the flight number when one is known (and on route+date+stops
-    when nobody knows one) means the cooldown answers "have I already told them about
-    this trip today", which is what the owner actually asked for.
+    Coarser than the clustering above on purpose, and the two answer different
+    questions. Clustering asks "may I show these as one flight" and must not claim more
+    than the evidence supports. This asks "have I already told them about flying this
+    route on this day recently" — which is the user's own notion of one thing, and the
+    only formulation that survives how the data actually arrives.
 
-    Membership churn can still flip a group between the two forms — an unverified
-    date-level group that later gains a confirmation-tier anchor gets a flight-number
-    key. That costs at most one extra message per date per cooldown window, against
-    the alternative of suppressing a genuinely different flight found later that day.
+    Live evidence for the coarser key (route 1, 2026-08-23): the same 16.09 trip was
+    announced twice, once from a Travelpayouts row and once from Aeroflot — and those
+    two never appear in the same search at all, because per-date confirmation adapters
+    only probe a rotating slice of a 30-day window (§6) while batch sources see all of
+    it. Clustering cannot merge offers it never sees together; keying the cooldown on
+    the flight number would leave exactly the duplicate the owner complained about.
+
+    Cost, accepted: a genuinely different flight on the same date is suppressed for the
+    rest of the cooldown window. In practice one poll cycle already reports only the
+    cheapest qualifying itinerary (scheduler/worker._deals_to_send), so what is lost is
+    a second message about a day the user has just been told about.
     """
     first, last = anchor.legs[0], anchor.legs[-1]
-    flight = _flight_key(anchor)
-    identity = "+".join(flight) if flight else f"{len(anchor.legs)}legs"
     return (
         f"{first.mode.value}|{first.from_place.place_id}|{last.to_place.place_id}|"
-        f"{first.depart_local.date().isoformat()}|{identity}"
+        f"{first.depart_local.date().isoformat()}"
     )

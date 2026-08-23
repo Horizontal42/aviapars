@@ -161,13 +161,19 @@ def test_different_dates_and_stop_counts_stay_separate() -> None:
     assert len(group_offers([direct, via_hub, other_day])) == 3
 
 
-def test_group_key_survives_a_source_dropping_out() -> None:
-    """Cooldown identity is the trip, not the set of sources that reported it — a cycle
-    where Travelpayouts answers and Aeroflot times out must not read as a new deal."""
+def test_group_key_is_the_route_and_day_not_the_sources_that_reported_it() -> None:
+    """Cooldown identity has to survive both a source dropping out and the same trip
+    being seen by different tiers in different cycles — per-date confirmation adapters
+    probe a rotating slice of a wide window while batch sources see all of it, so the
+    aggregator's row and the carrier's price for one date routinely never meet in a
+    single search."""
     both = group_offers([_discovery(), _confirmation()])
-    aeroflot_only = group_offers([_confirmation()])
+    aggregator_only = group_offers([_discovery()])
+    carrier_only = group_offers([_confirmation()])
+    other_day = group_offers([_discovery(day=date(2026, 9, 15))])
 
-    assert both[0].key == aeroflot_only[0].key
+    assert both[0].key == aggregator_only[0].key == carrier_only[0].key
+    assert other_day[0].key != both[0].key
 
 
 def test_duration_tolerance_scales_with_trip_length() -> None:
