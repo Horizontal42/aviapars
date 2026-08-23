@@ -529,3 +529,35 @@ async def test_a_different_flight_on_the_same_day_still_notifies(db: aiosqlite.C
 
     assert sent is True
     assert len(bot.sent) == 2
+
+
+async def test_second_send_the_same_day_advances_the_cooldown(db: aiosqlite.Connection) -> None:
+    """Found live on route 1: the dedupe key used to end in the calendar date, so a second
+    legitimate send of one trip in a day (cooldown is 12h, shorter than a day) hit the
+    key's UNIQUE constraint, recorded nothing, and left the cooldown pinned to the first
+    send — every hourly poll afterwards passed the gate and queued the same deal again."""
+    repo = NotificationsRepo(db)
+    notifier = Notifier(_FakeBot(), repo, JobsRepo(db), DedupeGate(repo), cooldown_h=12, daily_cap=5)
+    bot = notifier._bot
+    user = _user(start="00:00", end="00:00")  # quiet hours off — this is about the gate
+    route = _route()
+    start = datetime(2026, 9, 18, 1, 0, tzinfo=timezone.utc)
+    itinerary = _grouped_itinerary(with_alternate=False)
+
+    assert await notifier.send_deal(user=user, route=route, itinerary=itinerary, confirmed=True, now=start) is True
+    assert (
+        await notifier.send_deal(
+            user=user, route=route, itinerary=itinerary, confirmed=True, now=start + timedelta(hours=13)
+        )
+        is True
+    )  # cooldown expired, same calendar day
+    assert (
+        await notifier.send_deal(
+            user=user, route=route, itinerary=itinerary, confirmed=True, now=start + timedelta(hours=14)
+        )
+        is False
+    )  # an hour after the second send — the cooldown has to have moved with it
+
+    assert len(bot.sent) == 2
+    async with db.execute("SELECT COUNT(*) FROM notifications_sent WHERE route_id = ?", (route.id,)) as cur:
+        assert (await cur.fetchone())[0] == 2  # both sends recorded, not one swallowed

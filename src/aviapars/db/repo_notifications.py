@@ -35,13 +35,17 @@ class NotificationsRepo:
         mode: str,
         depart_date: str,
         tier_at_send: str,
+        sent_at: datetime | None = None,
     ) -> None:
         # sent_at is passed explicitly (not the schema's `datetime('now')` default) so its
         # format matches every other timestamp this repo reads back with datetime.fromisoformat
         # and compares against Python-generated ISO strings elsewhere (§4 timestamps are UTC
         # instants everywhere) — SQLite's own datetime('now') uses a different, incompatible
         # string format (space separator, no offset) that silently breaks both.
-        sent_at = datetime.now(timezone.utc).isoformat()
+        # The caller's own clock when it has one: the notifier decides "may I send" and
+        # "record that I sent" against the same instant, and a row stamped from a second
+        # clock is a row the cooldown compares against something it never checked.
+        stamp = (sent_at or datetime.now(timezone.utc)).isoformat()
         await self._db.execute(
             """
             INSERT INTO notifications_sent
@@ -49,6 +53,6 @@ class NotificationsRepo:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(dedupe_key) DO NOTHING
             """,
-            (route_id, dedupe_key, itinerary_hash, price_minor, mode, depart_date, tier_at_send, sent_at),
+            (route_id, dedupe_key, itinerary_hash, price_minor, mode, depart_date, tier_at_send, stamp),
         )
         await self._db.commit()

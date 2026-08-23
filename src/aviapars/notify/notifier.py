@@ -68,7 +68,15 @@ class Notifier:
         depart_date = all_legs[0].depart_local.date().isoformat()
         mode = "+".join(dict.fromkeys(leg.mode.value for leg in all_legs))
         itinerary_hash = _combined_hash(itinerary)
-        dedupe_key = f"{route.id}:{itinerary_hash}:{now.date().isoformat()}"
+        # Per send, not per calendar day. Found live: the key used to end in `now.date()`,
+        # so the second legitimate send of one trip in a day (cooldown is 12h, shorter than
+        # a day) hit `ON CONFLICT DO NOTHING` and left no row — the cooldown never advanced
+        # past the *first* send, and every following poll re-passed can_send() and enqueued
+        # the same deal again. Route 1 had four identical queued digest jobs from four
+        # consecutive hourly polls this way. The gate that actually dedupes is DedupeGate,
+        # which reads these rows; the UNIQUE constraint's job is only to stop one send from
+        # being written twice.
+        dedupe_key = f"{route.id}:{itinerary_hash}:{now.isoformat(timespec='seconds')}"
         tier = "confirmation" if confirmed else "discovery"
         return _DealMeta(
             itinerary_hash=itinerary_hash,
@@ -94,6 +102,7 @@ class Notifier:
                 mode=meta.mode,
                 depart_date=meta.depart_date,
                 tier_at_send=meta.tier,
+                sent_at=now,
             )
         except aiosqlite.IntegrityError:
             # route_id's FK — the route was deleted between crosses_threshold() finding
@@ -116,7 +125,9 @@ class Notifier:
         )
         return False
 
-    async def _send_immediate(self, user: User, route: Route, itinerary: Itinerary, meta: _DealMeta, text: str) -> bool:
+    async def _send_immediate(
+        self, user: User, route: Route, itinerary: Itinerary, meta: _DealMeta, text: str, now: datetime
+    ) -> bool:
         await _send_with_retry(self._bot, user.tg_user_id, text)
         try:
             await self._repo.record(
@@ -127,6 +138,7 @@ class Notifier:
                 mode=meta.mode,
                 depart_date=meta.depart_date,
                 tier_at_send=meta.tier,
+                sent_at=now,
             )
         except aiosqlite.IntegrityError:
             # Same race as above, but the message is already sent by this point — recording
@@ -189,7 +201,7 @@ class Notifier:
         if is_quiet_hours(user, now) or route.notification_mode == "digest":
             return await self._defer_deal(user, route, itinerary, meta, text, now)
 
-        return await self._send_immediate(user, route, itinerary, meta, text)
+        return await self._send_immediate(user, route, itinerary, meta, text, now)
 
     async def deliver_pending(self, job: Job) -> None:
         """Called by the scheduler for due kind='notify' jobs — the delivery
