@@ -184,10 +184,8 @@ class AeroflotDirectAdapter:
 
             cheapest = min(offer_options, key=lambda o: Decimal(o["price_total_amount"]))
 
-            legs: list[Leg] = []
-            for leg in legs_raw:
-                for seg in leg.get("segments") or []:
-                    legs.append(self._parse_segment(seg, q))
+            segments = [seg for leg in legs_raw for seg in (leg.get("segments") or [])]
+            legs = [self._parse_segment(seg, q, first=i == 0, last=i == len(segments) - 1) for i, seg in enumerate(segments)]
             if not legs:
                 continue
 
@@ -215,7 +213,7 @@ class AeroflotDirectAdapter:
             )
         return offers
 
-    def _parse_segment(self, seg: dict[str, Any], q: SearchQuery) -> Leg:
+    def _parse_segment(self, seg: dict[str, Any], q: SearchQuery, *, first: bool, last: bool) -> Leg:
         dep_local = datetime.fromisoformat(seg["departure"])
         dep_utc = _as_utc(datetime.fromisoformat(seg["departure_utc"]))
         arr_utc = None
@@ -227,8 +225,8 @@ class AeroflotDirectAdapter:
 
         return Leg(
             mode=Mode.PLANE,
-            from_place=q.origin,
-            to_place=q.dest,
+            from_place=q.origin if first else _segment_place(seg.get("origin")),
+            to_place=q.dest if last else _segment_place(seg.get("destination")),
             depart_utc=dep_utc,
             depart_local=dep_local,
             carrier=seg.get("operating_airline_name") or seg.get("marketing_airline_name"),
@@ -252,6 +250,30 @@ class AeroflotDirectAdapter:
             return HealthStatus(ok=result.status in (ResultStatus.OK, ResultStatus.EMPTY))
         except Exception as exc:  # health_check should never crash the caller (§5 rule 1 spirit)
             return HealthStatus(ok=False, detail=str(exc))
+
+
+def _segment_place(raw: dict[str, Any] | None) -> PlaceRef:
+    """The airport a *connection* passes through, from the segment's own payload.
+
+    Every segment used to be labelled with the query's own origin and destination, so a
+    LED→SVO→AER itinerary rendered as two identical "LED → AER" legs — harmless-looking
+    until the card started naming the transfer point, at which point it confidently
+    announced a layover in Сочи that happens in Москва.
+
+    Only ever used for the inner endpoints. The outer two keep the query's PlaceRef
+    because that one carries the real `place_id`, which grouping and the cooldown key
+    are built from (domain/grouping._shape) — a synthetic id there would stop an
+    Aeroflot offer from ever matching another source's for the same route.
+    """
+    raw = raw or {}
+    return PlaceRef(
+        place_id=0,  # not a row in `places`: a hub airport is not necessarily tracked there
+        iata=raw.get("airport_code"),
+        yandex_code=None,
+        rzd_code=None,
+        city_id=None,
+        name_ru=raw.get("city_name") or raw.get("airport_name"),
+    )
 
 
 def _total_duration_minutes(legs: list[Leg]) -> int | None:

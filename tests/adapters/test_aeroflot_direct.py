@@ -27,8 +27,9 @@ def _query() -> SearchQuery:
 def test_parse_offers_from_real_response() -> None:
     adapter = AeroflotDirectAdapter()
     payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    query = _query()
 
-    offers = adapter._parse_offers(payload, _query(), date(2026, 9, 10))
+    offers = adapter._parse_offers(payload, query, date(2026, 9, 10))
 
     assert len(offers) == 2
     direct = offers[0]
@@ -50,6 +51,16 @@ def test_parse_offers_from_real_response() -> None:
     assert len(via_moscow.legs) == 2
     assert via_moscow.legs[0].carrier == "Россия"
     assert via_moscow.legs[1].carrier == "Аэрофлот"
+    # regression: every segment used to be stamped with the query's own origin/destination,
+    # so this read as two identical LED → AER legs — and once the card started naming the
+    # transfer point it announced a layover in Сочи for a connection through Москва.
+    assert via_moscow.legs[0].to_place.iata == "SVO"
+    assert via_moscow.legs[1].from_place.iata == "SVO"
+    assert via_moscow.legs[0].to_place.name_ru == "Москва"
+    # the outer endpoints keep the query's PlaceRef, whose real place_id the grouping key
+    # is built from — a synthetic id there would break matching against other sources
+    assert via_moscow.legs[0].from_place == query.origin
+    assert via_moscow.legs[1].to_place == query.dest
 
 
 def test_offers_carry_duration_and_local_arrival() -> None:
