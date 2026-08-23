@@ -33,7 +33,7 @@ from aviapars.telegram.handlers.add import on_origin_text as add_on_origin_text
 from aviapars.telegram.handlers.add import on_threshold_text
 from aviapars.telegram.bot import create_dispatcher
 from aviapars.telegram.keyboards import MenuAction, RouteAction, SearchShowAll, SearchTrack
-from aviapars.telegram.screen import Screen, screen_for
+from aviapars.telegram.screen import SCREEN_KEY, Screen, screen_for
 from aviapars.telegram.states import AddRoute, EditRoute, SearchFlow
 
 from tests.conftest import DummyRegistry, FakeScreenBot, make_state, make_text_message
@@ -607,6 +607,122 @@ async def test_search_track_bridges_into_add_threshold_step() -> None:
 
     assert await state.get_state() == AddRoute.threshold.state
     assert any("Ниже какой цены" in t for t in bot.all_shown)
+
+
+# --- full user journeys: menu screen survives a deal-notification burst -----
+#
+# Regression coverage for two bugs reported live: a typed /menu right after the
+# scheduler had fired a batch of deal alerts appeared to "eat" the command and
+# show nothing. Root causes (see screen.py): (1) TelegramRetryAfter, Telegram's
+# per-chat flood control tripped by the burst, wasn't caught anywhere and blew
+# up the render silently; (2) even when the render succeeded, it edited the old
+# anchor message the burst had buried, which is invisible from the chat's
+# bottom. These tests drive the real handlers end to end, the way an actual
+# Telegram session would.
+
+
+async def test_menu_after_notification_burst_gets_a_fresh_message(db: aiosqlite.Connection) -> None:
+    bot = FakeScreenBot()
+    state = make_state(bot)
+
+    start_msg = make_text_message(CHAT_ID, "/start", bot, message_id=1)
+    object.__setattr__(start_msg, "from_user", TgUser(id=USER_ID, is_bot=False, first_name="U"))
+    await start_handlers.cmd_start(start_msg, state, db)
+
+    menu_msg = make_text_message(CHAT_ID, "/menu", bot, message_id=2)
+    object.__setattr__(menu_msg, "from_user", TgUser(id=USER_ID, is_bot=False, first_name="U"))
+    await menu_handlers.cmd_menu(menu_msg, state)
+
+    anchor = (await state.get_data())[SCREEN_KEY]
+    assert anchor is not None
+    edits_so_far = len(bot.edited)
+    sends_so_far = len(bot.sent)
+
+    # The scheduler's Notifier sends deal alerts straight to the chat, outside of
+    # Screen entirely (notify/notifier.py) — a realistic burst after the menu opened.
+    for i in range(15):
+        await bot.send_message(chat_id=CHAT_ID, text=f"🔥 Дело #{i}: цена упала")
+
+    # The user, looking at the bottom of the chat where nothing changed, types /menu
+    # again — this must not silently edit the now-buried anchor.
+    menu_msg_2 = make_text_message(CHAT_ID, "/menu", bot, message_id=anchor + 16)
+    object.__setattr__(menu_msg_2, "from_user", TgUser(id=USER_ID, is_bot=False, first_name="U"))
+    await menu_handlers.cmd_menu(menu_msg_2, state)
+
+    assert len(bot.edited) == edits_so_far  # no invisible edit to the buried anchor
+    assert len(bot.sent) == sends_so_far + 15 + 1  # the burst itself, plus the fresh menu
+    assert "Главное меню" in bot.sent[-1][1]
+    new_anchor = (await state.get_data())[SCREEN_KEY]
+    assert new_anchor != anchor  # re-anchored on the fresh message
+
+
+async def test_menu_shortly_after_a_couple_messages_still_edits_in_place(db: aiosqlite.Connection) -> None:
+    """Contrast case: a handful of intervening messages must not force a fresh
+    message on every /menu tap — only a real burst that buries the anchor should."""
+    bot = FakeScreenBot()
+    state = make_state(bot)
+
+    start_msg = make_text_message(CHAT_ID, "/start", bot, message_id=1)
+    object.__setattr__(start_msg, "from_user", TgUser(id=USER_ID, is_bot=False, first_name="U"))
+    await start_handlers.cmd_start(start_msg, state, db)
+
+    menu_msg = make_text_message(CHAT_ID, "/menu", bot, message_id=2)
+    object.__setattr__(menu_msg, "from_user", TgUser(id=USER_ID, is_bot=False, first_name="U"))
+    await menu_handlers.cmd_menu(menu_msg, state)
+    anchor = (await state.get_data())[SCREEN_KEY]
+
+    await bot.send_message(chat_id=CHAT_ID, text="🔥 Дело: цена упала")  # just one notification
+
+    menu_msg_2 = make_text_message(CHAT_ID, "/menu", bot, message_id=anchor + 2)
+    object.__setattr__(menu_msg_2, "from_user", TgUser(id=USER_ID, is_bot=False, first_name="U"))
+    sends_before = len(bot.sent)
+    await menu_handlers.cmd_menu(menu_msg_2, state)
+
+    assert len(bot.sent) == sends_before  # still an edit, not a fresh message
+    assert bot.edited[-1][1] == anchor
+
+
+async def test_notify_toggle_button_edits_the_tapped_message_regardless_of_burst_size(
+    db: aiosqlite.Connection,
+) -> None:
+    """A button tap re-anchors on the message actually tapped (screen_for's
+    CallbackQuery branch) — unlike a typed command, it is never "buried" by a
+    burst, since the user is looking straight at the message they just tapped."""
+    route_id = await make_route(db)
+    bot = FakeScreenBot()
+
+    for i in range(20):  # a burst far bigger than the typed-command staleness threshold
+        await bot.send_message(chat_id=CHAT_ID, text=f"🔥 Дело #{i}")
+
+    tapped_message = make_text_message(CHAT_ID, "card", bot, message_id=99)
+    query = CallbackQuery(
+        id="q1",
+        from_user=TgUser(id=USER_ID, is_bot=False, first_name="U"),
+        chat_instance="ci",
+        data=f"r:notify:{route_id}",
+        message=tapped_message,
+    )
+    query.as_(bot)  # type: ignore[arg-type]
+    object.__setattr__(query, "answer", _noop_answer)
+
+    state = make_state(bot)
+    notifications_repo = NotificationsRepo(db)
+    jobs_repo = JobsRepo(db)
+    notifier = Notifier(
+        bot,  # type: ignore[arg-type]
+        notifications_repo,
+        jobs_repo,
+        DedupeGate(notifications_repo),
+        cooldown_h=12,
+        daily_cap=3,
+    )
+    await routes_handlers.on_route_action(
+        query, RouteAction(action="notify", route_id=route_id), state, db, DummyRegistry(), notifier  # type: ignore[arg-type]
+    )
+
+    assert bot.edited[-1][1] == 99  # edited the exact message the user tapped, burst or not
+    route = await RoutesRepo(db).get(route_id)
+    assert route is not None and route.notification_mode == "digest"
 
 
 async def test_search_track_stale_index_shows_alert_not_crash() -> None:
