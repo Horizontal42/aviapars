@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 import aiosqlite
 import pytest
+from aiogram.exceptions import TelegramRetryAfter
 
 from aviapars.adapters.base import Leg, Mode, Offer, PlaceRef, Tier
 from aviapars.db.models import Route, User
@@ -90,6 +91,21 @@ class _FakeBot:
     async def send_message(self, chat_id: int, text: str) -> object:
         self.sent.append((chat_id, text))
         return object()
+
+
+class _FloodOnceBot(_FakeBot):
+    """Raises TelegramRetryAfter on the first send only — mimics Telegram's per-chat flood
+    control right after a burst of earlier deal notifications into the same chat."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._raised = False
+
+    async def send_message(self, chat_id: int, text: str) -> object:
+        if not self._raised:
+            self._raised = True
+            raise TelegramRetryAfter(method=None, message="flood", retry_after=0)  # type: ignore[arg-type]
+        return await super().send_message(chat_id, text)
 
 MIGRATION_TABLES = """
 CREATE TABLE notifications_sent (
@@ -363,6 +379,27 @@ async def test_instant_mode_still_sends_immediately_outside_quiet_hours(db: aios
     user = _user(start="23:00", end="08:00")
     route = _route(notification_mode="instant")
     now = datetime(2026, 9, 18, 9, 0, tzinfo=timezone.utc)  # 12:00 Moscow
+
+    sent = await notifier.send_deal(user=user, route=route, itinerary=_itinerary(), confirmed=True, now=now)
+    assert sent is True
+    assert len(bot.sent) == 1
+
+
+async def test_send_deal_retries_once_after_flood_control(db: aiosqlite.Connection) -> None:
+    # TelegramRetryAfter is a sibling of TelegramBadRequest, not a subclass — right after a
+    # burst of earlier deal notifications into the same chat, the very next send can trip
+    # Telegram's per-chat flood window. Without a retry, this deal was silently dropped: the
+    # exception propagated past send_deal, the scheduler tick's outer except swallowed it and
+    # logged, and record() below never ran — so the deal wasn't even queued for a later poll.
+    repo = NotificationsRepo(db)
+    jobs = JobsRepo(db)
+    gate = DedupeGate(repo)
+    bot = _FloodOnceBot()
+    notifier = Notifier(bot, repo, jobs, gate, cooldown_h=12, daily_cap=3)
+
+    user = _user(start="23:00", end="08:00")
+    route = _route(notification_mode="instant")
+    now = datetime(2026, 9, 18, 9, 0, tzinfo=timezone.utc)  # 12:00 Moscow, outside quiet hours
 
     sent = await notifier.send_deal(user=user, route=route, itinerary=_itinerary(), confirmed=True, now=now)
     assert sent is True

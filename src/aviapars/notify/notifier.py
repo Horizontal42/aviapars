@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ from typing import Protocol
 from zoneinfo import ZoneInfo
 
 import aiosqlite
+from aiogram.exceptions import TelegramRetryAfter
 
 from aviapars.db.models import Route, User
 from aviapars.db.repo_jobs import Job, JobsRepo
@@ -115,7 +117,7 @@ class Notifier:
         return False
 
     async def _send_immediate(self, user: User, route: Route, itinerary: Itinerary, meta: _DealMeta, text: str) -> bool:
-        await self._bot.send_message(user.tg_user_id, text)
+        await _send_with_retry(self._bot, user.tg_user_id, text)
         try:
             await self._repo.record(
                 route_id=route.id,
@@ -195,7 +197,21 @@ class Notifier:
         row was already written when the job was enqueued (see send_deal) — writing
         it again here would violate dedupe_key's UNIQUE constraint."""
         p = job.payload
-        await self._bot.send_message(p["chat_id"], p["text"])
+        await _send_with_retry(self._bot, p["chat_id"], p["text"])
+
+
+async def _send_with_retry(bot: TelegramSender, chat_id: int, text: str) -> None:
+    """One retry after Telegram's flood wait — a burst of deals into the same chat routinely
+    trips per-chat flood control on the very next send. TelegramRetryAfter is a sibling of
+    TelegramBadRequest, not a subclass, so an uncaught one here used to fall straight through
+    to the scheduler tick's outer `except Exception: log.exception(...)`, silently dropping
+    the deal (record() below never runs, so it just waits for the next poll cycle instead of
+    delivering now — see screen.py's Screen for the same fix on the menu-render side)."""
+    try:
+        await bot.send_message(chat_id, text)
+    except TelegramRetryAfter as exc:
+        await asyncio.sleep(exc.retry_after)
+        await bot.send_message(chat_id, text)
 
 
 def _combined_hash(itinerary: Itinerary) -> str:
