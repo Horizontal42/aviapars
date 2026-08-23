@@ -41,6 +41,15 @@ class EditRoute(StatesGroup):
     interval = State()
 
 
+class EditSettings(StatesGroup):
+    """§9 delivery preferences, typed as free text: when to stay quiet, and when
+    the daily digest should land. Separate states because the two parse
+    differently — a range against a single time."""
+
+    quiet_hours = State()
+    digest_time = State()
+
+
 class SearchFlow(StatesGroup):
     """§10 /search — one-shot interactive search, no route saved unless the
     user taps "Отслеживать". Same step order as AddRoute up to the dates

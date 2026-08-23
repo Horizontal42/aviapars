@@ -28,13 +28,14 @@ from aviapars.telegram.handlers import menu as menu_handlers
 from aviapars.telegram.handlers import routes as routes_handlers
 from aviapars.telegram.handlers import search as search_handlers
 from aviapars.telegram.handlers import start as start_handlers
+from aviapars.telegram.handlers import settings as settings_handlers
 from aviapars.telegram.handlers import status as status_handlers
 from aviapars.telegram.handlers.add import on_origin_text as add_on_origin_text
 from aviapars.telegram.handlers.add import on_threshold_text
 from aviapars.telegram.bot import create_dispatcher
 from aviapars.telegram.keyboards import MenuAction, RouteAction, SearchShowAll, SearchTrack
 from aviapars.telegram.screen import SCREEN_KEY, Screen, screen_for
-from aviapars.telegram.states import AddRoute, EditRoute, SearchFlow
+from aviapars.telegram.states import AddRoute, EditRoute, EditSettings, SearchFlow
 
 from tests.conftest import DummyRegistry, FakeScreenBot, make_state, make_text_message
 
@@ -732,3 +733,73 @@ async def test_search_track_stale_index_shows_alert_not_crash() -> None:
 
     await search_handlers.on_search_track(query, SearchTrack(idx=99), state)  # must not raise
     assert await state.get_state() == SearchFlow.results.state  # untouched — the bridge refused
+
+
+# --- /settings: quiet hours and digest time ---------------------------------
+
+
+async def test_settings_screen_shows_current_delivery_preferences(db: aiosqlite.Connection) -> None:
+    await UsersRepo(db).get_or_create(USER_ID)
+    bot = FakeScreenBot()
+    state = make_state(bot)
+    message = make_text_message(CHAT_ID, "/settings", bot)
+    message.as_(bot)
+    object.__setattr__(message, "from_user", TgUser(id=USER_ID, is_bot=False, first_name="U"))
+
+    await settings_handlers.cmd_settings(message, state, db)
+
+    shown = bot.all_shown[-1]
+    assert "23:00–08:00" in shown  # schema defaults
+    assert "конец тихих часов" in shown  # digest_time unset == the old behaviour
+
+
+async def test_digest_time_can_be_set_and_reset(db: aiosqlite.Connection) -> None:
+    users = UsersRepo(db)
+    await users.get_or_create(USER_ID)
+    bot = FakeScreenBot()
+    state = make_state(bot)
+    await state.set_state(EditSettings.digest_time)
+
+    message = make_text_message(CHAT_ID, "9:30", bot)
+    message.as_(bot)
+    object.__setattr__(message, "from_user", TgUser(id=USER_ID, is_bot=False, first_name="U"))
+    await settings_handlers.on_digest_time_text(message, state, db)
+
+    user = await users.get(USER_ID)
+    assert user is not None and user.digest_time == "09:30"  # normalised, typed as "9:30"
+    assert await state.get_state() is None
+
+    await state.set_state(EditSettings.digest_time)
+    reset = make_text_message(CHAT_ID, "-", bot)
+    reset.as_(bot)
+    object.__setattr__(reset, "from_user", TgUser(id=USER_ID, is_bot=False, first_name="U"))
+    await settings_handlers.on_digest_time_text(reset, state, db)
+
+    user = await users.get(USER_ID)
+    assert user is not None and user.digest_time is None
+
+
+async def test_quiet_hours_edit_rejects_junk_without_changing_anything(db: aiosqlite.Connection) -> None:
+    users = UsersRepo(db)
+    await users.get_or_create(USER_ID)
+    bot = FakeScreenBot()
+    state = make_state(bot)
+    await state.set_state(EditSettings.quiet_hours)
+
+    junk = make_text_message(CHAT_ID, "ночью", bot)
+    junk.as_(bot)
+    object.__setattr__(junk, "from_user", TgUser(id=USER_ID, is_bot=False, first_name="U"))
+    await settings_handlers.on_quiet_hours_text(junk, state, db)
+
+    assert "⚠️" in bot.all_shown[-1]
+    assert await state.get_state() == EditSettings.quiet_hours.state  # still waiting
+    user = await users.get(USER_ID)
+    assert user is not None and (user.quiet_hours_start, user.quiet_hours_end) == ("23:00", "08:00")
+
+    good = make_text_message(CHAT_ID, "22:00 - 7:15", bot)
+    good.as_(bot)
+    object.__setattr__(good, "from_user", TgUser(id=USER_ID, is_bot=False, first_name="U"))
+    await settings_handlers.on_quiet_hours_text(good, state, db)
+
+    user = await users.get(USER_ID)
+    assert user is not None and (user.quiet_hours_start, user.quiet_hours_end) == ("22:00", "07:15")

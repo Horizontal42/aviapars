@@ -14,7 +14,7 @@ class MenuAction(CallbackData, prefix="mn"):
     router (`handlers/menu.py`) so «☰ Меню» works from inside any wizard step,
     not only from screens that happen to be stateless."""
 
-    action: str  # root|add|routes|search|status|help
+    action: str  # root|add|routes|search|status|settings|help
 
 
 class DatePick(CallbackData, prefix="dt"):
@@ -31,6 +31,10 @@ class ModePick(CallbackData, prefix="md"):
 
 class NotifyModePick(CallbackData, prefix="nm"):
     value: str  # instant|digest
+
+
+class SettingsAction(CallbackData, prefix="cfg"):
+    action: str  # root|quiet|digest
 
 
 class ThresholdScopePick(CallbackData, prefix="ts"):
@@ -71,7 +75,17 @@ def main_menu_kb() -> InlineKeyboardMarkup:
     builder.button(text="📋 Мои маршруты", callback_data=MenuAction(action="routes").pack())
     builder.button(text="🔎 Разовый поиск", callback_data=MenuAction(action="search").pack())
     builder.button(text="📊 Источники", callback_data=MenuAction(action="status").pack())
+    builder.button(text="⚙️ Настройки", callback_data=MenuAction(action="settings").pack())
     builder.button(text="❓ Помощь", callback_data=MenuAction(action="help").pack())
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def settings_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🌙 Тихие часы", callback_data=SettingsAction(action="quiet").pack())
+    builder.button(text="📬 Время дайджеста", callback_data=SettingsAction(action="digest").pack())
+    _menu_button(builder)
     builder.adjust(1)
     return builder.as_markup()
 

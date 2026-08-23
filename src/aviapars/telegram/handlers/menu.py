@@ -9,7 +9,7 @@ from aiogram.types import CallbackQuery, Message
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.config import settings
 from aviapars.telegram.format import screen_text
-from aviapars.telegram.handlers import add, routes, search, status
+from aviapars.telegram.handlers import add, routes, search, settings as settings_handlers, status
 from aviapars.telegram.keyboards import MenuAction, main_menu_kb
 from aviapars.telegram.screen import Screen, screen_for
 
@@ -36,12 +36,13 @@ HELP_TEXT = screen_text(
     "➕ <b>Новый маршрут</b> — слежу за ценой в фоне и пишу, когда она упадёт ниже порога.\n"
     "📋 <b>Мои маршруты</b> — пауза, проверка сейчас, интервал, удаление.\n"
     "🔎 <b>Разовый поиск</b> — показываю варианты прямо сейчас, ничего не сохраняя.\n"
-    "📊 <b>Источники</b> — какие источники цен сейчас отвечают.",
+    "📊 <b>Источники</b> — какие источники цен сейчас отвечают.\n"
+    "⚙️ <b>Настройки</b> — тихие часы и время, когда приходит дайджест.",
     "<b>Даты.</b> Точная, ±3 дня вокруг опорной, диапазон «с … по …» или окно на N дней вперёд. "
     "Точную дату проверяю целиком; широкое окно фоновый опрос обходит по частям — каждый цикл новый кусок.",
     "<b>Цены.</b> Часть источников отдаёт кэш агрегатора — такие варианты помечены «⚠️ не подтверждено». "
     "Остальные спрашивают перевозчика напрямую, это «✅ подтверждено».",
-    "То же самое командами: /add, /routes, /search, /status, /menu.",
+    "То же самое командами: /add, /routes, /search, /status, /settings, /menu.",
 )
 
 _UNMATCHED_TEXT = screen_text(
@@ -98,6 +99,8 @@ async def on_menu_action(
         await routes.render_routes(screen, query.from_user.id, db)
     elif callback_data.action == "status":
         await status.render_status(screen, db, registry, is_admin=query.from_user.id == settings.admin_tg_id)
+    elif callback_data.action == "settings":
+        await settings_handlers.render_settings(screen, query.from_user.id, db)
     elif callback_data.action == "help":
         await screen.show(HELP_TEXT, reply_markup=main_menu_kb())
     else:
