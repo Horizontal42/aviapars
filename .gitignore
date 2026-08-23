@@ -6,6 +6,7 @@ bugs.md
 llm_context*
 TASKS.md
 docs/superpowers/
+docs/devops/
 plans/
 
 .venv/
@@ -33,3 +34,12 @@ data/places_seed.sqlite
 /*_resp.json
 /*_test_out.txt
 /solve_err.txt
+
+# private SSH keys should never live in the repo (real key is at ~/.ssh/, outside it) —
+# this is a safety net, not the actual storage location
+id_rsa
+id_ed25519
+*_ed25519
+*.pem
+*.key
+!*.pub
