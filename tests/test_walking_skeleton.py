@@ -533,7 +533,7 @@ async def test_two_sources_for_one_date_produce_a_single_notification(
     assert "купить у Aviasales" in text and "купить у Авиакомпания" in text
     assert "6 101 ₽" in text  # cheapest of the two, and the headline price
     # the carrier's real clock times and duration, not the aggregator's midnight placeholder
-    assert "🕑 вылет 07:35 · прилёт 11:45 · в пути 4ч 10м" in text
+    assert "🕑 вылет 07:35 · прибытие 11:45 · в пути 4ч 10м" in text
 
     # both sources' prices are still recorded — grouping is a delivery decision, not a
     # reason to lose one source's price history

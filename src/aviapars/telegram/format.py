@@ -15,6 +15,15 @@ MODE_EMOJI: dict[Mode, str] = {
     Mode.TRAIN: "🚂",
 }
 
+# Nominative and genitive («вылет 07:35» / «время вылета источник не знает»). Split by mode
+# because «вылет»/«прилёт» are aircraft words: a train departs and arrives, and Russian rail
+# says «отправление»/«прибытие» — what is actually printed on an RZD ticket and on station
+# boards. Arrival is one word for both modes, so it isn't in the table.
+_DEPART_LABEL: dict[Mode, tuple[str, str]] = {
+    Mode.PLANE: ("вылет", "вылета"),
+    Mode.TRAIN: ("отправление", "отправления"),
+}
+
 
 def screen_text(title: str, *blocks: str) -> str:
     """Every screen the bot draws has the same shape: a bold title, then
@@ -305,19 +314,22 @@ def _journey_block(legs: list[Leg], itinerary: Itinerary) -> list[str]:
     lines: list[str] = []
     for i, leg in enumerate(legs):
         if i:
-            lines.append(_layover_line(legs[i - 1], leg))
+            # blank lines on both sides: the transfer is the seam between two flights, and
+            # run into them it read as just another detail line of the leg above it
+            lines += ["", _layover_line(legs[i - 1], leg), ""]
         lines.append(f"{MODE_EMOJI[leg.mode]} {place_label(leg.from_place)} → {place_label(leg.to_place)}")
 
         duration = leg_duration_minutes(leg)
         if duration is None and len(legs) == 1:
             duration = itinerary.duration_minutes
+        departure, departure_genitive = _DEPART_LABEL[leg.mode]
         bits: list[str] = []
         if leg.time_precision == "exact":
-            bits.append(f"вылет {leg.depart_local.strftime('%H:%M')}")
+            bits.append(f"{departure} {leg.depart_local.strftime('%H:%M')}")
             if leg.arrive_local is not None:
-                bits.append(f"прилёт {leg.arrive_local.strftime('%H:%M')}")
+                bits.append(f"прибытие {leg.arrive_local.strftime('%H:%M')}")
         else:
-            bits.append("время вылета источник не знает")
+            bits.append(f"время {departure_genitive} источник не знает")
         bits.append(f"в пути {_describe_duration(duration)}")
         lines.append("🕑 " + " · ".join(bits))
 
@@ -326,7 +338,7 @@ def _journey_block(legs: list[Leg], itinerary: Itinerary) -> list[str]:
             lines.append(f"🎫 {carrier_bits}")
 
     if len(legs) > 1:
-        lines.append(f"⏱ Всего в пути {_describe_duration(itinerary.duration_minutes)}")
+        lines += ["", f"⏱ Всего в пути {_describe_duration(itinerary.duration_minutes)}"]
     return lines
 
 

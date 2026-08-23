@@ -232,7 +232,7 @@ def test_card_labels_departure_arrival_and_duration() -> None:
 
     card = format_deal_card("LED → MOW", itinerary, threshold_minor=600000, confirmed=True)
 
-    assert "🕑 вылет 12:00 · прилёт 14:25 · в пути 2ч 25м" in card
+    assert "🕑 вылет 12:00 · прибытие 14:25 · в пути 2ч 25м" in card
     assert "🎫 Победа · рейс 515" in card
 
 
@@ -247,7 +247,7 @@ def test_card_still_shows_duration_when_the_arrival_clock_is_unknown() -> None:
     card = format_deal_card("LED → MOW", itinerary, threshold_minor=600000, confirmed=True)
 
     assert "🕑 вылет 12:00 · в пути 1ч 40м" in card
-    assert "прилёт" not in card
+    assert "прибытие" not in card
 
 
 def test_date_only_offer_still_shows_the_one_fact_it_has() -> None:
