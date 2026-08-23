@@ -34,6 +34,8 @@ src/aviapars/
 │   ├── base.py                  # протокол SourceAdapter, Offer/Leg/SearchQuery
 │   ├── registry.py               # rate-limit + circuit-breaker + кэш + таймауты — единая обёртка
 │   ├── ratelimit.py, circuit.py, cache.py
+│   ├── _tutu_common.py            # общее между tutu_rail_direct/tutu_avia_direct: выбор
+│   │                                 ценового варианта (exact/approximate/absent), одна платформа
 │   ├── travelpayouts.py          # авиа-цены (discovery, кэш агрегаторов)
 │   ├── yandex_rasp.py             # расписания поездов (своих цен не даёт — см. README)
 │   ├── rzd_direct.py              # реальные цены на поезда (confirmation, неофициальный pass.rzd.ru,
@@ -58,8 +60,11 @@ src/aviapars/
 │   ├── dates.py                   # DateSelection/DatePlan: что за даты и сколько из них спрашивать
 │   ├── combiner.py                # единая точка входа поиска: прямые рейсы + маршруты через хаб
 │   ├── transfers.py               # политика пересадки (мин. время, стоимость) — пока только дефолты
+│   ├── geo.py                     # haversine/detour_km — геометрия для ранжирования хабов
 │   ├── validator.py, dealer.py, places.py
-└── notify/                       # notifier.py (форматирование/дедуп/тихие часы), dedupe.py
+├── notify/                       # notifier.py (форматирование/дедуп/тихие часы), dedupe.py
+└── systemd_notify.py              # sd_notify (READY=1/WATCHDOG=1) без внешней зависимости — no-op
+                                     # вне systemd
 
 data/
 ├── migrations/                     # 001 — вся схема; 002 — уникальный индекс (kind, iata) для сида;
