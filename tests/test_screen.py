@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -111,6 +111,52 @@ async def test_unmodified_screen_is_not_resent() -> None:
     assert screen.anchor_id == 101
 
 
+async def test_edit_retries_once_after_flood_control() -> None:
+    """TelegramRetryAfter is a sibling of TelegramBadRequest, not a subclass — a burst of
+    scheduler notifications into this chat right before the render must not fall through
+    _edit's except clause uncaught, leaving drop_input()'s deleted user message with
+    nothing to replace it (see screen.py)."""
+
+    class FloodOnce(FakeBot):
+        def __init__(self) -> None:
+            super().__init__()
+            self._raised = False
+
+        async def edit_message_text(self, text, *, chat_id=None, message_id=None, reply_markup=None):  # type: ignore[no-untyped-def]
+            if not self._raised:
+                self._raised = True
+                raise TelegramRetryAfter(method=None, message="flood", retry_after=0)  # type: ignore[arg-type]
+            return await super().edit_message_text(text, chat_id=chat_id, message_id=message_id, reply_markup=reply_markup)
+
+    bot, state = FloodOnce(), make_state()
+    screen = Screen(bot, CHAT_ID, state, anchor_id=101)
+
+    await screen.show("шаг 1")
+
+    assert bot.sent == []
+    assert bot.edited == [(101, "шаг 1")]
+
+
+async def test_send_retries_once_after_flood_control() -> None:
+    class FloodOnce(FakeBot):
+        def __init__(self) -> None:
+            super().__init__()
+            self._raised = False
+
+        async def send_message(self, *, chat_id, text, reply_markup=None):  # type: ignore[no-untyped-def]
+            if not self._raised:
+                self._raised = True
+                raise TelegramRetryAfter(method=None, message="flood", retry_after=0)  # type: ignore[arg-type]
+            return await super().send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
+
+    bot, state = FloodOnce(), make_state()
+    screen = Screen(bot, CHAT_ID, state)
+
+    await screen.show("привет")
+
+    assert bot.sent == ["привет"]
+
+
 async def test_dead_anchor_falls_back_to_a_new_message() -> None:
     bot, state = FakeBot(edit_error="message to edit not found"), make_state()
     screen = Screen(bot, CHAT_ID, state, anchor_id=101)
@@ -133,6 +179,33 @@ async def test_undeletable_input_does_not_break_the_render() -> None:
     await screen.show("шаг 1")
 
     assert bot.edited == [(101, "шаг 1")]
+
+
+async def test_stale_anchor_gets_a_fresh_message_instead_of_an_invisible_edit() -> None:
+    """If a burst of other messages (deal notifications, sent outside of Screen entirely)
+    pushed the old anchor far above the fold, editing it in place is invisible from the
+    chat's bottom — from the user's side, the bot looks like it deleted the typed command
+    and did nothing. Past the staleness threshold, a typed command should get a fresh
+    message at the bottom instead of an edit to a message no one is looking at."""
+    bot, state = FakeBot(), make_state()
+    await state.update_data({SCREEN_KEY: 101})
+
+    screen = await screen_for(make_message(bot, message_id=101 + 10), state)
+    await screen.show("меню")
+
+    assert bot.edited == []
+    assert bot.sent == ["меню"]
+
+
+async def test_recent_anchor_is_still_edited_in_place() -> None:
+    bot, state = FakeBot(), make_state()
+    await state.update_data({SCREEN_KEY: 101})
+
+    screen = await screen_for(make_message(bot, message_id=101 + 2), state)
+    await screen.show("меню")
+
+    assert bot.sent == []
+    assert bot.edited == [(101, "меню")]
 
 
 async def test_anchor_survives_state_clear_at_a_flow_boundary() -> None:

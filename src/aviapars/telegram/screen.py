@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Protocol
 
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
@@ -12,6 +13,14 @@ log = logging.getLogger(__name__)
 # Where the anchor lives inside FSM state. Wizard steps read/write it through
 # Screen only — no handler should touch this key directly.
 SCREEN_KEY = "screen_message_id"
+
+# Telegram assigns message_id sequentially per chat regardless of sender, so the gap between
+# a typed command and the stored anchor is a reasonable proxy for "how many messages back is
+# the screen". A scheduler notification burst (notify/notifier.py sends outside of Screen
+# entirely) can bury the anchor far above the fold; editing it there is invisible without
+# scrolling up — from the chat's bottom it looks like the bot ate the command and did nothing.
+# Past this many messages back, a typed command gets a fresh message at the bottom instead.
+_STALE_AFTER_MESSAGES = 3
 
 _NOT_MODIFIED = "message is not modified"
 
@@ -84,7 +93,16 @@ class Screen:
         if self._anchor_id is not None and await self._edit(text, reply_markup):
             await self._remember()
             return
-        sent = await self._bot.send_message(chat_id=self._chat_id, text=text, reply_markup=reply_markup)
+        try:
+            sent = await self._bot.send_message(chat_id=self._chat_id, text=text, reply_markup=reply_markup)
+        except TelegramRetryAfter as exc:
+            # A sibling of TelegramBadRequest, not a subclass — right after the scheduler
+            # bursts deal notifications into this chat, Telegram's per-chat flood window
+            # hits this call too. One retry after the wait is enough: the window is a
+            # handful of seconds, and without this the exception went straight past here,
+            # leaving drop_input()'s already-deleted user message with nothing to replace it.
+            await asyncio.sleep(exc.retry_after)
+            sent = await self._bot.send_message(chat_id=self._chat_id, text=text, reply_markup=reply_markup)
         self._anchor_id = sent.message_id
         await self._remember()
 
@@ -103,6 +121,11 @@ class Screen:
     async def _edit(self, text: str, reply_markup: InlineKeyboardMarkup | None) -> bool:
         assert self._anchor_id is not None
         try:
+            await self._bot.edit_message_text(
+                text, chat_id=self._chat_id, message_id=self._anchor_id, reply_markup=reply_markup
+            )
+        except TelegramRetryAfter as exc:
+            await asyncio.sleep(exc.retry_after)
             await self._bot.edit_message_text(
                 text, chat_id=self._chat_id, message_id=self._anchor_id, reply_markup=reply_markup
             )
@@ -145,4 +168,6 @@ async def screen_for(event: Message | CallbackQuery, state: FSMContext) -> Scree
         return Screen(event.bot, chat_id, state, anchor_id=anchor_id)
 
     assert event.bot is not None
+    if anchor_id is not None and event.message_id - anchor_id > _STALE_AFTER_MESSAGES:
+        anchor_id = None
     return Screen(event.bot, event.chat.id, state, anchor_id=anchor_id, input_message_id=event.message_id)
