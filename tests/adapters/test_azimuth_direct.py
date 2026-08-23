@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from typing import Any
 
 from aviapars.adapters.azimuth_direct import AzimuthDirectAdapter
 from aviapars.adapters.base import Mode, PlaceRef, ResultStatus, SearchQuery
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "azimuth_direct" / "search_led_mow.json"
+MOSCOW = ZoneInfo("Europe/Moscow")  # both endpoints of the fixture flight (LED→MOW)
 
 
 def _origin() -> PlaceRef:
@@ -38,6 +40,10 @@ def test_parse_offers_from_real_response() -> None:
     assert leg.carrier == "Азимут"
     assert leg.number == "7020"
     assert leg.time_precision == "exact"
+    # same gap as tutu_avia: arrival_date/arrival_time were in the payload all along and
+    # never reached the Leg, so no arrival time could be rendered
+    assert leg.arrive_local is not None
+    assert leg.arrive_local.strftime("%d.%m %H:%M") == leg.arrive_utc.astimezone(MOSCOW).strftime("%d.%m %H:%M")
 
 
 def test_parse_offers_ignores_directions_for_other_dates() -> None:

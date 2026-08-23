@@ -314,6 +314,7 @@ class TutuAviaDirectAdapter:
                         carrier=carrier_name,
                         number=seg.get("voyageNumber"),
                         arrive_utc=arr.astimezone(timezone.utc) if arr else None,
+                        arrive_local=arr,
                         tz=dep.tzname(),
                         time_precision="exact",
                     )

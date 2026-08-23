@@ -213,25 +213,56 @@ def test_unconfirmed_card_shows_source_and_age() -> None:
     assert "Туту.ру (самолёты)" in card
 
 
-def test_card_shows_arrival_time_when_the_source_states_it() -> None:
-    offer = _offer(source_id="pobeda_direct", deep_link=None, arrive_local=datetime(2026, 9, 1, 14, 25))
+def test_card_labels_departure_arrival_and_duration() -> None:
+    # the owner reported all three as missing from the first version: the times sat in an
+    # unlabelled indented continuation line and the duration in the header next to the
+    # date. Each one now says what it is, on the line the reader is already looking at.
+    base = _offer(source_id="pobeda_direct", deep_link=None)
+    offer = replace(
+        base,
+        legs=(
+            replace(
+                base.legs[0],
+                arrive_utc=datetime(2026, 9, 1, 14, 25, tzinfo=timezone.utc),
+                arrive_local=datetime(2026, 9, 1, 14, 25),
+            ),
+        ),
+    )
     itinerary = Itinerary(offers=(offer,), price_minor=500000, currency="RUB")
 
     card = format_deal_card("LED → MOW", itinerary, threshold_minor=600000, confirmed=True)
 
-    assert "12:00 → 14:25" in card
+    assert "🕑 вылет 12:00 · прилёт 14:25 · в пути 2ч 25м" in card
+    assert "🎫 Победа · рейс 515" in card
 
 
-def test_card_omits_arrival_when_only_a_utc_stamp_is_known() -> None:
+def test_card_still_shows_duration_when_the_arrival_clock_is_unknown() -> None:
     # arrive_utc alone can't be turned into a local arrival: `tz` on a Leg is the
-    # *departure* offset, and a leg that crosses zones lands on a different one.
-    offer = _offer(source_id="pobeda_direct", deep_link=None)
+    # *departure* offset, and a leg that crosses zones lands on a different one. The
+    # duration comes from the UTC stamps instead, which needs no timezone at all.
+    base = _offer(source_id="pobeda_direct", deep_link=None)
+    offer = replace(base, legs=(replace(base.legs[0], arrive_utc=datetime(2026, 9, 1, 13, 40, tzinfo=timezone.utc)),))
     itinerary = Itinerary(offers=(offer,), price_minor=500000, currency="RUB")
 
     card = format_deal_card("LED → MOW", itinerary, threshold_minor=600000, confirmed=True)
 
-    assert "12:00" in card
-    assert "→ 1" not in card.split("\n")[4]  # leg detail line carries a departure only
+    assert "🕑 вылет 12:00 · в пути 1ч 40м" in card
+    assert "прилёт" not in card
+
+
+def test_date_only_offer_still_shows_the_one_fact_it_has() -> None:
+    # a month-matrix row has no clock time at all but does state a duration — the card
+    # names what is missing and shows what isn't, instead of falling silent on both.
+    base = _offer(source_id="travelpayouts", deep_link=None, tier=Tier.DISCOVERY, duration_minutes=125)
+    offer = replace(
+        base,
+        legs=(replace(base.legs[0], carrier=None, number=None, arrive_utc=None, time_precision="date_only"),),
+    )
+    itinerary = Itinerary(offers=(offer,), price_minor=500000, currency="RUB", duration_minutes=125)
+
+    card = format_deal_card("LED → MOW", itinerary, threshold_minor=600000, confirmed=False)
+
+    assert "🕑 время вылета источник не знает · в пути 2ч 05м" in card
 
 
 def test_card_shows_the_layover_between_legs() -> None:
@@ -261,6 +292,8 @@ def test_card_shows_the_layover_between_legs() -> None:
     card = format_deal_card("LED → MOW", itinerary, threshold_minor=1100000, confirmed=True)
 
     assert "🔄 Пересадка 3ч · Москва (SVO)" in card
+    assert "🕑 вылет 08:00 · в пути 1ч 30м" in card  # per-leg duration, not only a total
+    assert "⏱ Всего в пути" in card
     # each leg keeps its own purchase line when the two come from different sources
     assert "Москва (SVO) → MOW: 5 000 ₽" in card
 
@@ -302,34 +335,30 @@ def _grouped(match: Match, *, alternate_price: int = 490000) -> Itinerary:
     )
 
 
-def test_grouped_card_hedges_when_the_match_is_only_probable() -> None:
+def test_grouped_card_makes_no_identity_claim_without_a_flight_number() -> None:
     card = format_deal_card(
         "LED → MOW",
-        _grouped(Match.LIKELY_SAME),
+        _grouped(Match.UNVERIFIED),
         threshold_minor=600000,
         confirmed=False,
         source_names={"aeroflot_direct": "Аэрофлот", "travelpayouts": "Aviasales"},
     )
 
-    assert "⚠️ Вероятно один и тот же рейс" in card
+    # this pair has matching durations; that used to read as «вероятно один и тот же
+    # рейс» and now claims nothing, because a duration match is not identity evidence
+    assert "❔ Один это рейс или разные" in card
+    assert "ероятно" not in card
     # one card, both sources, cheapest first, each marked with its own tier
     assert "⚠️ 4 900 ₽ · <a href=\"https://ts.test\">купить у Aviasales</a>" in card
     assert "✅ 5 000 ₽ · <a href=\"https://af.test\">купить у Аэрофлот</a>" in card
     assert "💰 <b>4 900 ₽</b>" in card  # headline price is what the trip can be bought for
 
 
-def test_grouped_card_claims_nothing_when_there_is_no_evidence() -> None:
-    card = format_deal_card("LED → MOW", _grouped(Match.UNVERIFIED), threshold_minor=600000, confirmed=False)
-
-    assert "❔ Возможно, это разные рейсы" in card
-    assert "вероятно" not in card.lower()
-
-
-def test_confirmed_flight_number_match_does_not_hedge() -> None:
+def test_matching_flight_number_is_stated_without_a_hedge() -> None:
     card = format_deal_card("LED → MOW", _grouped(Match.SAME_FLIGHT), threshold_minor=600000, confirmed=False)
 
     assert "🔁 Один и тот же рейс" in card
-    assert "Вероятно" not in card
+    assert "проверить нечем" not in card
 
 
 def test_lone_itinerary_has_no_confidence_note_at_all() -> None:
@@ -338,7 +367,9 @@ def test_lone_itinerary_has_no_confidence_note_at_all() -> None:
 
     card = format_deal_card("LED → MOW", itinerary, threshold_minor=600000, confirmed=True)
 
-    assert "рейс" not in card  # nothing was grouped, so there is nothing to hedge about
+    # nothing was grouped, so neither the claim nor the hedge belongs on the card
+    assert "Один и тот же рейс" not in card
+    assert "проверить нечем" not in card
 
 
 def test_screen_text_skips_empty_blocks() -> None:

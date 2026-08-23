@@ -518,20 +518,22 @@ async def _run_two_source_cycle(
     return bot
 
 
-async def test_two_sources_for_one_flight_produce_a_single_notification(
+async def test_two_sources_for_one_date_produce_a_single_notification(
     db: aiosqlite.Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The owner's actual complaint: one Пенза→Питер trip arriving as two messages a day,
-    once from the carrier and once from the aggregator. The aggregator says 4ч, the carrier
-    4ч10м — close enough to corroborate, so it is one card that hedges honestly."""
+    """The owner's actual complaint: one Екатеринбург→Сочи date arriving as two messages,
+    once from the carrier and once from the aggregator. One card now, with both prices —
+    and no claim that it is one flight, because nothing here can show that."""
     bot = await _run_two_source_cycle(db, monkeypatch, carrier_duration_minutes=250)
 
     assert len(bot.sent) == 1
     text = bot.sent[0][1]
-    assert "Вероятно один и тот же рейс" in text
+    assert "Один это рейс или разные" in text
+    assert "ероятно" not in text  # matching durations are not evidence of one flight
     assert "купить у Aviasales" in text and "купить у Авиакомпания" in text
     assert "6 101 ₽" in text  # cheapest of the two, and the headline price
-    assert "07:35 → 11:45" in text  # the carrier's real times, not the aggregator's midnight
+    # the carrier's real clock times and duration, not the aggregator's midnight placeholder
+    assert "🕑 вылет 07:35 · прилёт 11:45 · в пути 4ч 10м" in text
 
     # both sources' prices are still recorded — grouping is a delivery decision, not a
     # reason to lose one source's price history
@@ -549,5 +551,5 @@ async def test_durations_that_disagree_are_not_merged_into_one_flight(
 
     assert len(bot.sent) == 1
     text = bot.sent[0][1]
-    assert "рейс" not in text  # no grouping claim of any kind
+    assert "Один это рейс или разные" not in text  # no grouping claim of any kind
     assert "купить у Авиакомпания" not in text  # cheapest qualifying deal is the aggregator's

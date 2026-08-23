@@ -325,6 +325,7 @@ class RzdDirectAdapter:
             carrier=train.get("carrier"),
             number=train.get("number"),
             arrive_utc=arrive.astimezone(timezone.utc) if arrive else None,
+            arrive_local=arrive,
             tz="Europe/Moscow",
             fare_class=cheapest.get("typeLoc") or cheapest.get("type"),
             time_precision="exact",

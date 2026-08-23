@@ -169,6 +169,9 @@ class AzimuthDirectAdapter:
                     dep_local = datetime.strptime(seg["departure_date"] + " " + seg["departure_time"], "%d.%m.%Y %H:%M")
                     dep_utc = datetime.strptime(seg["departure_utc"], "%d.%m.%Y %H:%M:%S").replace(tzinfo=timezone.utc)
                     arr_utc = datetime.strptime(seg["arrival_utc"], "%d.%m.%Y %H:%M:%S").replace(tzinfo=timezone.utc)
+                    arr_local = None
+                    if seg.get("arrival_date") and seg.get("arrival_time"):
+                        arr_local = datetime.strptime(seg["arrival_date"] + " " + seg["arrival_time"], "%d.%m.%Y %H:%M")
                     legs.append(
                         Leg(
                             mode=Mode.PLANE,
@@ -179,6 +182,7 @@ class AzimuthDirectAdapter:
                             carrier=seg.get("ak_full_name"),
                             number=seg.get("flight_number"),
                             arrive_utc=arr_utc,
+                            arrive_local=arr_local,
                             time_precision="exact",
                         )
                     )

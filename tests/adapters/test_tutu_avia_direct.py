@@ -46,6 +46,13 @@ def test_parse_offers_from_real_response() -> None:
     assert leg.depart_utc.isoformat() == "2026-09-20T14:45:00+00:00"
     assert leg.arrive_utc is not None
     assert leg.arrive_utc.isoformat() == "2026-09-20T17:10:00+00:00"
+    # regression: the response's local arrival was parsed and then dropped, so the deal
+    # card could only ever show a departure — the owner reported exactly that gap.
+    # 22:10 is Yekaterinburg time (UTC+5), i.e. the *destination's* clock. Deriving an
+    # arrival from arrive_utc plus the leg's `tz` (the departure offset, Moscow +3) would
+    # have printed 20:10 here — two hours wrong, which is why nothing derives it.
+    assert leg.arrive_local is not None
+    assert leg.arrive_local.strftime("%H:%M") == "22:10"
 
 
 def test_approximate_price_used_with_reduced_confidence_when_no_exact_variant() -> None:

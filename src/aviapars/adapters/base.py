@@ -96,6 +96,34 @@ class Offer:
     # from leg times alone (date_only legs have no arrive_utc to subtract).
 
 
+def leg_duration_minutes(leg: Leg) -> int | None:
+    """Gate-to-gate for one leg, from timestamps rather than any source's own figure.
+
+    UTC on both ends on purpose: it needs no timezone knowledge and is therefore right
+    even for a leg that crosses zones, which is exactly where a local-clock subtraction
+    would be wrong. `date_only` legs hold a midnight placeholder and no arrival, so they
+    return None instead of a fabricated span.
+    """
+    if leg.arrive_utc is None:
+        return None
+    return int((leg.arrive_utc - leg.depart_utc).total_seconds() // 60)
+
+
+def offer_duration_minutes(offer: Offer) -> int | None:
+    """The offer's own duration when the source stated one, otherwise derived.
+
+    Several adapters (azimuth, pobeda) fill real arrival timestamps but never set
+    `duration_minutes`, and a discovery-tier offer is the mirror image — a duration and
+    no timestamps at all. Deriving here rather than in each adapter means one rule for
+    the whole roster, and it is what both the card and cross-source grouping read.
+    """
+    if offer.duration_minutes is not None:
+        return offer.duration_minutes
+    if offer.legs[-1].arrive_utc is None:
+        return None
+    return int((offer.legs[-1].arrive_utc - offer.legs[0].depart_utc).total_seconds() // 60)
+
+
 @dataclass(frozen=True, slots=True)
 class SearchQuery:
     origin: PlaceRef

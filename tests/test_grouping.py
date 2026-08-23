@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 
 from aviapars.adapters.base import Leg, Mode, Offer, PlaceRef, Tier
@@ -90,16 +91,33 @@ def _discovery(
     )
 
 
-def test_matching_durations_group_as_probably_the_same_flight() -> None:
+def test_a_number_less_offer_groups_without_any_same_flight_claim() -> None:
     groups = group_offers([_discovery(duration_minutes=130), _confirmation(duration_minutes=125)])
 
     assert len(groups) == 1
     group = groups[0]
-    assert group.match is Match.LIKELY_SAME
+    # matching durations used to read as "вероятно один и тот же рейс"; they are not
+    # evidence of identity at all — see test_near_identical_durations_prove_nothing
+    assert group.match is Match.UNVERIFIED
     assert group.anchor.source_id == "aeroflot_direct"  # the side that knows the flight number
     assert [o.source_id for o in group.alternates] == ["travelpayouts"]
     assert group.price_minor == 549000  # cheapest member — what the trip actually costs
     assert group.duration_minutes == 125
+
+
+def test_near_identical_durations_prove_nothing() -> None:
+    """Live numbers from the owner's route (PEZ→LED, 2026-08-24): every direct offer from
+    every source came back at 130 minutes. Two genuinely different same-day departures
+    match just as exactly as one flight seen twice, so a duration match must never be
+    dressed up as probable identity."""
+    morning = _confirmation(source_id="tutu_avia_direct", number="6768", depart=datetime(2026, 9, 14, 8, 0))
+    aggregator_row = _discovery(duration_minutes=130)
+
+    groups = group_offers([morning, aggregator_row])
+
+    assert len(groups) == 1
+    assert groups[0].match is Match.UNVERIFIED
+    assert groups[0].match is not None  # still grouped: one card per route+date, just no claim
 
 
 def test_clearly_different_durations_do_not_group() -> None:
@@ -133,6 +151,24 @@ def test_different_carriers_never_group_even_when_durations_agree() -> None:
     b = _confirmation(source_id="azimuth_direct", carrier="Азимут", number=None, duration_minutes=127)
 
     assert len(group_offers([a, b])) == 2
+
+
+def test_a_duration_derived_from_timestamps_still_disqualifies() -> None:
+    # azimuth/pobeda fill arrival timestamps but never duration_minutes; the conflict
+    # check derives it rather than treating those offers as "no duration known".
+    slow = replace(
+        _confirmation(source_id="azimuth_direct", number=None, duration_minutes=None),
+        legs=(
+            replace(
+                _confirmation(number=None).legs[0],
+                carrier=None,
+                number=None,
+                arrive_utc=datetime(2026, 9, 14, 15, 35, tzinfo=timezone.utc),  # 8h after departure
+            ),
+        ),
+    )
+
+    assert len(group_offers([slow, _discovery(duration_minutes=130)])) == 2
 
 
 def test_no_corroborating_signal_groups_but_claims_nothing() -> None:
@@ -176,9 +212,10 @@ def test_group_key_is_the_route_and_day_not_the_sources_that_reported_it() -> No
     assert other_day[0].key != both[0].key
 
 
-def test_duration_tolerance_scales_with_trip_length() -> None:
-    # 20 minutes apart on a 2ч flight is rounding/measurement noise; the same 20 minutes
-    # would be noise on a 10ч one too, but 3ч apart never is.
+def test_duration_disqualifies_only_past_measurement_noise() -> None:
+    # 20 minutes apart on a 2ч flight is how differently two sources measure one trip;
+    # 3ч apart is a different routing. The window scales so a long trip may differ by
+    # proportionally more before it counts as a different trip.
     assert len(group_offers([_discovery(duration_minutes=145), _confirmation(duration_minutes=125)])) == 1
     assert len(group_offers([_discovery(duration_minutes=305), _confirmation(duration_minutes=125)])) == 2
     assert len(group_offers([_discovery(duration_minutes=660), _confirmation(duration_minutes=600)])) == 1

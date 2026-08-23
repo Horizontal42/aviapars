@@ -6,7 +6,7 @@ from datetime import date
 from enum import Enum
 from typing import Sequence
 
-from aviapars.adapters.base import Offer, Tier
+from aviapars.adapters.base import Offer, Tier, offer_duration_minutes
 
 # ---------------------------------------------------------------------------
 # Cross-source grouping (§8/§9).
@@ -23,6 +23,12 @@ from aviapars.adapters.base import Offer, Tier
 # (Match below). Grouping on a guess and asserting certainty would be worse than the
 # duplicate messages it replaces.
 #
+# Which is why the only positive identity signal here is a shared flight number. The
+# first version also treated matching durations as corroboration ("вероятно один и тот
+# же рейс"); that was wrong, and a live search on the owner's route settled it — see
+# `_durations_conflict` for the numbers. Duration is still used, but only in the
+# direction where it actually carries information: to rule a pairing out.
+#
 # Deliberately NOT reused for hub composition: `Itinerary.offers` there means
 # "sequential legs of one journey", a completely different relation from "several
 # sources describing one leg". Groups produced here always share one leg, and a hub
@@ -31,24 +37,25 @@ from aviapars.adapters.base import Offer, Tier
 
 
 class Match(Enum):
-    """Strength of the evidence that a group's offers are one physical trip."""
+    """Strength of the evidence that a group's offers are one physical trip.
 
-    SAME_FLIGHT = "same_flight"  # carrier+number known on both sides and equal
-    LIKELY_SAME = "likely_same"  # no flight number on one side, but durations corroborate
-    UNVERIFIED = "unverified"  # nothing comparable beyond route+date — no identity claimed
+    Two levels, not three, and the missing middle one is the point. There was a
+    `LIKELY_SAME` tier that took matching durations as corroboration when only one side
+    knew a flight number; the owner rejected it and the live data proves them right —
+    see `_durations_conflict`. Anything short of a shared flight number is UNVERIFIED.
+    """
+
+    SAME_FLIGHT = "same_flight"  # flight number known on both sides, equal, carriers agree
+    UNVERIFIED = "unverified"  # same route and date, and that is all anyone can show
 
 
-_MATCH_RANK = {Match.SAME_FLIGHT: 0, Match.LIKELY_SAME: 1, Match.UNVERIFIED: 2}
+_MATCH_RANK = {Match.SAME_FLIGHT: 0, Match.UNVERIFIED: 1}
 
-# How far two durations may sit apart and still count as corroboration. Chosen against
-# what the numbers actually mean rather than as a round number: sources measure a trip
-# slightly differently (scheduled block time vs. gate-to-gate, minute rounding, a
-# schedule variant on the same flight number), which is worth tens of minutes — while
-# the thing this must never wave through, a direct flight vs. a one-stop itinerary on
-# the same route, differs by hours (Пенза→Питер: ~2ч direct against 5-7ч via Москву).
-# The fraction lets a long trip absorb proportionally more noise; the floor keeps a
-# short hop from being matched to the minute; the cap stops a very long itinerary from
-# opening a window wide enough to swallow a genuinely different routing.
+# Only ever used to *reject* a pairing, never to support one — see `_durations_conflict`.
+# The window has to absorb honest measurement noise between sources (scheduled block
+# time vs. gate-to-gate, minute rounding, a schedule variant under one flight number),
+# which is worth tens of minutes, while still separating trips that differ structurally
+# (a direct flight against a one-stop itinerary on the same route differs by hours).
 DURATION_TOLERANCE_MIN = 30
 DURATION_TOLERANCE_FRACTION = 0.10
 DURATION_TOLERANCE_CAP_MIN = 90
@@ -84,7 +91,7 @@ class OfferGroup:
 
     @property
     def duration_minutes(self) -> int | None:
-        return next((o.duration_minutes for o in self.members if o.duration_minutes is not None), None)
+        return next((d for d in map(offer_duration_minutes, self.members) if d is not None), None)
 
 
 def group_offers(offers: Sequence[Offer]) -> list[OfferGroup]:
@@ -146,18 +153,12 @@ def _match(a: Offer, b: Offer) -> Match | None:
 
     if _carriers_conflict(a, b):
         return None
+    if _durations_conflict(a, b):
+        return None
     key_a, key_b = _flight_key(a), _flight_key(b)
     if key_a is not None and key_b is not None:
         return Match.SAME_FLIGHT if key_a == key_b else None
-
-    dur_a, dur_b = a.duration_minutes, b.duration_minutes
-    if dur_a is None or dur_b is None:
-        return Match.UNVERIFIED
-    if abs(dur_a - dur_b) <= _duration_tolerance(min(dur_a, dur_b)):
-        return Match.LIKELY_SAME
-    # Both sides know a duration and they disagree — that is positive evidence of two
-    # different trips (typically direct vs. via a hub), not merely absence of proof.
-    return None
+    return Match.UNVERIFIED
 
 
 def _shape(offer: Offer) -> tuple[int, int, int, date, str]:
@@ -211,9 +212,28 @@ def _normalize_number(number: str) -> str:
     return "".join(re.findall(r"\d+", number))
 
 
-def _duration_tolerance(minutes: int) -> int:
-    scaled = round(minutes * DURATION_TOLERANCE_FRACTION)
-    return min(max(DURATION_TOLERANCE_MIN, scaled), DURATION_TOLERANCE_CAP_MIN)
+def _durations_conflict(a: Offer, b: Offer) -> bool:
+    """True when two known durations are far enough apart to prove different trips.
+
+    One-directional on purpose. A duration *mismatch* is real evidence — a 6ч offer and
+    a 2ч offer on one route are not the same flight. A duration *match* is close to no
+    evidence at all, because on a fixed route duration is a function of the distance and
+    the routing, not of which departure you took. Measured on the owner's own route
+    (live search, 2026-08-24, PEZ→LED, 30-day window): every single direct offer from
+    every source came back at 130 minutes, bar a handful at 125/135. Two genuinely
+    different same-day flights would have matched just as exactly, so treating that as
+    "вероятно один и тот же рейс" would have attached a confident-sounding label to a
+    coin flip — which is the opposite of what the honest-labelling design is for.
+
+    Symmetric, including the tolerance base, so a verdict never depends on which offer
+    happens to anchor a cluster.
+    """
+    dur_a, dur_b = offer_duration_minutes(a), offer_duration_minutes(b)
+    if dur_a is None or dur_b is None:
+        return False
+    scaled = round(min(dur_a, dur_b) * DURATION_TOLERANCE_FRACTION)
+    tolerance = min(max(DURATION_TOLERANCE_MIN, scaled), DURATION_TOLERANCE_CAP_MIN)
+    return abs(dur_a - dur_b) > tolerance
 
 
 def _weakest(verdicts: Sequence[Match | None]) -> Match:

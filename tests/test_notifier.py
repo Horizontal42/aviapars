@@ -449,7 +449,7 @@ def _grouped_itinerary(*, with_alternate: bool, price_minor: int = 500000) -> It
         currency="RUB",
         duration_minutes=125,
         alternates=alternates,
-        match=Match.LIKELY_SAME if alternates else None,
+        match=Match.UNVERIFIED if alternates else None,
         group_key="plane|1|2|2026-09-18",
     )
 
@@ -477,7 +477,7 @@ async def test_grouped_deal_is_one_notification_carrying_every_source(db: aiosql
     assert len(bot.sent) == 1  # one message for what used to be two
     text = bot.sent[0][1]
     assert "Аэрофлот" in text and "Aviasales" in text
-    assert "Вероятно один и тот же рейс" in text
+    assert "Один это рейс или разные" in text
 
 
 async def test_cooldown_keys_on_the_trip_not_on_which_sources_reported_it(db: aiosqlite.Connection) -> None:

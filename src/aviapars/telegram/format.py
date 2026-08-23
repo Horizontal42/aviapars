@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Mapping
 
-from aviapars.adapters.base import Leg, Mode, Offer, PlaceRef, Tier
+from aviapars.adapters.base import Leg, Mode, Offer, PlaceRef, Tier, leg_duration_minutes
 from aviapars.db.models import Route
 from aviapars.domain.combiner import Itinerary, itinerary_modes, itinerary_offers
-from aviapars.domain.grouping import Match
 from aviapars.domain.dates import DatePlan, DateSelection, selection_from_route, window
+from aviapars.domain.grouping import Match
 from aviapars.telegram.keyboards import MODE_LABEL
 
 MODE_EMOJI: dict[Mode, str] = {
@@ -224,8 +224,7 @@ def format_route_card(route: Route, today: date) -> str:
 
 _MATCH_NOTE = {
     Match.SAME_FLIGHT: "🔁 Один и тот же рейс у разных источников — совпал номер рейса",
-    Match.LIKELY_SAME: "⚠️ Вероятно один и тот же рейс — совпала длительность, номер рейса знает только один источник",
-    Match.UNVERIFIED: "❔ Возможно, это разные рейсы — сравнить нечего, совпадают только маршрут и дата",
+    Match.UNVERIFIED: "❔ Один это рейс или разные — проверить нечем: совпадают только маршрут и дата",
 }
 
 
@@ -270,13 +269,13 @@ def format_deal_card(
     # day early off depart_utc.date() — the user needs the date they'd see on a ticket.
     depart_date = all_legs[0].depart_local.date()
 
-    header = [
+    lines = [
         f"<b>🔥 {route_title}</b>",
         f"💰 <b>{price}</b> · порог {threshold}",
-        f"🗓 {depart_date.strftime('%d.%m.%Y')} · {mode_label} · в пути {_describe_duration(itinerary.duration_minutes)}",
+        f"🗓 {depart_date.strftime('%d.%m.%Y')} · {mode_label}",
+        "",
+        *_journey_block(all_legs, itinerary),
     ]
-
-    lines = [*header, "", *_journey_block(all_legs)]
 
     if itinerary.alternates and itinerary.match is not None:
         lines += ["", _MATCH_NOTE[itinerary.match]]
@@ -285,31 +284,49 @@ def format_deal_card(
     return "\n".join(lines)
 
 
-def _journey_block(legs: list[Leg]) -> list[str]:
-    """Two lines per leg — where, then when/who — with the layover in between.
+def _journey_block(legs: list[Leg], itinerary: Itinerary) -> list[str]:
+    """Per leg: where, then a labelled 🕑 line, then who flies it. Layover in between.
 
-    The second line leads with times because that is what the reader is
-    scanning for; arrival is shown only when the source stated the arrival in
-    the destination's own local time (base.py Leg.arrive_local), never derived
-    from a UTC stamp plus the *departure* offset.
+    Departure, arrival and duration each get a word in front of them and live on the
+    line the reader is already looking at. The first version put the trip duration in
+    the header next to the date and the times in an indented continuation line, and the
+    owner reported all three as missing — technically present, actually unreadable.
+
+    Every value is shown exactly when it is known, and named as unknown otherwise:
+    - departure/arrival come from the *local* clock a source stated (`depart_local`,
+      `arrive_local`), never from a UTC stamp plus the departure offset — a leg that
+      crosses zones lands on a different one, so that arithmetic invents a time.
+    - duration is computed from the UTC stamps instead (`leg_duration_minutes`), which
+      needs no timezone at all and is therefore right even across zones. A date_only
+      discovery offer has no stamps but does state a duration, so a single-leg trip
+      falls back to the offer's own figure — that is the one real fact those offers
+      carry, and it must not be dropped.
     """
     lines: list[str] = []
     for i, leg in enumerate(legs):
         if i:
             lines.append(_layover_line(legs[i - 1], leg))
         lines.append(f"{MODE_EMOJI[leg.mode]} {place_label(leg.from_place)} → {place_label(leg.to_place)}")
+
+        duration = leg_duration_minutes(leg)
+        if duration is None and len(legs) == 1:
+            duration = itinerary.duration_minutes
         bits: list[str] = []
         if leg.time_precision == "exact":
-            times = leg.depart_local.strftime("%H:%M")
+            bits.append(f"вылет {leg.depart_local.strftime('%H:%M')}")
             if leg.arrive_local is not None:
-                times += f" → {leg.arrive_local.strftime('%H:%M')}"
-            bits.append(times)
+                bits.append(f"прилёт {leg.arrive_local.strftime('%H:%M')}")
         else:
-            bits.append("время неизвестно")
-        carrier_bits = " ".join(b for b in (leg.carrier, leg.number) if b)
+            bits.append("время вылета источник не знает")
+        bits.append(f"в пути {_describe_duration(duration)}")
+        lines.append("🕑 " + " · ".join(bits))
+
+        carrier_bits = " · ".join(b for b in (leg.carrier, f"рейс {leg.number}" if leg.number else None) if b)
         if carrier_bits:
-            bits.append(carrier_bits)
-        lines.append("      " + " · ".join(bits))
+            lines.append(f"🎫 {carrier_bits}")
+
+    if len(legs) > 1:
+        lines.append(f"⏱ Всего в пути {_describe_duration(itinerary.duration_minutes)}")
     return lines
 
 
