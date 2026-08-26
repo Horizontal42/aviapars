@@ -63,12 +63,9 @@ async def cmd_stop(message: Message, shutdown_event: asyncio.Event) -> None:
 async def cmd_pause_all(message: Message, db: aiosqlite.Connection) -> None:
     """Softer than /stop — stops polling without killing the process, so
     the bot stays responsive to commands (§11)."""
-    async with db.execute("SELECT id FROM routes WHERE active = 1") as cursor:
-        rows = list(await cursor.fetchall())
     routes_repo = RoutesRepo(db)
-    for row in rows:
-        await routes_repo.set_active(row[0], False)
-    await message.answer(f"Поставил на паузу {len(rows)} маршрут(ов).")
+    count = await routes_repo.pause_all()
+    await message.answer(f"Поставил на паузу {count} маршрут(ов).")
 
 
 def _parse_cookie_payload(text: str) -> dict[str, str]:
