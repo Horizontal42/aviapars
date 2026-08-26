@@ -84,6 +84,15 @@ class JobsRepo:
         )
         await self._db.commit()
 
+    async def mark_running_batch(self, job_ids: list[int]) -> None:
+        if not job_ids:
+            return
+        await self._db.executemany(
+            "UPDATE jobs SET state = 'running', attempts = attempts + 1 WHERE id = ?",
+            [(j_id,) for j_id in job_ids],
+        )
+        await self._db.commit()
+
     async def mark_done(self, job_id: int) -> None:
         await self._db.execute(
             "UPDATE jobs SET state = 'done', finished_at = ? WHERE id = ?",
@@ -91,10 +100,30 @@ class JobsRepo:
         )
         await self._db.commit()
 
+    async def mark_done_batch(self, job_ids: list[int]) -> None:
+        if not job_ids:
+            return
+        now_str = datetime.now(timezone.utc).isoformat()
+        await self._db.executemany(
+            "UPDATE jobs SET state = 'done', finished_at = ? WHERE id = ?",
+            [(now_str, j_id) for j_id in job_ids],
+        )
+        await self._db.commit()
+
     async def mark_failed(self, job_id: int) -> None:
         await self._db.execute(
             "UPDATE jobs SET state = 'failed', finished_at = ? WHERE id = ?",
             (datetime.now(timezone.utc).isoformat(), job_id),
+        )
+        await self._db.commit()
+
+    async def mark_failed_batch(self, job_ids: list[int]) -> None:
+        if not job_ids:
+            return
+        now_str = datetime.now(timezone.utc).isoformat()
+        await self._db.executemany(
+            "UPDATE jobs SET state = 'failed', finished_at = ? WHERE id = ?",
+            [(now_str, j_id) for j_id in job_ids],
         )
         await self._db.commit()
 
