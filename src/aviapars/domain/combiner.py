@@ -124,18 +124,73 @@ async def search_itineraries(
     bounded number of requests regardless of how wide its window is.
     """
     now = datetime.now(timezone.utc)
+    state = _SearchState(sources_used=[], sources_skipped=[], oldest=None, partial=False)
+
+    itineraries, leg_pool = await _search_direct(
+        registry, origin, dest, dates, pax, modes, opts, now, state
+    )
+
+    hubs_tried: list[int] = []
+    if opts.max_hops >= 1 and not dates.is_empty:
+        hubs_itineraries, hubs_pool, hubs_tried = await _search_hubs(
+            registry, places_repo, origin, dest, dates, pax, modes, opts, now, state
+        )
+        itineraries.extend(hubs_itineraries)
+        for k, v in hubs_pool.items():
+            leg_pool.setdefault(k, []).extend(v)
+
+    itineraries.sort(key=lambda it: it.price_minor)
+    return SearchOutcome(
+        itineraries=itineraries,
+        leg_pool=leg_pool,
+        hubs_tried=hubs_tried,
+        sources_used=state.sources_used,
+        sources_skipped=state.sources_skipped,
+        oldest_data_at=state.oldest,
+        partial=state.partial,
+    )
+
+
+@dataclass(slots=True)
+class _LegMeta:
+    sources_used: list[str]
+    sources_skipped: list[tuple[str, str]]
+    oldest: datetime | None
+    partial: bool
+
+
+@dataclass(slots=True)
+class _SearchState:
+    sources_used: list[str]
+    sources_skipped: list[tuple[str, str]]
+    oldest: datetime | None
+    partial: bool
+
+    def update(self, meta: _LegMeta) -> None:
+        for s in meta.sources_used:
+            if s not in self.sources_used:
+                self.sources_used.append(s)
+        self.sources_skipped.extend(meta.sources_skipped)
+        self.oldest = _min_dt(self.oldest, meta.oldest)
+        self.partial = self.partial or meta.partial
+
+
+async def _search_direct(
+    registry: AdapterRegistry,
+    origin: Place,
+    dest: Place,
+    dates: DatePlan,
+    pax: int,
+    modes: frozenset[Mode],
+    opts: SearchOpts,
+    now: datetime,
+    state: _SearchState,
+) -> tuple[list[Itinerary], dict[str, list[Offer]]]:
     itineraries: list[Itinerary] = []
     leg_pool: dict[str, list[Offer]] = {}
-    sources_used: list[str] = []
-    sources_skipped: list[tuple[str, str]] = []
-    oldest: datetime | None = None
-    partial = False
-
     for mode in modes:
         offers, meta = await _search_leg(registry, origin, dest, dates, pax, mode, opts, now)
-        _merge_meta(meta, sources_used, sources_skipped)
-        oldest = _min_dt(oldest, meta.oldest)
-        partial = partial or meta.partial
+        state.update(meta)
         leg_pool.setdefault(_pool_key(origin, dest, mode), []).extend(offers[: opts.leg_pool_size])
         # Grouped, not one Itinerary per offer: several sources pricing the same flight
         # are one thing to tell the user about (§9). Only the direct leg is grouped —
@@ -153,62 +208,56 @@ async def search_itineraries(
                     group_key=group.key,
                 )
             )
+    return itineraries, leg_pool
 
-    hubs_tried: list[int] = []
-    if opts.max_hops >= 1 and not dates.is_empty:
-        hub_dates = dates.narrowed(opts.hub_probe_dates_cap)
-        hubs = await _resolve_hubs(places_repo, origin, dest, opts)
-        hubs_tried = [h.id for h in hubs]
-        combo_count = 0
 
-        for hub in hubs:
-            leg_a_by_mode: dict[Mode, list[Offer]] = {}
-            leg_b_by_mode: dict[Mode, list[Offer]] = {}
-            for m in modes:
-                offers_a, meta_a = await _search_leg(registry, origin, hub, hub_dates, pax, m, opts, now)
-                offers_b, meta_b = await _search_leg(registry, hub, dest, hub_dates, pax, m, opts, now)
-                leg_a_by_mode[m] = offers_a[: opts.leg_pool_size]
-                leg_b_by_mode[m] = offers_b[: opts.leg_pool_size]
-                _merge_meta(meta_a, sources_used, sources_skipped)
-                _merge_meta(meta_b, sources_used, sources_skipped)
-                oldest = _min_dt(_min_dt(oldest, meta_a.oldest), meta_b.oldest)
-                partial = partial or meta_a.partial or meta_b.partial
-                leg_pool.setdefault(_pool_key(origin, hub, m), []).extend(leg_a_by_mode[m])
-                leg_pool.setdefault(_pool_key(hub, dest, m), []).extend(leg_b_by_mode[m])
+async def _search_hubs(
+    registry: AdapterRegistry,
+    places_repo: PlacesRepo,
+    origin: Place,
+    dest: Place,
+    dates: DatePlan,
+    pax: int,
+    modes: frozenset[Mode],
+    opts: SearchOpts,
+    now: datetime,
+    state: _SearchState,
+) -> tuple[list[Itinerary], dict[str, list[Offer]], list[int]]:
+    itineraries: list[Itinerary] = []
+    leg_pool: dict[str, list[Offer]] = {}
+    hub_dates = dates.narrowed(opts.hub_probe_dates_cap)
+    hubs = await _resolve_hubs(places_repo, origin, dest, opts)
+    hubs_tried = [h.id for h in hubs]
+    combo_count = 0
 
-            for mode_a, mode_b in itertools.product(modes, repeat=2):
+    for hub in hubs:
+        leg_a_by_mode: dict[Mode, list[Offer]] = {}
+        leg_b_by_mode: dict[Mode, list[Offer]] = {}
+        for m in modes:
+            offers_a, meta_a = await _search_leg(registry, origin, hub, hub_dates, pax, m, opts, now)
+            offers_b, meta_b = await _search_leg(registry, hub, dest, hub_dates, pax, m, opts, now)
+            leg_a_by_mode[m] = offers_a[: opts.leg_pool_size]
+            leg_b_by_mode[m] = offers_b[: opts.leg_pool_size]
+            state.update(meta_a)
+            state.update(meta_b)
+            leg_pool.setdefault(_pool_key(origin, hub, m), []).extend(leg_a_by_mode[m])
+            leg_pool.setdefault(_pool_key(hub, dest, m), []).extend(leg_b_by_mode[m])
+
+        for mode_a, mode_b in itertools.product(modes, repeat=2):
+            if combo_count >= opts.max_combo_candidates:
+                break
+            for offer_a, offer_b in itertools.product(leg_a_by_mode[mode_a], leg_b_by_mode[mode_b]):
                 if combo_count >= opts.max_combo_candidates:
                     break
-                for offer_a, offer_b in itertools.product(leg_a_by_mode[mode_a], leg_b_by_mode[mode_b]):
-                    if combo_count >= opts.max_combo_candidates:
-                        break
-                    if not _dates_composable(offer_a, offer_b):
-                        continue
-                    combo_count += 1
-                    itinerary = _compose(
-                        offer_a, offer_b, max_transfer_min=opts.max_transfer_min, max_total_hours=opts.max_total_hours
-                    )
-                    if not itinerary.violations:
-                        itineraries.append(itinerary)
-
-    itineraries.sort(key=lambda it: it.price_minor)
-    return SearchOutcome(
-        itineraries=itineraries,
-        leg_pool=leg_pool,
-        hubs_tried=hubs_tried,
-        sources_used=sources_used,
-        sources_skipped=sources_skipped,
-        oldest_data_at=oldest,
-        partial=partial,
-    )
-
-
-@dataclass(slots=True)
-class _LegMeta:
-    sources_used: list[str]
-    sources_skipped: list[tuple[str, str]]
-    oldest: datetime | None
-    partial: bool
+                if not _dates_composable(offer_a, offer_b):
+                    continue
+                combo_count += 1
+                itinerary = _compose(
+                    offer_a, offer_b, max_transfer_min=opts.max_transfer_min, max_total_hours=opts.max_total_hours
+                )
+                if not itinerary.violations:
+                    itineraries.append(itinerary)
+    return itineraries, leg_pool, hubs_tried
 
 
 async def _search_leg(
@@ -383,13 +432,6 @@ async def _resolve_hubs(places_repo: PlacesRepo, origin: Place, dest: Place, opt
                 resolved.append(place)
         return resolved
     return await places_repo.hub_candidates_near(origin, dest, limit=MAX_HUBS_DEFAULT)
-
-
-def _merge_meta(meta: _LegMeta, sources_used: list[str], sources_skipped: list[tuple[str, str]]) -> None:
-    for s in meta.sources_used:
-        if s not in sources_used:
-            sources_used.append(s)
-    sources_skipped.extend(meta.sources_skipped)
 
 
 def _min_dt(a: datetime | None, b: datetime | None) -> datetime | None:
