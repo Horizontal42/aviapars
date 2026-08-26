@@ -95,8 +95,9 @@ async def start_from_route(
     pre-filled from the route's own origin/destination/dates, nothing saved."""
     await state.clear()
     places_repo = PlacesRepo(db)
-    origin = await places_repo.get(route.origin_place_id)
-    dest = await places_repo.get(route.dest_place_id)
+    places = await places_repo.get_many([route.origin_place_id, route.dest_place_id])
+    origin = places.get(route.origin_place_id)
+    dest = places.get(route.dest_place_id)
     assert origin is not None and dest is not None
     await state.update_data(
         origin_place_id=origin.id,
@@ -254,8 +255,9 @@ async def _run_search(
         return
 
     places_repo = PlacesRepo(db)
-    origin = await places_repo.get(data["origin_place_id"])
-    dest = await places_repo.get(data["dest_place_id"])
+    places = await places_repo.get_many([data["origin_place_id"], data["dest_place_id"]])
+    origin = places.get(data["origin_place_id"])
+    dest = places.get(data["dest_place_id"])
     assert origin is not None and dest is not None
 
     await screen.show(
