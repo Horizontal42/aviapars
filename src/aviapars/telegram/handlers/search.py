@@ -13,7 +13,7 @@ from aviapars.adapters.registry import AdapterRegistry
 from aviapars.config import settings
 from aviapars.db.repo_places import PlacesRepo
 from aviapars.db.models import Place, Route
-from aviapars.domain.combiner import Itinerary, SearchOpts, itinerary_modes, itinerary_offers, search_itineraries
+from aviapars.domain.combiner import Itinerary, SearchOpts, itinerary_offers, search_itineraries
 from aviapars.domain.dates import DateSelection, resolve_date_plan, selection_from_route
 from aviapars.domain.places import modes_for_pref
 from aviapars.telegram import date_picker
@@ -328,10 +328,18 @@ def _mode_gap_note(
     to "trains genuinely don't exist here" — say which sources were asked
     for that mode and why they didn't contribute (adapter EMPTY/blocked/
     missing-code reasons), instead of silently dropping the mode."""
-    found_modes = {m for it in itineraries for m in itinerary_modes(it)}
-    missing = [m for m in modes if m not in found_modes]
-    if not missing:
+    missing_set = set(modes)
+    for it in itineraries:
+        for offer in it.offers:
+            for leg in offer.legs:
+                missing_set.discard(leg.mode)
+        if not missing_set:
+            break
+
+    if not missing_set:
         return ""
+
+    missing = [m for m in modes if m in missing_set]
     adapters_by_id = {a.id: a for a in registry.all()}
     lines: list[str] = []
     for mode in missing:
