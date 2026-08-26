@@ -41,6 +41,18 @@ class PlacesRepo:
             row = await cursor.fetchone()
         return _row_to_place(row) if row else None
 
+    async def get_many(self, place_ids: list[int] | tuple[int, ...]) -> list[Place]:
+        if not place_ids:
+            return []
+        placeholders = ", ".join("?" for _ in place_ids)
+        async with self._db.execute(
+            f"SELECT {_COLUMNS} FROM places WHERE id IN ({placeholders})", tuple(place_ids)
+        ) as cursor:
+            rows = await cursor.fetchall()
+        places = [_row_to_place(row) for row in rows]
+        place_by_id = {p.id: p for p in places}
+        return [place_by_id[pid] for pid in place_ids if pid in place_by_id]
+
     async def search_by_name(self, query: str, *, limit: int = 6) -> list[Place]:
         """Sub-millisecond local lookup backing the /add and /search place picker
         (§10) — no external API call. Match is against `normalize(name)`
