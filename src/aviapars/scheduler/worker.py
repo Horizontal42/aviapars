@@ -85,12 +85,17 @@ async def process_route(
         modes=allowed_modes(route),
         opts=opts,
     )
+    await _record_observations(route.id, outcome.itineraries, observations_repo)
+    await _notify_deals(user, route, outcome.itineraries, notifier)
+
+
+async def _record_observations(route_id: int, itineraries: list[Itinerary], observations_repo: ObservationsRepo) -> None:
     # The same offer (same itinerary_hash) commonly appears in several composed itineraries
     # at once — a leg shared across hub combinations — so recording every occurrence would
     # insert the identical row once per combination it happens to be part of.
     recorded_hashes: set[str] = set()
     unique_offers = []
-    for itinerary in outcome.itineraries:
+    for itinerary in itineraries:
         # alternates included: a grouped itinerary renders one source's legs, but every
         # member is a real price another source quoted, and price history is per-source.
         for offer in itinerary_offers(itinerary):
@@ -101,16 +106,18 @@ async def process_route(
 
     if unique_offers:
         try:
-            await observations_repo.record_many(route.id, unique_offers)
+            await observations_repo.record_many(route_id, unique_offers)
         except aiosqlite.IntegrityError:
             # Observed live: "🔍 Проверить сейчас" on a route the user deletes mid-search
             # (a slow cycle against several confirmation adapters can run minutes) leaves
             # `route.id` gone by the time this INSERT runs — a FOREIGN KEY failure that,
             # unhandled, used to crash the whole update and skip the notify step below for
             # every other offer in this same cycle, not just the doomed one.
-            log.warning("observation insert for route %s failed (route likely deleted mid-cycle)", route.id)
+            log.warning("observation insert for route %s failed (route likely deleted mid-cycle)", route_id)
 
-    for deal in _deals_to_send(route, outcome.itineraries):
+
+async def _notify_deals(user: User, route: Route, itineraries: list[Itinerary], notifier: Notifier) -> None:
+    for deal in _deals_to_send(route, itineraries):
         # Alternates count: the headline price on the card is the cheapest member's, so a
         # group whose cheapest quote comes from a discovery source is not "подтверждено"
         # even when the flight itself was confirmed by a carrier — the card marks the
