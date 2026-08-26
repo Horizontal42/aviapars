@@ -139,7 +139,7 @@ class AdapterRegistry:
                     error_kind=result.status.value,
                     error_msg=result.error,
                 )
-        if result.status == ResultStatus.OK:
+        if result.status in (ResultStatus.OK, ResultStatus.EMPTY):
             await self._cache.set(
                 cache_key, adapter.id, _serialize_result(result), "application/json", adapter.default_cache_ttl_s
             )
