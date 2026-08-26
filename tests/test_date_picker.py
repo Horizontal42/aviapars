@@ -21,7 +21,12 @@ def test_parse_any_window_length_within_bounds() -> None:
 
 def test_parse_any_window_length_rejects_non_numeric() -> None:
     result = date_picker.parse_selection("any", "тридцать", date(2026, 1, 1))
-    assert isinstance(result, str)
+    assert result == date_picker._ERRORS["any"]
+
+
+def test_parse_any_window_length_rejects_float() -> None:
+    result = date_picker.parse_selection("any", "12.5", date(2026, 1, 1))
+    assert result == date_picker._ERRORS["any"]
 
 
 def test_parse_any_window_length_rejects_out_of_range() -> None:
@@ -64,6 +69,26 @@ def test_parse_exact_accepts_a_two_digit_year() -> None:
     sel = date_picker.parse_selection("exact", "18.09.26", date(2026, 1, 1))
     assert not isinstance(sel, str)
     assert sel.fixed_dates == (date(2026, 9, 18),)
+
+
+def test_parse_exact_rejects_past_dates() -> None:
+    result = date_picker.parse_selection("exact", "18.09.25", date(2026, 1, 1))
+    assert result == date_picker._PAST
+
+
+def test_parse_around_rejects_past_dates() -> None:
+    result = date_picker.parse_selection("around", "01.01.26", date(2026, 1, 5))
+    assert result == date_picker._PAST
+
+
+def test_parse_range_rejects_invalid_format() -> None:
+    result = date_picker.parse_selection("range", "not_a_range", date(2026, 1, 1))
+    assert result == date_picker._ERRORS["range"]
+
+
+def test_parse_range_rejects_past_end_date() -> None:
+    result = date_picker.parse_selection("range", "01.01.25 15.01.25", date(2026, 1, 1))
+    assert result == date_picker._PAST
 
 
 def test_parse_range_accepts_two_digit_years() -> None:
