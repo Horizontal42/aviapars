@@ -91,6 +91,7 @@ async def _run_due_routes(
     registry: AdapterRegistry,
     notifier: Notifier,
 ) -> None:
+    runs_to_mark = []
     for route in await routes_repo.due(now=now):
         next_run = now + timedelta(minutes=route.poll_interval_min)
         try:
@@ -109,7 +110,10 @@ async def _run_due_routes(
         except Exception:
             log.exception("route %s poll failed", route.id)
         finally:
-            await routes_repo.mark_run(route.id, next_run_at=next_run, ran_at=now)
+            runs_to_mark.append((route.id, next_run, now))
+
+    if runs_to_mark:
+        await routes_repo.mark_run_batch(runs_to_mark)
 
 
 async def _run_due_notify_jobs(now: datetime, jobs_repo: JobsRepo, notifier: Notifier) -> None:
