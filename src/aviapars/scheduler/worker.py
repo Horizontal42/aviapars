@@ -44,8 +44,9 @@ async def process_route(
     cycles at a per-cycle cost that doesn't depend on its width. Batch-capable
     sources see the whole window anyway — for them it's the same request.
     """
-    origin = await places_repo.get(route.origin_place_id)
-    dest = await places_repo.get(route.dest_place_id)
+    places = await places_repo.get_many([route.origin_place_id, route.dest_place_id])
+    origin = places.get(route.origin_place_id)
+    dest = places.get(route.dest_place_id)
     if origin is None or dest is None:
         return  # route creation guarantees valid place ids; nothing to recover here
 
