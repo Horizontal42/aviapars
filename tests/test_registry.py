@@ -89,6 +89,22 @@ async def test_repeated_empty_results_do_not_open_circuit(db: aiosqlite.Connecti
     assert failures == 0
 
 
+async def test_empty_results_are_cached(db: aiosqlite.Connection) -> None:
+    registry = AdapterRegistry(
+        db, http_concurrency_global=2, http_concurrency_interactive=1, http_concurrency_per_source=1
+    )
+    adapter = AlwaysEmptyAdapter()
+    registry.register(adapter)
+
+    result = await registry.search(adapter, _query())
+    assert result.status == ResultStatus.EMPTY
+
+    async with db.execute("SELECT COUNT(*) FROM source_cache WHERE source_id = ?", (adapter.id,)) as cur:
+        row = await cur.fetchone()
+    assert row is not None
+    assert row[0] == 1
+
+
 class _SlowCeilingAdapter(AlwaysEmptyAdapter):
     id = "slow_ceiling"
     total_timeout_s = 270  # e.g. s7_direct: 7 probe dates + 2 lookups + one browser solve
