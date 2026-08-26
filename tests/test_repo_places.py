@@ -44,6 +44,20 @@ async def test_search_folds_hyphen_and_space_as_equivalent(repo: PlacesRepo, que
     results = await repo.search_by_name(query)
     assert any(p.id == 2 for p in results)
 
+async def test_get_many_returns_places(repo: PlacesRepo) -> None:
+    places = await repo.get_many([1, 2])
+    assert len(places) == 2
+    ids = {p.id for p in places}
+    assert ids == {1, 2}
+
+async def test_get_many_returns_empty_when_ids_empty(repo: PlacesRepo) -> None:
+    places = await repo.get_many([])
+    assert places == []
+
+async def test_get_many_ignores_missing_ids(repo: PlacesRepo) -> None:
+    places = await repo.get_many([1, 999])
+    assert len(places) == 1
+    assert places[0].id == 1
 
 async def test_search_by_iata_code_excludes_airport_rows(repo: PlacesRepo) -> None:
     # LED matches both the Saint Petersburg city row and the Пулково airport row by
