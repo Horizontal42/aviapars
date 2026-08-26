@@ -376,12 +376,7 @@ def _compose(leg_a: Offer, leg_b: Offer, *, max_transfer_min: int | None, max_to
 
 async def _resolve_hubs(places_repo: PlacesRepo, origin: Place, dest: Place, opts: SearchOpts) -> list[Place]:
     if opts.hubs is not None:
-        resolved = []
-        for hub_id in opts.hubs:
-            place = await places_repo.get(hub_id)
-            if place is not None:
-                resolved.append(place)
-        return resolved
+        return await places_repo.get_many(opts.hubs)
     return await places_repo.hub_candidates_near(origin, dest, limit=MAX_HUBS_DEFAULT)
 
 
