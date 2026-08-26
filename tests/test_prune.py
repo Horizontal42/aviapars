@@ -23,7 +23,7 @@ async def db(tmp_path: Path) -> aiosqlite.Connection:
 
 async def test_prune_expired_removes_only_expired_cache_rows(db: aiosqlite.Connection) -> None:
     cache = ResponseCache(db)
-    now = datetime.now(timezone.utc)
+    datetime.now(timezone.utc)
 
     await cache.set("expired-key", "src", b"old", None, ttl_s=-3600)  # already expired
     await cache.set("live-key", "src", b"fresh", None, ttl_s=3600)
