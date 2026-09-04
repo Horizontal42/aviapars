@@ -1,0 +1,1 @@
+MAX_INTERVAL_MIN = 43_200  # 30 days
