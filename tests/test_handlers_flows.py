@@ -8,7 +8,7 @@ import aiosqlite
 import pytest
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
-from aiogram.types import CallbackQuery, Chat, Update
+from aiogram.types import CallbackQuery, Update
 from aiogram.types import User as TgUser
 
 from aviapars.adapters.base import Leg, Mode, Offer, PlaceRef, Tier
@@ -33,7 +33,7 @@ from aviapars.telegram.handlers import status as status_handlers
 from aviapars.telegram.handlers.add import on_origin_text as add_on_origin_text
 from aviapars.telegram.handlers.add import on_threshold_text
 from aviapars.telegram.bot import create_dispatcher
-from aviapars.telegram.keyboards import MenuAction, RouteAction, SearchShowAll, SearchTrack
+from aviapars.telegram.keyboards import MenuAction, RouteAction, SearchTrack
 from aviapars.telegram.screen import SCREEN_KEY, Screen, screen_for
 from aviapars.telegram.states import AddRoute, EditRoute, EditSettings, SearchFlow
 
