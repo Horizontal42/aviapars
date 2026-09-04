@@ -20,6 +20,7 @@ from aviapars.notify.notifier import Notifier
 from aviapars.scheduler.worker import process_route
 from aviapars.telegram.format import format_route_card, screen_text
 from aviapars.telegram.handlers import search as search_handlers
+from aviapars.telegram.handlers.constants import MAX_INTERVAL_MIN
 from aviapars.telegram.keyboards import RouteAction, menu_only_kb, route_card_kb, routes_list_kb
 from aviapars.telegram.screen import Screen, screen_for
 from aviapars.telegram.states import EditRoute
@@ -35,11 +36,6 @@ TITLE = "📋 Мои маршруты"
 # UI-spam guard, not a durable rate limit, and a restart resetting it is harmless.
 _CHECK_NOW_COOLDOWN_S = 60.0
 _last_manual_check: dict[int, float] = {}
-
-# Same sanity ceiling as the /add wizard's own interval step (handlers/add.py) — kept as a
-# local constant there too rather than a shared import, matching this file's existing
-# per-handler sanity-ceiling style (_CHECK_NOW_COOLDOWN_S above).
-_MAX_INTERVAL_MIN = 43_200  # 30 days
 
 
 @router.message(Command("routes"))
@@ -150,7 +146,7 @@ async def on_route_action(
                 route.title,
                 f"Сейчас проверяю каждые {route.poll_interval_min} мин.\n"
                 f"Напишите новый интервал в минутах — от {settings.poll_interval_floor_min} "
-                f"до {_MAX_INTERVAL_MIN}.",
+                f"до {MAX_INTERVAL_MIN}.",
             ),
             reply_markup=menu_only_kb(),
         )
@@ -190,11 +186,11 @@ async def on_interval_edit_text(message: Message, state: FSMContext, db: aiosqli
             reply_markup=menu_only_kb(),
         )
         return
-    if not settings.poll_interval_floor_min <= minutes <= _MAX_INTERVAL_MIN:
+    if not settings.poll_interval_floor_min <= minutes <= MAX_INTERVAL_MIN:
         await screen.show(
             screen_text(
                 "⏱ Интервал проверки",
-                f"⚠️ Нужно число от {settings.poll_interval_floor_min} до {_MAX_INTERVAL_MIN} минут.",
+                f"⚠️ Нужно число от {settings.poll_interval_floor_min} до {MAX_INTERVAL_MIN} минут.",
             ),
             reply_markup=menu_only_kb(),
         )

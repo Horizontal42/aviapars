@@ -14,6 +14,7 @@ from aviapars.db.repo_routes import RoutesRepo
 from aviapars.domain.dates import DateSelection, to_route_fields
 from aviapars.telegram import date_picker
 from aviapars.telegram.format import describe_draft, format_route_card, screen_text
+from aviapars.telegram.handlers.constants import MAX_INTERVAL_MIN
 from aviapars.telegram.keyboards import (
     MODE_LABEL,
     DatePick,
@@ -40,7 +41,6 @@ TITLE = "➕ Новый маршрут"
 # this rarely. Without them an absurd digit string (e.g. 19 digits) overflows timedelta()
 # or SQLite's bind for max_price and takes down the whole scheduler tick, not just this route.
 _MAX_PRICE_RUB = 100_000_000
-_MAX_INTERVAL_MIN = 43_200  # 30 days
 
 # Every @router.message(SomeState) handler below accepts any content type, not just text
 # (there's no content-type filter) — a sticker/photo/voice message sent mid-wizard used to
@@ -302,11 +302,11 @@ async def on_interval_text(message: Message, state: FSMContext) -> None:
     except ValueError:
         await step(screen, state, "⚠️ Нужно целое число минут, например 60.", reply_markup=menu_only_kb())
         return
-    if minutes < settings.poll_interval_floor_min or minutes > _MAX_INTERVAL_MIN:
+    if minutes < settings.poll_interval_floor_min or minutes > MAX_INTERVAL_MIN:
         await step(
             screen,
             state,
-            f"⚠️ Нужно число от {settings.poll_interval_floor_min} до {_MAX_INTERVAL_MIN} минут.",
+            f"⚠️ Нужно число от {settings.poll_interval_floor_min} до {MAX_INTERVAL_MIN} минут.",
             reply_markup=menu_only_kb(),
         )
         return
