@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import aiosqlite
@@ -166,18 +166,34 @@ async def test_status_admin_view_covers_every_row_shape(db: aiosqlite.Connection
     adapters = [
         _fake_adapter("never_polled", "Никогда не спрашивал", frozenset({Mode.PLANE})),
         _fake_adapter("failing", "Падает", frozenset({Mode.PLANE})),
+        _fake_adapter("failing_with_old_success", "Падает со старой датой", frozenset({Mode.PLANE})),
         _fake_adapter("healthy", "Здоров", frozenset({Mode.TRAIN})),
+        _fake_adapter("healthy_no_last_success", "Здоров (нет даты)", frozenset({Mode.TRAIN})),
+        _fake_adapter("healthy_invalid_last_success", "Здоров (битая дата)", frozenset({Mode.TRAIN})),
     ]
     now_iso = datetime.now(timezone.utc).isoformat()
+    old_iso = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     await db.execute(
         "INSERT INTO source_health (source_id, status, last_success_at, consecutive_failures, last_error_kind) "
-        "VALUES ('failing', 'down', ?, 5, 'blocked')",
-        (now_iso,),
+        "VALUES ('failing', 'down', NULL, 5, 'blocked')"
+    )
+    await db.execute(
+        "INSERT INTO source_health (source_id, status, last_success_at, consecutive_failures, last_error_kind) "
+        "VALUES ('failing_with_old_success', 'down', ?, 3, 'timeout')",
+        (old_iso,),
     )
     await db.execute(
         "INSERT INTO source_health (source_id, status, last_success_at, consecutive_failures, last_error_kind) "
         "VALUES ('healthy', 'ok', ?, 0, NULL)",
         (now_iso,),
+    )
+    await db.execute(
+        "INSERT INTO source_health (source_id, status, last_success_at, consecutive_failures, last_error_kind) "
+        "VALUES ('healthy_no_last_success', 'ok', NULL, 0, NULL)"
+    )
+    await db.execute(
+        "INSERT INTO source_health (source_id, status, last_success_at, consecutive_failures, last_error_kind) "
+        "VALUES ('healthy_invalid_last_success', 'ok', 'invalid_date', 0, NULL)"
     )
     await db.commit()
 
@@ -193,7 +209,10 @@ async def test_status_admin_view_covers_every_row_shape(db: aiosqlite.Connection
     shown = "\n".join(bot.all_shown)
     assert "ещё не опрашивал" in shown
     assert "blocked" in shown
+    assert "timeout" in shown
     assert "отвечал" in shown
+    assert "Здоров (нет даты)" in shown
+    assert "Здоров (битая дата)" in shown
 
 
 async def test_status_non_admin_view_groups_by_mode(db: aiosqlite.Connection) -> None:
