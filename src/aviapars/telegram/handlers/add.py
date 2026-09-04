@@ -220,10 +220,10 @@ def _per_mode_prompt(mode: str) -> str:
 def _parse_price_minor(text: str) -> int | str:
     """Minor units, or the error message to show the user."""
     try:
-        rub = int(text.strip().replace(" ", ""))
+        rub = int("".join(text.split()))
     except ValueError:
         return "⚠️ Нужно число — сумма в рублях, например 8000."
-    if rub <= 0 or rub > _MAX_PRICE_RUB:
+    if not (1 <= rub <= _MAX_PRICE_RUB):
         return f"⚠️ Нужна сумма от 1 до {_MAX_PRICE_RUB:,} ₽.".replace(",", " ")
     return rub * 100
 
