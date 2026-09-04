@@ -15,6 +15,15 @@ _COLUMNS = (
     "poll_interval_min, notification_mode, active, next_run_at, last_run_at, created_at"
 )
 
+_GET_SQL = "SELECT " + _COLUMNS + " FROM routes WHERE id = ?"
+_LIST_FOR_USER_SQL = "SELECT " + _COLUMNS + " FROM routes WHERE user_id = ? ORDER BY created_at DESC"
+_DUE_SQL = (
+    "SELECT " + _COLUMNS + " FROM routes\n"
+    "WHERE active = 1 AND (next_run_at IS NULL OR next_run_at <= ?)\n"
+    "ORDER BY next_run_at ASC\n"
+    "LIMIT ?"
+)
+
 NOTIFICATION_MODES = ("instant", "digest")
 
 
@@ -122,25 +131,18 @@ class RoutesRepo:
         return route
 
     async def get(self, route_id: int) -> Route | None:
-        async with self._db.execute(f"SELECT {_COLUMNS} FROM routes WHERE id = ?", (route_id,)) as cursor:
+        async with self._db.execute(_GET_SQL, (route_id,)) as cursor:
             row = await cursor.fetchone()
         return _row_to_route(row) if row else None
 
     async def list_for_user(self, user_id: int) -> list[Route]:
-        async with self._db.execute(
-            f"SELECT {_COLUMNS} FROM routes WHERE user_id = ? ORDER BY created_at DESC", (user_id,)
-        ) as cursor:
+        async with self._db.execute(_LIST_FOR_USER_SQL, (user_id,)) as cursor:
             rows = await cursor.fetchall()
         return [_row_to_route(row) for row in rows]
 
     async def due(self, *, now: datetime, limit: int = 50) -> list[Route]:
         async with self._db.execute(
-            f"""
-            SELECT {_COLUMNS} FROM routes
-            WHERE active = 1 AND (next_run_at IS NULL OR next_run_at <= ?)
-            ORDER BY next_run_at ASC
-            LIMIT ?
-            """,
+            _DUE_SQL,
             (now.isoformat(), limit),
         ) as cursor:
             rows = await cursor.fetchall()
