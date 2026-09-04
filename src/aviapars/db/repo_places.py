@@ -26,9 +26,10 @@ def _row_to_place(row: aiosqlite.Row) -> Place:
     )
 
 
-_COLUMNS = (
-    "id, kind, name_ru, name_en, iata, yandex_code, rzd_code, city_id, country, region, lat, lon, "
-    "popularity, is_hub_candidate"
+_SELECT_BASE = (
+    "SELECT id, kind, name_ru, name_en, iata, yandex_code, rzd_code, city_id, country, region, lat, lon, "
+    "popularity, is_hub_candidate "
+    "FROM places"
 )
 
 
@@ -37,7 +38,10 @@ class PlacesRepo:
         self._db = db
 
     async def get(self, place_id: int) -> Place | None:
-        async with self._db.execute(f"SELECT {_COLUMNS} FROM places WHERE id = ?", (place_id,)) as cursor:
+        async with self._db.execute(
+            _SELECT_BASE + " WHERE id = ?",
+            (place_id,),
+        ) as cursor:
             row = await cursor.fetchone()
         return _row_to_place(row) if row else None
 
@@ -58,14 +62,15 @@ class PlacesRepo:
         airport rows add nothing but an extra disambiguation tap.
         """
         like = f"%{normalize_place_query(query)}%"
+        sql_query = (
+            _SELECT_BASE + "\n"
+            "WHERE kind = 'city'\n"
+            "  AND (normalize(name_ru) LIKE ? OR normalize(name_en) LIKE ? OR iata = ?)\n"
+            "ORDER BY popularity DESC\n"
+            "LIMIT ?"
+        )
         async with self._db.execute(
-            f"""
-            SELECT {_COLUMNS} FROM places
-            WHERE kind = 'city'
-              AND (normalize(name_ru) LIKE ? OR normalize(name_en) LIKE ? OR iata = ?)
-            ORDER BY popularity DESC
-            LIMIT ?
-            """,
+            sql_query,
             (like, like, query.strip().upper(), limit),
         ) as cursor:
             rows = await cursor.fetchall()
@@ -93,16 +98,17 @@ class PlacesRepo:
         country realistically has — 17 in the live RU seed), not to pre-rank:
         truncating by popularity here would smuggle the old bias back in.
         """
+        sql_query = (
+            _SELECT_BASE + "\n"
+            "WHERE is_hub_candidate = 1\n"
+            "  AND country IN (?, ?)\n"
+            "  AND id NOT IN (?, ?)\n"
+            "  AND (city_id IS NULL OR (city_id IS NOT ? AND city_id IS NOT ?))\n"
+            "ORDER BY popularity DESC\n"
+            "LIMIT ?"
+        )
         async with self._db.execute(
-            f"""
-            SELECT {_COLUMNS} FROM places
-            WHERE is_hub_candidate = 1
-              AND country IN (?, ?)
-              AND id NOT IN (?, ?)
-              AND (city_id IS NULL OR (city_id IS NOT ? AND city_id IS NOT ?))
-            ORDER BY popularity DESC
-            LIMIT ?
-            """,
+            sql_query,
             (
                 origin.country,
                 dest.country,
