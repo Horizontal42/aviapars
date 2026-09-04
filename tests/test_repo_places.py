@@ -238,3 +238,21 @@ async def test_hub_candidates_near_handles_null_city_id(db: aiosqlite.Connection
     candidates = await repo.hub_candidates_near(origin, dest)
 
     assert [c.id for c in candidates] == [3]
+
+async def test_get_many_preserves_order_and_skips_missing(db: aiosqlite.Connection) -> None:
+    repo = PlacesRepo(db)
+    await _insert_place(db, place_id=10, city_id=1, name="City A")
+    await _insert_place(db, place_id=20, city_id=2, name="City B")
+    await _insert_place(db, place_id=30, city_id=3, name="City C")
+
+    # Ask for [30, 999, 10] -> Should return [Place(30), Place(10)] in that order
+    places = await repo.get_many([30, 999, 10])
+
+    assert len(places) == 2
+    assert places[0].id == 30
+    assert places[1].id == 10
+
+async def test_get_many_empty_list(db: aiosqlite.Connection) -> None:
+    repo = PlacesRepo(db)
+    places = await repo.get_many([])
+    assert places == []
