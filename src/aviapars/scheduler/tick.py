@@ -91,10 +91,17 @@ async def _run_due_routes(
     registry: AdapterRegistry,
     notifier: Notifier,
 ) -> None:
-    for route in await routes_repo.due(now=now):
+    due_routes = await routes_repo.due(now=now)
+    if not due_routes:
+        return
+
+    user_ids = list({route.user_id for route in due_routes})
+    users_by_id = await users_repo.get_multi(user_ids)
+
+    for route in due_routes:
         next_run = now + timedelta(minutes=route.poll_interval_min)
         try:
-            user = await users_repo.get(route.user_id)
+            user = users_by_id.get(route.user_id)
             if user is None:
                 continue
             await process_route(
