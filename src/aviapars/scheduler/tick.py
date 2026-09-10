@@ -119,11 +119,14 @@ async def _run_due_notify_jobs(now: datetime, jobs_repo: JobsRepo, notifier: Not
     jobs = [job for job in await jobs_repo.due(now=now) if job.kind == "notify"]
     if not jobs:
         return
-    for job in jobs:
-        await jobs_repo.mark_running(job.id)
-    delivered = set(await notifier.deliver_pending(jobs))
-    for job in jobs:
-        if job.id in delivered:
-            await jobs_repo.mark_done(job.id)
-        else:
-            await jobs_repo.mark_failed(job.id)
+
+    job_ids = [job.id for job in jobs]
+    await jobs_repo.mark_many_running(job_ids)
+
+    delivered_set = set(await notifier.deliver_pending(jobs))
+
+    done_ids = [job.id for job in jobs if job.id in delivered_set]
+    failed_ids = [job.id for job in jobs if job.id not in delivered_set]
+
+    await jobs_repo.mark_many_done(done_ids)
+    await jobs_repo.mark_many_failed(failed_ids)
