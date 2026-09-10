@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
 from collections.abc import Awaitable, Callable
@@ -130,25 +131,36 @@ class S7DirectAdapter:
         cookies = await self._get_cached_cookies()
         offers: list[Offer] = []
         blocked = False
-        solver_tried = False
-        for depart_date in q.dates:
-            day_offers, ok = await self._try_search(q, depart_date, origin_id, dest_id, cookies)
-            if not ok and not solver_tried:
-                # Only ever solve once per search() call — the challenge is session/browser
-                # scoped, not per-date (see class docstring), and a fresh browser subprocess
-                # per date in a 7-date cycle would be both slow and pointless.
-                solver_tried = True
-                solved = await self._solver.solve("s7", {"AA1": q.dest.iata, "DA1": q.origin.iata, "CUR": "RUB"})
-                if solved is None:
-                    blocked = True
-                    break  # persistent block — further dates would fail the same way
+
+        tasks = [self._try_search(q, d, origin_id, dest_id, cookies) for d in q.dates]
+        results = await asyncio.gather(*tasks)
+
+        failed_dates: list[date] = []
+        for i, (day_offers, ok) in enumerate(results):
+            if ok:
+                offers.extend(day_offers)
+            else:
+                failed_dates.append(q.dates[i])
+
+        if failed_dates:
+            # Only ever solve once per search() call — the challenge is session/browser
+            # scoped, not per-date (see class docstring), and a fresh browser subprocess
+            # per date in a 7-date cycle would be both slow and pointless.
+            solved = await self._solver.solve("s7", {"AA1": q.dest.iata, "DA1": q.origin.iata, "CUR": "RUB"})
+            if solved is None:
+                blocked = True
+            else:
                 cookies = solved["cookies"]
                 await self._save_session(cookies)
-                day_offers, ok = await self._try_search(q, depart_date, origin_id, dest_id, cookies)
-            if not ok:
-                blocked = True
-                break
-            offers.extend(day_offers)
+
+                retry_tasks = [self._try_search(q, d, origin_id, dest_id, cookies) for d in failed_dates]
+                retry_results = await asyncio.gather(*retry_tasks)
+
+                for day_offers, ok in retry_results:
+                    if ok:
+                        offers.extend(day_offers)
+                    else:
+                        blocked = True
 
         return build_search_result(offers, blocked=blocked)
 
