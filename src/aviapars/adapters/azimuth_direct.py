@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -87,8 +88,11 @@ class AzimuthDirectAdapter:
                 offers: list[Offer] = []
                 blocked = False
                 partial = False
-                for depart_date in q.dates:
-                    day_offers, outcome = await self._search_day(session, q, token, depart_date)
+
+                tasks = [self._search_day(session, q, token, depart_date) for depart_date in q.dates]
+                results = await asyncio.gather(*tasks)
+
+                for day_offers, outcome in results:
                     if outcome == "blocked":
                         blocked = True
                         continue
