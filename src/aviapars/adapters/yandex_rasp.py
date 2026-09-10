@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from datetime import date, datetime, timezone
 from typing import Any
@@ -61,8 +62,9 @@ class YandexRaspAdapter:
         offers: list[Offer] = []
         partial = False
         async with aiohttp.ClientSession() as session:
-            for d in dates:
-                segments, ok = await self._fetch_day(session, q.origin.yandex_code, q.dest.yandex_code, d)
+            tasks = [self._fetch_day(session, q.origin.yandex_code, q.dest.yandex_code, d) for d in dates]
+            results = await asyncio.gather(*tasks)
+            for segments, ok in results:
                 if not ok:
                     partial = True
                     continue
