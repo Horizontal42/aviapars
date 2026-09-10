@@ -22,13 +22,17 @@ from __future__ import annotations
 import argparse
 import asyncio
 import ipaddress
+import shutil
 import socket
 import struct
 import subprocess
 
 
 def _detect_tailscale_ip() -> str:
-    out = subprocess.run(["tailscale", "ip", "-4"], capture_output=True, text=True, check=True)
+    ts_bin = shutil.which("tailscale")
+    if not ts_bin:
+        raise RuntimeError("tailscale executable not found in PATH")
+    out = subprocess.run([ts_bin, "ip", "-4"], capture_output=True, text=True, check=True)  # nosec B603
     ip = out.stdout.strip()
     if not ip:
         raise RuntimeError("tailscale ip -4 returned nothing — is tailscaled up and assigned an IPv4?")
