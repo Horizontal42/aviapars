@@ -157,6 +157,43 @@ def test_quiet_hours_wraps_midnight() -> None:
     assert is_quiet_hours(user, midday_utc) is False
 
 
+def test_quiet_hours_wrap_boundaries() -> None:
+    user = _user(start="23:00", end="08:00")
+
+    # Exactly at start (23:00 Moscow = 20:00 UTC) -> should be quiet
+    exact_start = datetime(2026, 8, 17, 20, 0, tzinfo=timezone.utc)
+    assert is_quiet_hours(user, exact_start) is True
+
+    # Exactly at end (08:00 Moscow = 05:00 UTC) -> should NOT be quiet
+    exact_end = datetime(2026, 8, 17, 5, 0, tzinfo=timezone.utc)
+    assert is_quiet_hours(user, exact_end) is False
+
+
+def test_quiet_hours_daytime() -> None:
+    # start < end case (e.g. 10:00 to 18:00)
+    user = _user(start="10:00", end="18:00")
+
+    # Inside (14:00 Moscow = 11:00 UTC)
+    inside = datetime(2026, 8, 17, 11, 0, tzinfo=timezone.utc)
+    assert is_quiet_hours(user, inside) is True
+
+    # Outside (09:00 Moscow = 06:00 UTC)
+    before = datetime(2026, 8, 17, 6, 0, tzinfo=timezone.utc)
+    assert is_quiet_hours(user, before) is False
+
+    # Outside (19:00 Moscow = 16:00 UTC)
+    after = datetime(2026, 8, 17, 16, 0, tzinfo=timezone.utc)
+    assert is_quiet_hours(user, after) is False
+
+    # Exactly at start (10:00 Moscow = 07:00 UTC) -> should be quiet
+    exact_start = datetime(2026, 8, 17, 7, 0, tzinfo=timezone.utc)
+    assert is_quiet_hours(user, exact_start) is True
+
+    # Exactly at end (18:00 Moscow = 15:00 UTC) -> should NOT be quiet
+    exact_end = datetime(2026, 8, 17, 15, 0, tzinfo=timezone.utc)
+    assert is_quiet_hours(user, exact_end) is False
+
+
 def test_quiet_hours_disabled_when_start_equals_end() -> None:
     user = _user(start="00:00", end="00:00")
     for hour in (0, 6, 12, 18, 23):
