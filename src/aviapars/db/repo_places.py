@@ -31,13 +31,20 @@ _COLUMNS = (
     "popularity, is_hub_candidate"
 )
 
+_SELECT = (
+    "SELECT "
+    "id, kind, name_ru, name_en, iata, yandex_code, rzd_code, city_id, country, region, lat, lon, "
+    "popularity, is_hub_candidate"
+    " FROM places"
+)
+
 
 class PlacesRepo:
     def __init__(self, db: aiosqlite.Connection) -> None:
         self._db = db
 
     async def get(self, place_id: int) -> Place | None:
-        async with self._db.execute(f"SELECT {_COLUMNS} FROM places WHERE id = ?", (place_id,)) as cursor:
+        async with self._db.execute(_SELECT + " WHERE id = ?", (place_id,)) as cursor:
             row = await cursor.fetchone()
         return _row_to_place(row) if row else None
 
@@ -59,8 +66,8 @@ class PlacesRepo:
         """
         like = f"%{normalize_place_query(query)}%"
         async with self._db.execute(
-            f"""
-            SELECT {_COLUMNS} FROM places
+            _SELECT
+            + """
             WHERE kind = 'city'
               AND (normalize(name_ru) LIKE ? OR normalize(name_en) LIKE ? OR iata = ?)
             ORDER BY popularity DESC
@@ -94,8 +101,8 @@ class PlacesRepo:
         truncating by popularity here would smuggle the old bias back in.
         """
         async with self._db.execute(
-            f"""
-            SELECT {_COLUMNS} FROM places
+            _SELECT
+            + """
             WHERE is_hub_candidate = 1
               AND country IN (?, ?)
               AND id NOT IN (?, ?)
