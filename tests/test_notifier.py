@@ -174,6 +174,25 @@ def test_next_quiet_hours_end_rolls_to_tomorrow_if_already_past() -> None:
     assert end > now_utc
 
 
+def test_next_quiet_hours_end_same_day() -> None:
+    user = _user()
+    # 07:00 Moscow — quiet hours end (08:00) not passed today, so next
+    # end must be today morning.
+    now_utc = datetime(2026, 8, 17, 4, 0, tzinfo=timezone.utc)  # 07:00 Moscow
+    end = next_quiet_hours_end(user, now_utc)
+    assert end.astimezone(ZoneInfo(user.tz)).date().day == 17
+    assert end > now_utc
+
+
+def test_next_quiet_hours_end_exactly_at_end() -> None:
+    user = _user()
+    # 08:00 Moscow — exactly at quiet hours end (08:00), should roll to next day.
+    now_utc = datetime(2026, 8, 17, 5, 0, tzinfo=timezone.utc)  # 08:00 Moscow
+    end = next_quiet_hours_end(user, now_utc)
+    assert end.astimezone(ZoneInfo(user.tz)).date().day == 18
+    assert end > now_utc
+
+
 @pytest.fixture
 async def db(tmp_path) -> aiosqlite.Connection:
     conn = await aiosqlite.connect(tmp_path / "notif.db")
