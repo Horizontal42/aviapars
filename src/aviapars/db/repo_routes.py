@@ -170,6 +170,11 @@ class RoutesRepo:
         await self._db.execute("UPDATE routes SET active = ? WHERE id = ?", (int(active), route_id))
         await self._db.commit()
 
+    async def pause_all(self) -> int:
+        cursor = await self._db.execute("UPDATE routes SET active = 0 WHERE active = 1")
+        await self._db.commit()
+        return cursor.rowcount
+
     async def delete(self, route_id: int) -> None:
         await self._db.execute("DELETE FROM routes WHERE id = ?", (route_id,))
         await self._db.commit()
