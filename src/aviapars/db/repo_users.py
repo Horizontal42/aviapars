@@ -51,6 +51,37 @@ class UsersRepo:
             created_at=row[7],
         )
 
+    async def get_multi(self, tg_user_ids: list[int]) -> dict[int, User]:
+        if not tg_user_ids:
+            return {}
+
+        unique_ids = list(set(tg_user_ids))
+        placeholders = ",".join("?" for _ in unique_ids)
+
+        async with self._db.execute(
+            f"""
+            SELECT tg_user_id, tz, currency, quiet_hours_start, quiet_hours_end, digest_time,
+                   is_admin, created_at
+            FROM users WHERE tg_user_id IN ({placeholders})
+            """,
+            unique_ids,
+        ) as cursor:
+            rows = await cursor.fetchall()
+
+        users = {}
+        for row in rows:
+            users[row[0]] = User(
+                tg_user_id=row[0],
+                tz=row[1],
+                currency=row[2],
+                quiet_hours_start=row[3],
+                quiet_hours_end=row[4],
+                digest_time=row[5],
+                is_admin=bool(row[6]),
+                created_at=row[7],
+            )
+        return users
+
     async def set_quiet_hours(self, tg_user_id: int, *, start: str, end: str) -> None:
         await self._db.execute(
             "UPDATE users SET quiet_hours_start = ?, quiet_hours_end = ? WHERE tg_user_id = ?",
