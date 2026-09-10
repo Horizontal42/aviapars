@@ -131,8 +131,29 @@ async def search_itineraries(
     oldest: datetime | None = None
     partial = False
 
+    hubs_tried: list[int] = []
+    hubs: list[Place] = []
+    if opts.max_hops >= 1 and not dates.is_empty:
+        hub_dates = dates.narrowed(opts.hub_probe_dates_cap)
+        hubs = await _resolve_hubs(places_repo, origin, dest, opts)
+        hubs_tried = [h.id for h in hubs]
+    else:
+        hub_dates = dates
+
+    coros = []
     for mode in modes:
-        offers, meta = await _search_leg(registry, origin, dest, dates, pax, mode, opts, now)
+        coros.append(_search_leg(registry, origin, dest, dates, pax, mode, opts, now))
+
+    for hub in hubs:
+        for m in modes:
+            coros.append(_search_leg(registry, origin, hub, hub_dates, pax, m, opts, now))
+            coros.append(_search_leg(registry, hub, dest, hub_dates, pax, m, opts, now))
+
+    results = await asyncio.gather(*coros)
+    results_iter = iter(results)
+
+    for mode in modes:
+        offers, meta = next(results_iter)
         _merge_meta(meta, sources_used, sources_skipped)
         oldest = _min_dt(oldest, meta.oldest)
         partial = partial or meta.partial
@@ -154,19 +175,14 @@ async def search_itineraries(
                 )
             )
 
-    hubs_tried: list[int] = []
-    if opts.max_hops >= 1 and not dates.is_empty:
-        hub_dates = dates.narrowed(opts.hub_probe_dates_cap)
-        hubs = await _resolve_hubs(places_repo, origin, dest, opts)
-        hubs_tried = [h.id for h in hubs]
+    if hubs:
         combo_count = 0
-
         for hub in hubs:
             leg_a_by_mode: dict[Mode, list[Offer]] = {}
             leg_b_by_mode: dict[Mode, list[Offer]] = {}
             for m in modes:
-                offers_a, meta_a = await _search_leg(registry, origin, hub, hub_dates, pax, m, opts, now)
-                offers_b, meta_b = await _search_leg(registry, hub, dest, hub_dates, pax, m, opts, now)
+                offers_a, meta_a = next(results_iter)
+                offers_b, meta_b = next(results_iter)
                 leg_a_by_mode[m] = offers_a[: opts.leg_pool_size]
                 leg_b_by_mode[m] = offers_b[: opts.leg_pool_size]
                 _merge_meta(meta_a, sources_used, sources_skipped)
