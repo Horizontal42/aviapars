@@ -80,11 +80,22 @@ async def solve(target: str, params: dict[str, str]) -> dict[str, Any] | None:
 
 
 async def _main() -> int:
-    if len(sys.argv) < 2:
-        print(json.dumps({"error": "usage: browser_solver.py <target> [k=v ...]"}))
+    try:
+        input_data = sys.stdin.read()
+        if not input_data:
+            print(json.dumps({"error": "No input provided on stdin"}))
+            return 1
+
+        parsed_input = json.loads(input_data)
+        target = parsed_input.get("target")
+        params = parsed_input.get("params", {})
+
+        if not target:
+            print(json.dumps({"error": "Target must be provided"}))
+            return 1
+    except json.JSONDecodeError as exc:
+        print(json.dumps({"error": f"Invalid JSON on stdin: {str(exc)}"}))
         return 1
-    target = sys.argv[1]
-    params = dict(p.split("=", 1) for p in sys.argv[2:] if "=" in p)
 
     try:
         result = await solve(target, params)

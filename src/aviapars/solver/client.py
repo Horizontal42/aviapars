@@ -17,14 +17,19 @@ class BrowserSolverClient:
         self._timeout_s = timeout_s
 
     async def solve(self, target: str, params: dict[str, str]) -> dict[str, Any] | None:
-        cmd = [sys.executable, "-m", "aviapars.solver.browser_solver", target]
-        cmd += [f"{k}={v}" for k, v in params.items()]
+        cmd = [sys.executable, "-m", "aviapars.solver.browser_solver"]
 
         try:
             proc = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
+                *cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=self._timeout_s)
+            input_data = json.dumps({"target": target, "params": params}).encode()
+            stdout, _ = await asyncio.wait_for(
+                proc.communicate(input=input_data), timeout=self._timeout_s
+            )
         except (TimeoutError, OSError):
             return None
 
