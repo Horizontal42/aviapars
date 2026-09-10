@@ -647,17 +647,21 @@ async def test_digest_splits_only_when_telegram_would_reject_it(db: aiosqlite.Co
     assert "продолжение" in messages[1]
 
 
-def test_digest_time_overrides_quiet_hours_end_but_never_wakes_the_user() -> None:
+@pytest.mark.parametrize(
+    ("digest_time", "expected_day", "expected_hour", "expected_minute"),
+    [
+        (None, 19, 5, 0),  # No digest_time: fallback to next_quiet_hours_end (08:00 MSK = 05:00 UTC next day, wait, now is 09:00 UTC (12:00 MSK), quiet hours are 23:00-08:00 MSK, so next end is 19th 05:00 UTC)
+        ("14:00", 18, 11, 0),  # Later today, outside quiet hours: 14:00 MSK = 11:00 UTC today
+        ("23:30", 19, 5, 0),  # Later today, inside quiet hours: clamps to next quiet hours end (19th 08:00 MSK = 05:00 UTC)
+        ("10:00", 19, 7, 0),  # Earlier today, outside quiet hours tomorrow: shifts to tomorrow 10:00 MSK = 07:00 UTC
+        ("04:00", 19, 5, 0),  # Earlier today, inside quiet hours tomorrow: shifts to tomorrow 04:00 MSK, clamps to 08:00 MSK = 05:00 UTC
+        ("12:00", 19, 9, 0),  # Exactly now: candidate <= local shifts to tomorrow 12:00 MSK = 09:00 UTC
+    ],
+)
+def test_next_digest_delivery(
+    digest_time: str | None, expected_day: int, expected_hour: int, expected_minute: int
+) -> None:
     now = datetime(2026, 9, 18, 9, 0, tzinfo=timezone.utc)  # 12:00 Moscow
-
-    default = _user()
-    assert next_digest_delivery(default, now) == next_quiet_hours_end(default, now)
-
-    evening = _user(digest_time="20:00")
-    landed = next_digest_delivery(evening, now).astimezone(ZoneInfo("Europe/Moscow"))
-    assert (landed.day, landed.hour, landed.minute) == (18, 20, 0)
-
-    # 03:00 sits inside 23:00-08:00 — quiet hours are the stronger promise, so it waits
-    middle_of_night = _user(digest_time="03:00")
-    clamped = next_digest_delivery(middle_of_night, now).astimezone(ZoneInfo("Europe/Moscow"))
-    assert (clamped.hour, clamped.minute) == (8, 0)
+    user = _user(digest_time=digest_time, start="23:00", end="08:00")
+    result = next_digest_delivery(user, now)
+    assert (result.day, result.hour, result.minute) == (expected_day, expected_hour, expected_minute)
