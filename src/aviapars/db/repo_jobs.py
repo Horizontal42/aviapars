@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
 
@@ -95,6 +96,35 @@ class JobsRepo:
         await self._db.execute(
             "UPDATE jobs SET state = 'failed', finished_at = ? WHERE id = ?",
             (datetime.now(timezone.utc).isoformat(), job_id),
+        )
+        await self._db.commit()
+
+    async def mark_many_running(self, job_ids: Sequence[int]) -> None:
+        if not job_ids:
+            return
+        await self._db.executemany(
+            "UPDATE jobs SET state = 'running', attempts = attempts + 1 WHERE id = ?",
+            [(job_id,) for job_id in job_ids],
+        )
+        await self._db.commit()
+
+    async def mark_many_done(self, job_ids: Sequence[int]) -> None:
+        if not job_ids:
+            return
+        now_iso = datetime.now(timezone.utc).isoformat()
+        await self._db.executemany(
+            "UPDATE jobs SET state = 'done', finished_at = ? WHERE id = ?",
+            [(now_iso, job_id) for job_id in job_ids],
+        )
+        await self._db.commit()
+
+    async def mark_many_failed(self, job_ids: Sequence[int]) -> None:
+        if not job_ids:
+            return
+        now_iso = datetime.now(timezone.utc).isoformat()
+        await self._db.executemany(
+            "UPDATE jobs SET state = 'failed', finished_at = ? WHERE id = ?",
+            [(now_iso, job_id) for job_id in job_ids],
         )
         await self._db.commit()
 
