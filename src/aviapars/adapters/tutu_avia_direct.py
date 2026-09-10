@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import asyncio
 import json
 import uuid
 from datetime import date, datetime, timezone
@@ -148,8 +149,9 @@ class TutuAviaDirectAdapter:
                     return SearchResult(status=ResultStatus.UPSTREAM_ERROR, offers=[], partial=True)
                 return SearchResult(status=ResultStatus.EMPTY, offers=[], partial=False, error="city not found")
 
-            for depart_date in q.dates:
-                day_offers, outcome = await self._search_day(session, q, origin_id, dest_id, depart_date)
+            tasks = [self._search_day(session, q, origin_id, dest_id, depart_date) for depart_date in q.dates]
+            results = await asyncio.gather(*tasks)
+            for day_offers, outcome in results:
                 if outcome == "blocked":
                     blocked = True
                     continue
