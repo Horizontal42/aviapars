@@ -1,0 +1,25 @@
+--- src/aviapars/adapters/s7_direct.py
++++ src/aviapars/adapters/s7_direct.py
+@@ -3,6 +3,7 @@
+ import hashlib
+ import re
+ from collections.abc import Awaitable, Callable
++from dataclasses import dataclass
+ from datetime import date, datetime, timedelta, timezone
+ from typing import Any
+ from urllib.parse import urlencode
+@@ -43,6 +44,15 @@
+ SessionSetter = Callable[[dict[str, Any], datetime], Awaitable[None]]
+
+
++@dataclass(frozen=True, slots=True)
++class S7DirectAdapterConfig:
++    session_getter: SessionGetter | None = None
++    session_setter: SessionSetter | None = None
++    rate_limit: RateLimitPolicy | None = None
++    cache_ttl_s: int = 1800
++    solver_timeout_s: float = 90
++    session_ttl_s: int = 1500
++
+ class S7DirectAdapter:
+     """Confirmation-tier direct scrape of S7's own booking search (ibe.s7.ru).

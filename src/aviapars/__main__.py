@@ -13,7 +13,7 @@ from aviapars.adapters.azimuth_direct import AzimuthDirectAdapter
 from aviapars.adapters.pobeda_direct import PobedaDirectAdapter
 from aviapars.adapters.registry import AdapterRegistry
 from aviapars.adapters.rzd_direct import RzdDirectAdapter
-from aviapars.adapters.s7_direct import S7DirectAdapter
+from aviapars.adapters.s7_direct import S7DirectAdapter, S7DirectAdapterConfig
 from aviapars.adapters.travelpayouts import TravelpayoutsAdapter
 from aviapars.adapters.tutu_avia_direct import TutuAviaDirectAdapter
 from aviapars.adapters.tutu_rail_direct import TutuRailDirectAdapter
@@ -100,9 +100,11 @@ def setup_registry(db: aiosqlite.Connection) -> AdapterRegistry:
         sessions_repo = SessionsRepo(db)
         registry.register(
             S7DirectAdapter(
-                session_getter=lambda: sessions_repo.get("s7_direct"),
-                session_setter=lambda payload, expires_at: sessions_repo.save("s7_direct", payload, expires_at),
-                cache_ttl_s=settings.cache_ttl_s.airline_direct,
+                config=S7DirectAdapterConfig(
+                    session_getter=lambda: sessions_repo.get("s7_direct"),
+                    session_setter=lambda payload, expires_at: sessions_repo.save("s7_direct", payload, expires_at),
+                    cache_ttl_s=settings.cache_ttl_s.airline_direct,
+                )
             )
         )
     return registry

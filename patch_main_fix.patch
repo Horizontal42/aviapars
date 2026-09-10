@@ -1,0 +1,15 @@
+--- src/aviapars/__main__.py
++++ src/aviapars/__main__.py
+@@ -100,7 +100,9 @@
+         sessions_repo = SessionsRepo(db)
+         registry.register(
+             S7DirectAdapter(
+-                session_getter=lambda: sessions_repo.get("s7_direct"),
+-                session_setter=lambda payload, expires_at: sessions_repo.save("s7_direct", payload, expires_at),
+-                cache_ttl_s=settings.cache_ttl_s.airline_direct,
++                config=S7DirectAdapterConfig(
++                    session_getter=lambda: sessions_repo.get("s7_direct"),
++                    session_setter=lambda payload, expires_at: sessions_repo.save("s7_direct", payload, expires_at),
++                    cache_ttl_s=settings.cache_ttl_s.airline_direct,
++                )
+             )

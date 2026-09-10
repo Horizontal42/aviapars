@@ -1,0 +1,19 @@
+--- src/aviapars/__main__.py
++++ src/aviapars/__main__.py
+@@ -15,2 +15,2 @@
+ from aviapars.adapters.rzd_direct import RzdDirectAdapter
+-from aviapars.adapters.s7_direct import S7DirectAdapter
++from aviapars.adapters.s7_direct import S7DirectAdapter, S7DirectAdapterConfig
+ from aviapars.adapters.travelpayouts import TravelpayoutsAdapter
+@@ -101,6 +101,8 @@
+         registry.register(
+             S7DirectAdapter(
+-                session_getter=lambda: sessions_repo.get("s7_direct"),
+-                session_setter=lambda payload, expires_at: sessions_repo.save("s7_direct", payload, expires_at),
+-                cache_ttl_s=settings.cache_ttl_s.airline_direct,
++                config=S7DirectAdapterConfig(
++                    session_getter=lambda: sessions_repo.get("s7_direct"),
++                    session_setter=lambda payload, expires_at: sessions_repo.save("s7_direct", payload, expires_at),
++                    cache_ttl_s=settings.cache_ttl_s.airline_direct,
++                )
+             )

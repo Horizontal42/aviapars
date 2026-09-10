@@ -1,0 +1,38 @@
+--- src/aviapars/adapters/s7_direct.py
++++ src/aviapars/adapters/s7_direct.py
+@@ -99,19 +99,15 @@
+     def __init__(
+         self,
+         *,
+-        session_getter: SessionGetter | None = None,
+-        session_setter: SessionSetter | None = None,
+-        rate_limit: RateLimitPolicy | None = None,
+-        cache_ttl_s: int = 1800,
+-        solver_timeout_s: float = 90,
+-        session_ttl_s: int = 1500,
++        config: S7DirectAdapterConfig | None = None,
+     ) -> None:
+-        self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=15.0)
+-        self.default_cache_ttl_s = cache_ttl_s
+-        self._session_getter = session_getter
+-        self._session_setter = session_setter
+-        self._solver = BrowserSolverClient(timeout_s=solver_timeout_s)
+-        self._session_ttl_s = session_ttl_s
++        config = config or S7DirectAdapterConfig()
++        self.rate_limit = config.rate_limit or RateLimitPolicy(min_interval_s=15.0)
++        self.default_cache_ttl_s = config.cache_ttl_s
++        self._session_getter = config.session_getter
++        self._session_setter = config.session_setter
++        self._solver = BrowserSolverClient(timeout_s=config.solver_timeout_s)
++        self._session_ttl_s = config.session_ttl_s
+         self._location_id_cache: dict[str, str] = {}
+         # One /air POST per probe date, preceded by 2 location lookups (memoised after the
+         # first call), plus at most one browser solve for the whole search() — the solve is
+@@ -112,7 +108,7 @@
+         # throw away offers that were already collected, purely because the clock ran out.
+         self.total_timeout_s = probe_dates_total_timeout_s(
+-            self.request_timeout_s, setup_s=2 * self.request_timeout_s + solver_timeout_s
++            self.request_timeout_s, setup_s=2 * self.request_timeout_s + config.solver_timeout_s
+         )
+
+     async def search(self, q: SearchQuery) -> SearchResult:
