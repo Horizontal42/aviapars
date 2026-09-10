@@ -75,3 +75,32 @@ async def test_set_poll_interval_updates_only_that_route(db: aiosqlite.Connectio
     other = await repo.get(other_id)
     assert updated is not None and updated.poll_interval_min == 15
     assert other is not None and other.poll_interval_min == 60  # untouched
+
+
+async def test_mark_many_run(db: aiosqlite.Connection) -> None:
+    from datetime import datetime, timezone, timedelta
+    repo = RoutesRepo(db)
+    route_id_1 = await _create(db, None)
+    route_id_2 = await _create(db, None)
+
+    now = datetime.now(timezone.utc)
+    next_run_1 = now + timedelta(minutes=60)
+    next_run_2 = now + timedelta(minutes=120)
+    ran_at = now
+
+    runs = [
+        (next_run_1, ran_at, route_id_1),
+        (next_run_2, ran_at, route_id_2),
+    ]
+
+    await repo.mark_many_run(runs)
+
+    updated_1 = await repo.get(route_id_1)
+    updated_2 = await repo.get(route_id_2)
+
+    assert updated_1 is not None
+    assert updated_2 is not None
+    assert updated_1.next_run_at == next_run_1.isoformat()
+    assert updated_2.next_run_at == next_run_2.isoformat()
+    assert updated_1.last_run_at == ran_at.isoformat()
+    assert updated_2.last_run_at == ran_at.isoformat()
