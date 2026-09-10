@@ -194,13 +194,13 @@ def test_local_day_start_utc_crosses_utc_date_boundary() -> None:
 
 async def test_dedupe_gate_blocks_within_cooldown(db: aiosqlite.Connection) -> None:
     repo = NotificationsRepo(db)
-    gate = DedupeGate(repo)
+    gate = DedupeGate(repo, cooldown_h=12, daily_cap=3)
     now = datetime.now(timezone.utc)
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     assert (
         await gate.can_send(
-            route_id=1, itinerary_hash="abc", now=now, cooldown_h=12, daily_cap=3, day_start_utc=day_start
+            route_id=1, itinerary_hash="abc", now=now, day_start_utc=day_start
         )
         is True
     )
@@ -217,7 +217,7 @@ async def test_dedupe_gate_blocks_within_cooldown(db: aiosqlite.Connection) -> N
 
     assert (
         await gate.can_send(
-            route_id=1, itinerary_hash="abc", now=now, cooldown_h=12, daily_cap=3, day_start_utc=day_start
+            route_id=1, itinerary_hash="abc", now=now, day_start_utc=day_start
         )
         is False
     )
@@ -225,7 +225,7 @@ async def test_dedupe_gate_blocks_within_cooldown(db: aiosqlite.Connection) -> N
 
 async def test_dedupe_gate_enforces_daily_cap(db: aiosqlite.Connection) -> None:
     repo = NotificationsRepo(db)
-    gate = DedupeGate(repo)
+    gate = DedupeGate(repo, cooldown_h=12, daily_cap=3)
     now = datetime.now(timezone.utc)
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -242,7 +242,7 @@ async def test_dedupe_gate_enforces_daily_cap(db: aiosqlite.Connection) -> None:
 
     assert (
         await gate.can_send(
-            route_id=2, itinerary_hash="brand-new", now=now, cooldown_h=12, daily_cap=3, day_start_utc=day_start
+            route_id=2, itinerary_hash="brand-new", now=now, day_start_utc=day_start
         )
         is False
     )
@@ -253,7 +253,7 @@ async def test_dedupe_gate_daily_cap_uses_user_local_day_not_utc(db: aiosqlite.C
     # user east of Moscow saw their daily cap reset mid-afternoon local time instead of
     # at their own midnight (and a user west of it, mid-evening the day before).
     repo = NotificationsRepo(db)
-    gate = DedupeGate(repo)
+    gate = DedupeGate(repo, cooldown_h=12, daily_cap=3)
 
     # 2026-09-18 23:30 UTC == 2026-09-19 06:30 Novosibirsk (UTC+7) — local midnight for
     # that day fell at 2026-09-18 17:00 UTC. A notification sent at 10:00 UTC the same
@@ -280,7 +280,7 @@ async def test_dedupe_gate_daily_cap_uses_user_local_day_not_utc(db: aiosqlite.C
 
     assert (
         await gate.can_send(
-            route_id=3, itinerary_hash="new-one", now=now_utc, cooldown_h=12, daily_cap=1, day_start_utc=day_start_utc
+            route_id=3, itinerary_hash="new-one", now=now_utc, day_start_utc=day_start_utc
         )
         is True
     )  # yesterday's (local) notification must not count against today's cap
@@ -298,9 +298,9 @@ async def test_quiet_hours_defer_records_immediately_so_dedupe_sees_it(db: aiosq
     # that boundary logic is already covered by test_quiet_hours_wraps_midnight.
     repo = NotificationsRepo(db)
     jobs = JobsRepo(db)
-    gate = DedupeGate(repo)
+    gate = DedupeGate(repo, cooldown_h=12, daily_cap=3)
     bot = _FakeBot()
-    notifier = Notifier(bot, repo, jobs, gate, cooldown_h=12, daily_cap=3)
+    notifier = Notifier(bot, repo, jobs, gate)
 
     user = _user(start="00:00", end="23:59")
     route = _route()
@@ -326,9 +326,9 @@ async def test_deliver_pending_does_not_double_record(db: aiosqlite.Connection) 
     # would crash the scheduler's notify-job delivery instead of just sending the message.
     repo = NotificationsRepo(db)
     jobs = JobsRepo(db)
-    gate = DedupeGate(repo)
+    gate = DedupeGate(repo, cooldown_h=12, daily_cap=3)
     bot = _FakeBot()
-    notifier = Notifier(bot, repo, jobs, gate, cooldown_h=12, daily_cap=3)
+    notifier = Notifier(bot, repo, jobs, gate)
 
     user = _user(start="00:00", end="23:59")
     route = _route()
@@ -350,9 +350,9 @@ async def test_digest_mode_defers_every_qualifying_deal_not_just_the_cheapest(db
     # applies outside quiet hours too, by design.
     repo = NotificationsRepo(db)
     jobs = JobsRepo(db)
-    gate = DedupeGate(repo)
+    gate = DedupeGate(repo, cooldown_h=12, daily_cap=3)
     bot = _FakeBot()
-    notifier = Notifier(bot, repo, jobs, gate, cooldown_h=12, daily_cap=3)
+    notifier = Notifier(bot, repo, jobs, gate)
 
     user = _user(start="23:00", end="08:00")
     route = _route(notification_mode="digest")
@@ -383,9 +383,9 @@ async def test_instant_mode_still_sends_immediately_outside_quiet_hours(db: aios
     # accidentally make instant mode defer too.
     repo = NotificationsRepo(db)
     jobs = JobsRepo(db)
-    gate = DedupeGate(repo)
+    gate = DedupeGate(repo, cooldown_h=12, daily_cap=3)
     bot = _FakeBot()
-    notifier = Notifier(bot, repo, jobs, gate, cooldown_h=12, daily_cap=3)
+    notifier = Notifier(bot, repo, jobs, gate)
 
     user = _user(start="23:00", end="08:00")
     route = _route(notification_mode="instant")
@@ -404,9 +404,9 @@ async def test_send_deal_retries_once_after_flood_control(db: aiosqlite.Connecti
     # logged, and record() below never ran — so the deal wasn't even queued for a later poll.
     repo = NotificationsRepo(db)
     jobs = JobsRepo(db)
-    gate = DedupeGate(repo)
+    gate = DedupeGate(repo, cooldown_h=12, daily_cap=3)
     bot = _FloodOnceBot()
-    notifier = Notifier(bot, repo, jobs, gate, cooldown_h=12, daily_cap=3)
+    notifier = Notifier(bot, repo, jobs, gate)
 
     user = _user(start="23:00", end="08:00")
     route = _route(notification_mode="instant")
@@ -469,9 +469,7 @@ async def test_grouped_deal_is_one_notification_carrying_every_source(db: aiosql
         _FakeBot(),
         repo,
         JobsRepo(db),
-        DedupeGate(repo),
-        cooldown_h=12,
-        daily_cap=3,
+        DedupeGate(repo, cooldown_h=12, daily_cap=3),
         source_names={"aeroflot_direct": "Аэрофлот", "travelpayouts": "Aviasales"},
     )
     bot = notifier._bot
@@ -493,7 +491,7 @@ async def test_cooldown_keys_on_the_trip_not_on_which_sources_reported_it(db: ai
     # The whole point of grouping: the next cycle finding only Aeroflot (Travelpayouts
     # timed out, or its row aged out) is the same trip, not a new deal to announce.
     repo = NotificationsRepo(db)
-    notifier = Notifier(_FakeBot(), repo, JobsRepo(db), DedupeGate(repo), cooldown_h=12, daily_cap=3)
+    notifier = Notifier(_FakeBot(), repo, JobsRepo(db), DedupeGate(repo, cooldown_h=12, daily_cap=3))
     bot = notifier._bot
     # quiet hours disabled (start == end) so `now` can be the real clock, which is what
     # the cooldown compares against — notifications_sent stamps rows with datetime.now().
@@ -521,7 +519,7 @@ async def test_a_different_departure_date_still_notifies(db: aiosqlite.Connectio
     # Suppression is per identity, not per route — another date in the same flexible
     # window is a different thing to buy and must still get through the cooldown gate.
     repo = NotificationsRepo(db)
-    notifier = Notifier(_FakeBot(), repo, JobsRepo(db), DedupeGate(repo), cooldown_h=12, daily_cap=3)
+    notifier = Notifier(_FakeBot(), repo, JobsRepo(db), DedupeGate(repo, cooldown_h=12, daily_cap=3))
     bot = notifier._bot
     user = _user(start="00:00", end="00:00")
     route = _route()
@@ -546,7 +544,7 @@ async def test_second_send_the_same_day_advances_the_cooldown(db: aiosqlite.Conn
     key's UNIQUE constraint, recorded nothing, and left the cooldown pinned to the first
     send — every hourly poll afterwards passed the gate and queued the same deal again."""
     repo = NotificationsRepo(db)
-    notifier = Notifier(_FakeBot(), repo, JobsRepo(db), DedupeGate(repo), cooldown_h=12, daily_cap=5)
+    notifier = Notifier(_FakeBot(), repo, JobsRepo(db), DedupeGate(repo, cooldown_h=12, daily_cap=5))
     bot = notifier._bot
     user = _user(start="00:00", end="00:00")  # quiet hours off — this is about the gate
     route = _route()
@@ -577,7 +575,7 @@ async def test_a_days_digest_arrives_as_one_message_across_routes(db: aiosqlite.
     own dedupe/cooldown/cap accounting and its own job — combining happens at delivery."""
     repo = NotificationsRepo(db)
     jobs = JobsRepo(db)
-    notifier = Notifier(_FakeBot(), repo, jobs, DedupeGate(repo), cooldown_h=12, daily_cap=5)
+    notifier = Notifier(_FakeBot(), repo, jobs, DedupeGate(repo, cooldown_h=12, daily_cap=5))
     bot = notifier._bot
     user = _user(start="23:00", end="08:00")
     now = datetime(2026, 9, 18, 9, 0, tzinfo=timezone.utc)
@@ -613,7 +611,7 @@ async def test_quiet_hours_deferrals_stay_one_message_each(db: aiosqlite.Connect
     # meaning "one deal, one notification" — those must not be swept into a digest.
     repo = NotificationsRepo(db)
     jobs = JobsRepo(db)
-    notifier = Notifier(_FakeBot(), repo, jobs, DedupeGate(repo), cooldown_h=12, daily_cap=5)
+    notifier = Notifier(_FakeBot(), repo, jobs, DedupeGate(repo, cooldown_h=12, daily_cap=5))
     bot = notifier._bot
     user = _user(start="00:00", end="23:59")  # always quiet, so instant deals defer
     route = _route(notification_mode="instant")

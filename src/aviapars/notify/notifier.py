@@ -51,16 +51,12 @@ class Notifier:
         jobs_repo: JobsRepo,
         dedupe: DedupeGate,
         *,
-        cooldown_h: int,
-        daily_cap: int,
         source_names: dict[str, str] | None = None,
     ) -> None:
         self._bot = bot
         self._repo = notifications_repo
         self._jobs = jobs_repo
         self._dedupe = dedupe
-        self._cooldown_h = cooldown_h
-        self._daily_cap = daily_cap
         self._source_names = source_names or {}
 
     def _build_metadata(self, route: Route, itinerary: Itinerary, confirmed: bool, now: datetime) -> _DealMeta:
@@ -187,8 +183,6 @@ class Notifier:
             route_id=route.id,
             itinerary_hash=meta.itinerary_hash,
             now=now,
-            cooldown_h=self._cooldown_h,
-            daily_cap=self._daily_cap,
             day_start_utc=_local_day_start_utc(user, now),
         )
         if not allowed:

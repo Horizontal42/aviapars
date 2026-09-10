@@ -111,14 +111,16 @@ def setup_registry(db: aiosqlite.Connection) -> AdapterRegistry:
 def setup_notifier(db: aiosqlite.Connection, bot: Bot, registry: AdapterRegistry) -> Notifier:
     notifications_repo = NotificationsRepo(db)
     jobs_repo = JobsRepo(db)
-    dedupe = DedupeGate(notifications_repo)
+    dedupe = DedupeGate(
+        notifications_repo,
+        cooldown_h=settings.notification_dedupe_cooldown_h,
+        daily_cap=settings.notifications_per_route_per_day,
+    )
     return Notifier(
         bot,
         notifications_repo,
         jobs_repo,
         dedupe,
-        cooldown_h=settings.notification_dedupe_cooldown_h,
-        daily_cap=settings.notifications_per_route_per_day,
         source_names={a.id: a.display_name for a in registry.all()},
     )
 
