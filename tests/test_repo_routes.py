@@ -75,3 +75,31 @@ async def test_set_poll_interval_updates_only_that_route(db: aiosqlite.Connectio
     other = await repo.get(other_id)
     assert updated is not None and updated.poll_interval_min == 15
     assert other is not None and other.poll_interval_min == 60  # untouched
+
+
+async def test_pause_all_pauses_only_active_routes(db: aiosqlite.Connection) -> None:
+    repo = RoutesRepo(db)
+
+    # Create two active routes
+    active1_id = await _create(db, None)
+    active2_id = await _create(db, None)
+
+    # Create an inactive route
+    inactive_id = await _create(db, None)
+    await repo.set_active(inactive_id, False)
+
+    # Verify initial state
+    assert (await repo.get(active1_id)).active is True
+    assert (await repo.get(active2_id)).active is True
+    assert (await repo.get(inactive_id)).active is False
+
+    # Pause all
+    paused_count = await repo.pause_all()
+
+    # Should only affect the two previously active routes
+    assert paused_count == 2
+
+    # Verify new state
+    assert (await repo.get(active1_id)).active is False
+    assert (await repo.get(active2_id)).active is False
+    assert (await repo.get(inactive_id)).active is False
