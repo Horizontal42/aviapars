@@ -661,3 +661,50 @@ def test_digest_time_overrides_quiet_hours_end_but_never_wakes_the_user() -> Non
     middle_of_night = _user(digest_time="03:00")
     clamped = next_digest_delivery(middle_of_night, now).astimezone(ZoneInfo("Europe/Moscow"))
     assert (clamped.hour, clamped.minute) == (8, 0)
+
+
+def test_digest_messages_empty() -> None:
+    assert digest_messages([]) == []
+
+
+def test_digest_messages_custom_limit() -> None:
+    # Testing that it splits based on the provided limit
+    # "a", "b", "c" length is 1 each. _DIGEST_DIVIDER is "\n\n———\n\n" (length 9).
+    # Card length + divider length = 10
+    # limit = 15
+    # Card 1: 10 <= 15. OK. (length=10)
+    # Card 2: 10+10 = 20 > 15. Splits.
+    cards = ["a", "b", "c"]
+    messages = digest_messages(cards, limit=15)
+
+    assert len(messages) == 3
+    # The header "<b>📬 Дайджест</b>" contains 'b' from '<b>'
+    # Checking for 'b' in messages[0] will be True because of the header.
+    # Therefore we should check for "\nb" or simply use exact matching or card checks.
+    assert "a" in messages[0] and "\nb" not in messages[0] and "\nc" not in messages[0]
+    assert "\nb" in messages[1] and "\na" not in messages[1] and "\nc" not in messages[1]
+    assert "\nc" in messages[2] and "\na" not in messages[2] and "\nb" not in messages[2]
+
+    # Increase limit to 20.
+    # Divider is '\n\n———\n\n'. In Python, len() counts characters.
+    # Em dash '—' is 1 character, so len("\n\n———\n\n") is 7.
+    # Card length + divider length = 1 + 7 = 8.
+    # Card 1: 0 + 8 = 8 <= 20. OK. (length=8)
+    # Card 2: 8 + 8 = 16 <= 20. OK. (length=16)
+    # Card 3: 16 + 8 = 24 > 20. Splits.
+    messages2 = digest_messages(cards, limit=20)
+    assert len(messages2) == 2
+    assert "a" in messages2[0] and "b" in messages2[0] and "\nc" not in messages2[0]
+    assert "\nc" in messages2[1] and "\na" not in messages2[1]
+
+
+def test_digest_messages_oversized_card() -> None:
+    # A single card that is larger than the limit on its own should not be split
+    # or dropped, but passed through as its own chunk since it's the first in the chunk
+    huge_card = "x" * 2000
+    small_card = "y" * 10
+
+    messages = digest_messages([huge_card, small_card], limit=1000)
+    assert len(messages) == 2
+    assert huge_card in messages[0]
+    assert small_card in messages[1]
