@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlencode
@@ -43,6 +44,15 @@ _CHALLENGE_MARKER = "js-challenge-loader"
 SessionGetter = Callable[[], Awaitable[dict[str, Any] | None]]
 SessionSetter = Callable[[dict[str, Any], datetime], Awaitable[None]]
 
+
+@dataclass(frozen=True, slots=True)
+class S7DirectAdapterConfig:
+    session_getter: SessionGetter | None = None
+    session_setter: SessionSetter | None = None
+    rate_limit: RateLimitPolicy | None = None
+    cache_ttl_s: int = 1800
+    solver_timeout_s: float = 90
+    session_ttl_s: int = 1500
 
 class S7DirectAdapter:
     """Confirmation-tier direct scrape of S7's own booking search (ibe.s7.ru).
@@ -92,19 +102,15 @@ class S7DirectAdapter:
     def __init__(
         self,
         *,
-        session_getter: SessionGetter | None = None,
-        session_setter: SessionSetter | None = None,
-        rate_limit: RateLimitPolicy | None = None,
-        cache_ttl_s: int = 1800,
-        solver_timeout_s: float = 90,
-        session_ttl_s: int = 1500,
+        config: S7DirectAdapterConfig | None = None,
     ) -> None:
-        self.rate_limit = rate_limit or RateLimitPolicy(min_interval_s=15.0)
-        self.default_cache_ttl_s = cache_ttl_s
-        self._session_getter = session_getter
-        self._session_setter = session_setter
-        self._solver = BrowserSolverClient(timeout_s=solver_timeout_s)
-        self._session_ttl_s = session_ttl_s
+        config = config or S7DirectAdapterConfig()
+        self.rate_limit = config.rate_limit or RateLimitPolicy(min_interval_s=15.0)
+        self.default_cache_ttl_s = config.cache_ttl_s
+        self._session_getter = config.session_getter
+        self._session_setter = config.session_setter
+        self._solver = BrowserSolverClient(timeout_s=config.solver_timeout_s)
+        self._session_ttl_s = config.session_ttl_s
         self._location_id_cache: dict[str, str] = {}
         # One /air POST per probe date, preceded by 2 location lookups (memoised after the
         # first call), plus at most one browser solve for the whole search() — the solve is
@@ -112,7 +118,7 @@ class S7DirectAdapter:
         # a single challenge could eat the entire budget and the outer asyncio.timeout would
         # throw away offers that were already collected, purely because the clock ran out.
         self.total_timeout_s = probe_dates_total_timeout_s(
-            self.request_timeout_s, setup_s=2 * self.request_timeout_s + solver_timeout_s
+            self.request_timeout_s, setup_s=2 * self.request_timeout_s + config.solver_timeout_s
         )
 
     async def search(self, q: SearchQuery) -> SearchResult:
