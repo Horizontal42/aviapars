@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from datetime import date, datetime, timezone
 from typing import Any
@@ -66,8 +67,13 @@ class TravelpayoutsAdapter:
         offers: list[Offer] = []
         partial = False
         async with aiohttp.ClientSession() as session:
-            for month in months:
-                rows, ok = await self._fetch_month(session, q.origin.iata, q.dest.iata, month, q.currency)
+            tasks = [
+                self._fetch_month(session, q.origin.iata, q.dest.iata, month, q.currency)
+                for month in months
+            ]
+            results = await asyncio.gather(*tasks)
+
+            for rows, ok in results:
                 if not ok:
                     partial = True
                     continue
