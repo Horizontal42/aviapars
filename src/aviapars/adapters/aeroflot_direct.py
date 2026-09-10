@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -120,8 +121,10 @@ class AeroflotDirectAdapter:
         blocked = False
         partial = False
         async with AsyncSession(**session_kwargs) as session:
-            for depart_date in q.dates:
-                day_offers, outcome = await self._search_day(session, q, depart_date)
+            coros = [self._search_day(session, q, depart_date) for depart_date in q.dates]
+            results = await asyncio.gather(*coros)
+
+            for day_offers, outcome in results:
                 if outcome == "blocked":
                     blocked = True
                     continue
