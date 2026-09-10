@@ -356,6 +356,6 @@ class RzdDirectAdapter:
             connector = aiohttp.TCPConnector(ssl=_ssl_context)
             async with aiohttp.ClientSession(headers=_HEADERS, connector=connector) as session:
                 _, outcome = await self._search_day(session, "2000000", "2004000", date.today())  # Moscow -> SPb
-            return HealthStatus(ok=outcome == "ok")
+            return HealthStatus(ok=outcome in ("ok", "empty"))
         except Exception as exc:  # health_check should never crash the caller (§5 rule 1 spirit)
             return HealthStatus(ok=False, detail=str(exc))

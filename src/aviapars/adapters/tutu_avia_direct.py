@@ -362,7 +362,7 @@ class TutuAviaDirectAdapter:
             async with AsyncSession(
                 impersonate="chrome", timeout=self.request_timeout_s, curl_options=CURL_FORCE_IPV4
             ) as session:
-                city_id, _ = await self._resolve_city_id(session, "MOW")
-            return HealthStatus(ok=city_id is not None)
+                _, outcome = await self._resolve_city_id(session, "MOW")
+            return HealthStatus(ok=outcome in ("ok", "empty"))
         except Exception as exc:  # health_check should never crash the caller (§5 rule 1 spirit)
             return HealthStatus(ok=False, detail=str(exc))
