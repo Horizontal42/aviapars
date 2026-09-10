@@ -31,13 +31,33 @@ _COLUMNS = (
     "popularity, is_hub_candidate"
 )
 
+_SELECT_GET = "SELECT " + _COLUMNS + " FROM places WHERE id = ?"
+
+_SELECT_SEARCH = (
+    "SELECT " + _COLUMNS + " FROM places\n"
+    "WHERE kind = 'city'\n"
+    "  AND (normalize(name_ru) LIKE ? OR normalize(name_en) LIKE ? OR iata = ?)\n"
+    "ORDER BY popularity DESC\n"
+    "LIMIT ?"
+)
+
+_SELECT_HUB = (
+    "SELECT " + _COLUMNS + " FROM places\n"
+    "WHERE is_hub_candidate = 1\n"
+    "  AND country IN (?, ?)\n"
+    "  AND id NOT IN (?, ?)\n"
+    "  AND (city_id IS NULL OR (city_id IS NOT ? AND city_id IS NOT ?))\n"
+    "ORDER BY popularity DESC\n"
+    "LIMIT ?"
+)
+
 
 class PlacesRepo:
     def __init__(self, db: aiosqlite.Connection) -> None:
         self._db = db
 
     async def get(self, place_id: int) -> Place | None:
-        async with self._db.execute(f"SELECT {_COLUMNS} FROM places WHERE id = ?", (place_id,)) as cursor:
+        async with self._db.execute(_SELECT_GET, (place_id,)) as cursor:
             row = await cursor.fetchone()
         return _row_to_place(row) if row else None
 
@@ -59,13 +79,7 @@ class PlacesRepo:
         """
         like = f"%{normalize_place_query(query)}%"
         async with self._db.execute(
-            f"""
-            SELECT {_COLUMNS} FROM places
-            WHERE kind = 'city'
-              AND (normalize(name_ru) LIKE ? OR normalize(name_en) LIKE ? OR iata = ?)
-            ORDER BY popularity DESC
-            LIMIT ?
-            """,
+            _SELECT_SEARCH,
             (like, like, query.strip().upper(), limit),
         ) as cursor:
             rows = await cursor.fetchall()
@@ -94,15 +108,7 @@ class PlacesRepo:
         truncating by popularity here would smuggle the old bias back in.
         """
         async with self._db.execute(
-            f"""
-            SELECT {_COLUMNS} FROM places
-            WHERE is_hub_candidate = 1
-              AND country IN (?, ?)
-              AND id NOT IN (?, ?)
-              AND (city_id IS NULL OR (city_id IS NOT ? AND city_id IS NOT ?))
-            ORDER BY popularity DESC
-            LIMIT ?
-            """,
+            _SELECT_HUB,
             (
                 origin.country,
                 dest.country,
