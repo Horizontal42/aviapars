@@ -153,6 +153,13 @@ class RoutesRepo:
         )
         await self._db.commit()
 
+    async def mark_many_run(self, runs: list[tuple[datetime, datetime, int]]) -> None:
+        await self._db.executemany(
+            "UPDATE routes SET next_run_at = ?, last_run_at = ? WHERE id = ?",
+            ((next_run_at.isoformat(), ran_at.isoformat(), route_id) for next_run_at, ran_at, route_id in runs),
+        )
+        await self._db.commit()
+
     async def set_date_cursor(self, route_id: int, cursor: int) -> None:
         await self._db.execute("UPDATE routes SET date_cursor = ? WHERE id = ?", (cursor, route_id))
         await self._db.commit()
