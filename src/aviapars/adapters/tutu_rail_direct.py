@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import uuid
 from datetime import date, datetime, timezone
@@ -128,8 +129,10 @@ class TutuRailDirectAdapter:
         blocked = False
         partial = False
         async with AsyncSession(**session_kwargs) as session:
-            for depart_date in q.dates:
-                day_offers, outcome = await self._search_day(session, q, depart_date)
+            results = await asyncio.gather(
+                *[self._search_day(session, q, depart_date) for depart_date in q.dates]
+            )
+            for day_offers, outcome in results:
                 if outcome == "blocked":
                     blocked = True
                     continue
