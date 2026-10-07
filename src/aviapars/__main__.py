@@ -132,51 +132,56 @@ async def init_bot() -> AsyncIterator[Bot]:
         await bot.session.close()
 
 
+def _on_scheduler_done(task: asyncio.Task[None]) -> None:
+    # run_scheduler_loop is a `while True` — it should only ever end via
+    # cancellation. If it exits any other way (an unhandled exception past its own
+    # try/except, or just returning), every route silently stops being polled while
+    # the bot keeps answering commands and /status keeps reporting sources as fine —
+    # there's otherwise no signal anywhere that this happened.
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        log.error("scheduler loop died unexpectedly, routes will no longer be polled", exc_info=exc)
+    else:
+        log.error("scheduler loop exited unexpectedly, routes will no longer be polled")
+
+
+async def _run_app(db: aiosqlite.Connection, bot: Bot) -> None:
+    registry = setup_registry(db)
+    dp = create_dispatcher()
+    notifier = setup_notifier(db, bot, registry)
+
+    shutdown_event = asyncio.Event()
+
+    scheduler_task = asyncio.create_task(run_scheduler_loop(db, registry, notifier))
+    scheduler_task.add_done_callback(_on_scheduler_done)
+    watchdog_task = asyncio.create_task(watchdog_loop(_WATCHDOG_PING_INTERVAL_S))
+    notify("READY=1")
+    try:
+        await setup_commands(bot)
+        polling_task = asyncio.create_task(
+            dp.start_polling(bot, db=db, registry=registry, notifier=notifier, shutdown_event=shutdown_event)
+        )
+        shutdown_wait = asyncio.create_task(shutdown_event.wait())
+        done, pending = await asyncio.wait({polling_task, shutdown_wait}, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        for task in done:
+            if task is polling_task:
+                task.result()  # re-raise if polling itself failed
+    finally:
+        scheduler_task.cancel()
+        watchdog_task.cancel()
+
+
 async def main() -> None:
     log.info("aviapars starting up (db=%s)", settings.db_path)
     await migrate()
 
     async with connect() as db, init_bot() as bot:
-        registry = setup_registry(db)
-        dp = create_dispatcher()
-        notifier = setup_notifier(db, bot, registry)
-
-        shutdown_event = asyncio.Event()
-
-        def _on_scheduler_done(task: asyncio.Task[None]) -> None:
-            # run_scheduler_loop is a `while True` — it should only ever end via
-            # cancellation. If it exits any other way (an unhandled exception past its own
-            # try/except, or just returning), every route silently stops being polled while
-            # the bot keeps answering commands and /status keeps reporting sources as fine —
-            # there's otherwise no signal anywhere that this happened.
-            if task.cancelled():
-                return
-            exc = task.exception()
-            if exc is not None:
-                log.error("scheduler loop died unexpectedly, routes will no longer be polled", exc_info=exc)
-            else:
-                log.error("scheduler loop exited unexpectedly, routes will no longer be polled")
-
-        scheduler_task = asyncio.create_task(run_scheduler_loop(db, registry, notifier))
-        scheduler_task.add_done_callback(_on_scheduler_done)
-        watchdog_task = asyncio.create_task(watchdog_loop(_WATCHDOG_PING_INTERVAL_S))
-        notify("READY=1")
-        try:
-            await setup_commands(bot)
-            polling_task = asyncio.create_task(
-                dp.start_polling(bot, db=db, registry=registry, notifier=notifier, shutdown_event=shutdown_event)
-            )
-            shutdown_wait = asyncio.create_task(shutdown_event.wait())
-            done, pending = await asyncio.wait({polling_task, shutdown_wait}, return_when=asyncio.FIRST_COMPLETED)
-            for task in pending:
-                task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
-            for task in done:
-                if task is polling_task:
-                    task.result()  # re-raise if polling itself failed
-        finally:
-            scheduler_task.cancel()
-            watchdog_task.cancel()
+        await _run_app(db, bot)
 
 
 if __name__ == "__main__":
