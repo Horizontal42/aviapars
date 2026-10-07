@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import socket
+
 import pytest
 
 from aviapars.systemd_notify import notify
@@ -13,3 +15,9 @@ def test_noop_when_notify_socket_unset(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_never_raises_on_unreachable_socket(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NOTIFY_SOCKET", "/nonexistent/path/that/does/not/exist.sock")
     notify("READY=1")  # startup must survive even if systemd's socket is unreachable
+
+
+def test_never_raises_on_missing_af_unix(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NOTIFY_SOCKET", "/nonexistent/path/that/does/not/exist.sock")
+    monkeypatch.delattr(socket, "AF_UNIX", raising=False)
+    notify("READY=1")  # startup must survive on platforms without AF_UNIX
