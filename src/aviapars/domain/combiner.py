@@ -161,12 +161,23 @@ async def search_itineraries(
         hubs_tried = [h.id for h in hubs]
         combo_count = 0
 
+        tasks = []
+        for hub in hubs:
+            for m in modes:
+                tasks.append(_search_leg(registry, origin, hub, hub_dates, pax, m, opts, now))
+                tasks.append(_search_leg(registry, hub, dest, hub_dates, pax, m, opts, now))
+
+        results = await asyncio.gather(*tasks)
+
+        result_idx = 0
         for hub in hubs:
             leg_a_by_mode: dict[Mode, list[Offer]] = {}
             leg_b_by_mode: dict[Mode, list[Offer]] = {}
             for m in modes:
-                offers_a, meta_a = await _search_leg(registry, origin, hub, hub_dates, pax, m, opts, now)
-                offers_b, meta_b = await _search_leg(registry, hub, dest, hub_dates, pax, m, opts, now)
+                offers_a, meta_a = results[result_idx]
+                offers_b, meta_b = results[result_idx + 1]
+                result_idx += 2
+
                 leg_a_by_mode[m] = offers_a[: opts.leg_pool_size]
                 leg_b_by_mode[m] = offers_b[: opts.leg_pool_size]
                 _merge_meta(meta_a, sources_used, sources_skipped)
