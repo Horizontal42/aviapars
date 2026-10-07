@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 
+import pytest
+
 from aviapars.adapters.base import Leg, Mode, Offer, PlaceRef, Tier
 from aviapars.domain.combiner import Itinerary
 from aviapars.domain.dates import exact_date
@@ -13,6 +15,7 @@ from aviapars.telegram.format import (
     describe_draft,
     describe_thresholds,
     format_deal_card,
+    format_money,
     mode_group,
     screen_text,
     select_top_itineraries,
@@ -408,3 +411,19 @@ def test_age_is_relative_and_rounded_down() -> None:
     # A source_health row written a hair in the future (clock skew) must not read
     # as "-1 мин назад".
     assert describe_age(now + timedelta(minutes=1), now) == "только что"
+
+@pytest.mark.parametrize(
+    ("price_minor", "currency", "expected"),
+    [
+        (100, "RUB", "1 ₽"),
+        (100000, "RUB", "1 000 ₽"),
+        (5000000, "USD", "50 000 $"),
+        (25500, "EUR", "255 €"),
+        (9999, "GBP", "99 GBP"),
+        (0, "RUB", "0 ₽"),
+        (-5000, "USD", "-50 $"),
+        (123456789, "RUB", "1 234 567 ₽"),
+    ],
+)
+def test_format_money(price_minor: int, currency: str, expected: str) -> None:
+    assert format_money(price_minor, currency) == expected
