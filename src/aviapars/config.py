@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     yandex_rasp_api_key: str
 
     # --- tunables: have defaults, sourced from config.yaml ---
-    db_path: str = "./aviapars.db"
+    db_path: str = str(REPO_ROOT / "aviapars.db")
     seed_countries: list[str] = Field(default_factory=lambda: ["RU"])
 
     worker_count: int = 2
