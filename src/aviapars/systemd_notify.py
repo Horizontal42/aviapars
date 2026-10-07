@@ -9,8 +9,6 @@ periodic WATCHDOG=1 pings, the same timeout kills an otherwise-healthy process
 every WatchdogSec. Both are real failure modes this module exists to prevent.
 """
 
-from __future__ import annotations
-
 import asyncio
 import os
 import socket
