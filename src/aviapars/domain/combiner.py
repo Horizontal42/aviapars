@@ -131,8 +131,12 @@ async def search_itineraries(
     oldest: datetime | None = None
     partial = False
 
-    for mode in modes:
-        offers, meta = await _search_leg(registry, origin, dest, dates, pax, mode, opts, now)
+    modes_list = list(modes)
+    results = await asyncio.gather(
+        *(_search_leg(registry, origin, dest, dates, pax, mode, opts, now) for mode in modes_list)
+    )
+
+    for mode, (offers, meta) in zip(modes_list, results):
         _merge_meta(meta, sources_used, sources_skipped)
         oldest = _min_dt(oldest, meta.oldest)
         partial = partial or meta.partial
