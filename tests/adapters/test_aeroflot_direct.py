@@ -282,13 +282,13 @@ async def test_blocked_egress_rotates_and_is_remembered(monkeypatch: Any) -> Non
     monkeypatch.setattr("aviapars.adapters.aeroflot_direct.AsyncSession", fake_session)
 
     adapter = AeroflotDirectAdapter(
-        egress_pool=["socks5h://127.0.0.1:10809", "socks5h://100.84.46.36:11080"]
+        egress_pool=["socks5h://127.0.0.1:10809", "socks5h://100.64.0.1:11080"]
     )
     result = await adapter.search(_query())
 
-    assert proxies_tried == ["socks5h://127.0.0.1:10809", "socks5h://100.84.46.36:11080"]
+    assert proxies_tried == ["socks5h://127.0.0.1:10809", "socks5h://100.64.0.1:11080"]
     assert result.status == ResultStatus.EMPTY
 
     proxies_tried.clear()
     await adapter.search(_query())
-    assert proxies_tried == ["socks5h://100.84.46.36:11080"]
+    assert proxies_tried == ["socks5h://100.64.0.1:11080"]

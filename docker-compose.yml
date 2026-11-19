@@ -1,0 +1,12 @@
+services:
+  aviapars:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - aviapars_data:/var/lib/aviapars
+
+volumes:
+  aviapars_data:

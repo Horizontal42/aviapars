@@ -134,16 +134,16 @@ async def test_blocked_direct_egress_falls_back_to_the_relay(monkeypatch: pytest
     monkeypatch.setattr("aviapars.adapters.rzd_direct.ProxyConnector.from_url", fake_from_url)
     monkeypatch.setattr(RzdDirectAdapter, "_post", fake_post)
 
-    a = RzdDirectAdapter(egress_pool=[None, "socks5h://100.84.46.36:11080"])
+    a = RzdDirectAdapter(egress_pool=[None, "socks5h://100.64.0.1:11080"])
     q = SearchQuery(origin=_origin(), dest=_dest(), dates=(date(2026, 8, 27),), pax=1, mode=Mode.TRAIN)
     result = await a.search(q)
 
-    assert egresses_tried == [None, "socks5h://100.84.46.36:11080"]
+    assert egresses_tried == [None, "socks5h://100.64.0.1:11080"]
     # scheme is normalized to plain socks5 before from_url — see rzd_direct._proxy_connector.
-    assert connectors == ["socks5://100.84.46.36:11080"]  # only the proxied leg builds one
+    assert connectors == ["socks5://100.64.0.1:11080"]  # only the proxied leg builds one
     assert result.status == ResultStatus.OK
 
     # sticky: the 403'd direct egress is not re-probed on the next call
     egresses_tried.clear()
     await a.search(q)
-    assert egresses_tried == ["socks5h://100.84.46.36:11080"]
+    assert egresses_tried == ["socks5h://100.64.0.1:11080"]

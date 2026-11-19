@@ -1,4 +1,5 @@
 .claude/
+.gemini/
 .aider*
 .cursorrules
 bugs.md

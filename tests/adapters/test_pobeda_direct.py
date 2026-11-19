@@ -149,6 +149,6 @@ async def test_proxy_url_forwarded_to_session(monkeypatch: Any) -> None:
 
     monkeypatch.setattr("aviapars.adapters.pobeda_direct.AsyncSession", fake_session)
 
-    adapter = PobedaDirectAdapter(egress_pool=["socks5://100.84.46.36:11080"])
+    adapter = PobedaDirectAdapter(egress_pool=["socks5://100.64.0.1:11080"])
     await adapter.search(_query())
-    assert captured.get("proxy") == "socks5://100.84.46.36:11080"
+    assert captured.get("proxy") == "socks5://100.64.0.1:11080"
