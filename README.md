@@ -251,4 +251,4 @@ bash deploy/deploy.sh
 
 ## License
 
-MIT License. См. [LICENSE](LICENSE) для подробностей.
+PolyForm Noncommercial License 1.0.0. См. [LICENSE](LICENSE) для подробностей.
